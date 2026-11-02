@@ -1249,13 +1249,13 @@ def _cli_emit(e: dict) -> None:
             print(f"\n[{e['no']:>2}] {e['title']}", flush=True)
         else:
             detail = e.get("detail", "")
-            print(f"      ✓ {e.get('ms', 0)}ms {detail}", flush=True)
+            print(f"      OK {e.get('ms', 0)}ms {detail}", flush=True)
     elif t == "log":
-        print(f"      · {e['msg']}", flush=True)
+        print(f"      - {e['msg']}", flush=True)
     elif t == "tick":
-        print(f"      … 息屏倒计时 {e['remain']}s  ", end="\r", flush=True)
+        print(f"      ... 息屏倒计时 {e['remain']}s  ", end="\r", flush=True)
     elif t == "shot":
-        print(f"      📷 截图 {e.get('tag', '')}", flush=True)
+        print(f"      [shot] 截图 {e.get('tag', '')}", flush=True)
 
 
 if __name__ == "__main__":

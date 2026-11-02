@@ -65,7 +65,7 @@ def run(dev: Device | None = None, emit=None, *,
         target_date = date(now.year, 12, 25)
         r.step(f"年度总结：设置时间到当年 12月25日 {target_date} 08:59")
 
-    set_system_datetime(dev, target_date.year, target_date.month, target_date.day, 8, 59)
+    set_system_datetime(dev, r, target_date, 8, 59)
     r.ok(f"时间已设为 {target_date} 08:59")
     result["target_date"] = str(target_date)
 
