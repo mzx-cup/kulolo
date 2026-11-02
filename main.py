@@ -18,7 +18,7 @@ import subprocess
 import threading
 import time
 import webbrowser
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer, HTTPServer as Server
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
