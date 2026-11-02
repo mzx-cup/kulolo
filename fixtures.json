@@ -1,0 +1,64 @@
+{
+  "devices": {
+    "ASALE3741B000022": {
+      "exam": {
+        "event_id": 59,
+        "calendar_id": 1,
+        "title": "FastExam",
+        "registered_at": "2026-10-27T17:29:34"
+      },
+      "none": {
+        "event_id": 60,
+        "calendar_id": 1,
+        "title": "FastDay",
+        "registered_at": "2026-10-27T17:55:08"
+      },
+      "birthday": {
+        "event_id": 77,
+        "calendar_id": 1,
+        "title": "Bday111143",
+        "registered_at": "2026-10-30T14:34:04"
+      }
+    },
+    "16667705BV000031": {
+      "birthday": {
+        "event_id": 599,
+        "calendar_id": 3,
+        "title": "Bday112525",
+        "registered_at": "2026-10-28T15:00:28"
+      }
+    },
+    "0826A15000003978": {
+      "birthday": {
+        "event_id": 78,
+        "calendar_id": 1,
+        "title": "SeedBday",
+        "registered_at": "2026-10-28T16:56:37"
+      },
+      "anniversary": {
+        "event_id": 79,
+        "calendar_id": 1,
+        "title": "SeedAnniv",
+        "registered_at": "2026-10-28T16:57:28"
+      },
+      "exam": {
+        "event_id": 80,
+        "calendar_id": 1,
+        "title": "SeedExam",
+        "registered_at": "2026-10-28T16:58:22"
+      },
+      "performance": {
+        "event_id": 81,
+        "calendar_id": 1,
+        "title": "SeedShow",
+        "registered_at": "2026-10-28T16:59:17"
+      },
+      "none": {
+        "event_id": 82,
+        "calendar_id": 1,
+        "title": "SeedDay",
+        "registered_at": "2026-10-28T17:00:04"
+      }
+    }
+  }
+}

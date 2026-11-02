@@ -1,0 +1,402 @@
+"""设备控制层：adbutils + uiautomator dump + input 命令。
+
+不用 uiautomator2：它自带的 com.wetest.uia2.stub 在 Android 17(SDK37) 上
+UiDevice.getDisplaySizeDp() 会抛 ApplicationSharedMemory not initialized。
+这里直接解析平台 uiautomator dump 的 XML，零设备侧依赖。
+
+性能要点（实测，Windows + adb over USB）：
+    echo 1                        ~80ms
+    dumpsys window|grep focus     ~170ms
+    input tap / keyevent          ~140ms
+    uiautomator dump /dev/tty     ~2400ms   <-- 唯一的大头（设备侧 JVM 启动）
+所以提速的关键不是把每次 dump 变快（做不到），而是**少 dump**：
+先花 0.17s 轮询廉价的活动/焦点信号，再 dump 一次拿控件树。
+"""
+from __future__ import annotations
+
+import io
+import os
+import re
+import tempfile
+import time
+from dataclasses import dataclass
+
+import adbutils
+
+# 滚轮（NumberPicker）闭环参数。实测一次 700px 滑动约等于 +11 格 => ≈64px/格。
+WHEEL_PX_PER_UNIT = 64
+WHEEL_MAX_UNITS = 10   # 单次最多滑 10 格，再大就有惯性过冲
+WHEEL_SETTLE = 0.3
+
+_NODE_RE = re.compile(r"<node\b[^>]*>")
+_ATTR_RE = re.compile(r'([\w:-]+)="([^"]*)"')
+_BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
+
+KEY_BACK = 4
+KEY_HOME = 3
+KEY_POWER = 26
+KEY_WAKEUP = 224
+KEY_ESC = 111
+
+# 英文月份（缩写或全名，startswith 匹配：Oct / October 都命中）
+_EN_MONTH = ["january", "february", "march", "april", "may", "june",
+             "july", "august", "september", "october", "november", "december"]
+# 中文月份（「十月」等），数字式「10月」由正则兜底
+_CN_MONTH = ["一月", "二月", "三月", "四月", "五月", "六月",
+             "七月", "八月", "九月", "十月", "十一月", "十二月"]
+
+
+def parse_wheel_value(rid: str, desc: str) -> int:
+    """把滚轮 content-desc 解析成数值，兼容数字 / 英文月份 / 中文月份。
+
+    部分设备的日期滚轮把月份显示成 "Oct" 而非 "10"，直接搜数字会
+    抛「content-desc 无数字」，这里把月份文案也映射成 1..12。
+    """
+    if "month" in rid or "月" in desc:
+        # 月份滚轮优先认月份文案（如 "Oct" / "October 2026"），再兜数字
+        t = desc.strip()
+        if t in _CN_MONTH:
+            return _CN_MONTH.index(t) + 1
+        low = t.lower().rstrip("月").strip()
+        for i, name in enumerate(_EN_MONTH):
+            if name.startswith(low):
+                return i + 1
+        for i, name in enumerate(_CN_MONTH):
+            if name in t:
+                return i + 1
+    m = re.search(r"-?\d+", desc)
+    if m:
+        return int(m.group(0))
+    raise UiError(f"滚轮 {rid} 的 content-desc 无数字：{desc!r}")
+
+
+class UiError(RuntimeError):
+    pass
+
+
+@dataclass
+class Node:
+    attrs: dict
+
+    @property
+    def text(self) -> str:
+        return self.attrs.get("text", "")
+
+    @property
+    def desc(self) -> str:
+        return self.attrs.get("content-desc", "")
+
+    @property
+    def rid(self) -> str:
+        return self.attrs.get("resource-id", "")
+
+    @property
+    def short_id(self) -> str:
+        return self.rid.split("/")[-1]
+
+    @property
+    def cls(self) -> str:
+        return self.attrs.get("class", "")
+
+    @property
+    def pkg(self) -> str:
+        return self.attrs.get("package", "")
+
+    @property
+    def clickable(self) -> bool:
+        return self.attrs.get("clickable") == "true"
+
+    @property
+    def bounds(self) -> tuple[int, int, int, int]:
+        m = _BOUNDS_RE.match(self.attrs.get("bounds", ""))
+        if not m:
+            return (0, 0, 0, 0)
+        return tuple(int(v) for v in m.groups())
+
+    @property
+    def center(self) -> tuple[int, int]:
+        x1, y1, x2, y2 = self.bounds
+        return ((x1 + x2) // 2, (y1 + y2) // 2)
+
+    def __str__(self) -> str:
+        return f"<{self.cls.split('.')[-1]} text={self.text!r} desc={self.desc!r} rid={self.short_id!r} center={self.center}>"
+
+
+def _match(node: Node, text=None, desc=None, rid=None, cls=None,
+           text_contains=None, desc_contains=None, rid_contains=None, clickable=None):
+    if text is not None and node.text != text:
+        return False
+    if desc is not None and node.desc != desc:
+        return False
+    if cls is not None and node.cls != cls and node.cls.split(".")[-1] != cls:
+        return False
+    if clickable is not None and node.clickable != clickable:
+        return False
+    if rid is not None:
+        if node.rid != rid and node.short_id != rid:
+            return False
+    if text_contains is not None and text_contains not in node.text:
+        return False
+    if desc_contains is not None and desc_contains not in node.desc:
+        return False
+    if rid_contains is not None and rid_contains not in node.rid:
+        return False
+    return True
+
+
+class Device:
+    def __init__(self, serial: str | None = None, log=None):
+        self.log = log or (lambda msg: None)
+        if serial is None:
+            found = adbutils.adb.device_list()
+            if not found:
+                raise UiError(
+                    "未检测到设备。请确认：USB 已连接、已开启 USB 调试、"
+                    "并在手机弹窗中点了「允许」。"
+                )
+            serial = found[0].serial
+        self.d = adbutils.adb.device(serial=serial)
+        self.serial = serial
+        self._stayon_changed = False
+        self._size: tuple[int, int] | None = None
+        self._model: str | None = None
+
+    # ---------- 基础 ----------
+    def shell(self, cmd: str) -> str:
+        return self.d.shell(cmd)
+
+    def key(self, keycode: int) -> None:
+        self.shell(f"input keyevent {keycode}")
+
+    def tap(self, x: int, y: int) -> None:
+        self.shell(f"input tap {int(x)} {int(y)}")
+
+    def swipe(self, x1: int, y1: int, x2: int, y2: int, ms: int = 300) -> None:
+        self.shell(f"input swipe {int(x1)} {int(y1)} {int(x2)} {int(y2)} {int(ms)}")
+
+    def input_text(self, text: str) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9@._%+=:,-]*", text):
+            raise UiError(
+                f"input text 只支持 ASCII 字母数字和少量符号，收到 {text!r}。"
+                "中文需要先在手机上装 ADBKeyboard。"
+            )
+        # 白名单已排除空格、引号、$、`、\ 等，双引号包裹即可安全传给 adb shell
+        self.shell(f'input text "{text}"')
+
+    def focus(self) -> str:
+        """当前焦点窗口（约 0.17s）。比 dump 便宜 14 倍，用来轮询界面切换。"""
+        out = self.shell("dumpsys window | grep mCurrentFocus")
+        m = re.findall(r"u0 ([\w.$/]+)", out)
+        return m[-1] if m else out.strip()
+
+    def wait_focus(self, needle: str, timeout: float = 15.0,
+                   interval: float = 0.25) -> str:
+        """廉价等待：轮询焦点窗口直到出现关键词（切 Activity / 开页面时用）。"""
+        deadline = time.time() + timeout
+        last = ""
+        while True:
+            last = self.focus()
+            if needle.lower() in last.lower():
+                return last
+            if time.time() >= deadline:
+                raise UiError(f"等待窗口 {needle!r} 超时({timeout}s)，当前 {last!r}")
+            time.sleep(interval)
+
+    def keyguard_showing(self) -> bool:
+        return self.locked()
+
+    def locked(self) -> bool:
+        """锁屏判定：系统标志为准，焦点窗口兜底。
+
+        个别无锁屏密码的设备（平板常见）上滑解锁后 isKeyguardShowing 标志
+        不翻转，只信标志会误报「仍锁定」；此时若焦点已离开锁屏窗口
+        （回到桌面/应用），判定为已解锁。
+
+        注意：指纹/上滑锁屏的焦点常见是 NotificationShade 或 StatusBar，
+        不能把这些窗口误判成「已解锁」，否则 wm dismiss-keyguard 失败时
+        不会再回退上滑。
+        """
+        focus, kg = self.window_info()
+        if not kg:
+            return False
+        if not focus:
+            return True
+        f = focus.lower()
+        if "keyguard" in f or "notificationshade" in f or "statusbar" in f:
+            return True
+        return False
+
+    def window_info(self) -> tuple[str, bool]:
+        """一次 dumpsys 同时拿到焦点窗口和锁屏状态，省掉一次 adb 往返。
+
+        解锁轮询里每次都要问锁屏，和焦点查询合并后每次省 ~0.17s。
+        """
+        out = self.shell('dumpsys window | grep -E "mCurrentFocus|isKeyguardShowing"')
+        m = re.findall(r"u0 ([\w.$/]+)", out)
+        focus = m[-1] if m else out.strip()
+        return focus, "isKeyguardShowing=true" in out
+
+    def screen_on(self) -> bool:
+        return "mWakefulness=Awake" in self.shell("dumpsys power | grep mWakefulness=")
+
+    def screenshot_png(self) -> bytes:
+        # 有些机型有多个 display，adb exec-out 的 screencap 会把
+        # "Multiple displays..." 警告混进字节流，adbutils 直接解码会失败。
+        # 先落到设备文件再 pull，警告只走 stderr，不会污染 PNG。
+        remote = f"/sdcard/.dsh_screen_{os.getpid()}.png"
+        local = ""
+        try:
+            self.shell(f"screencap -p {remote}")
+            fd, local = tempfile.mkstemp(suffix=".png")
+            os.close(fd)
+            self.d.sync.pull(remote, local)
+            with open(local, "rb") as fh:
+                data = fh.read()
+            if not data.startswith(b"\x89PNG"):
+                raise UiError("截图失败：screencap 没有返回有效 PNG")
+            return data
+        finally:
+            if local:
+                try:
+                    os.unlink(local)
+                except OSError:
+                    pass
+            try:
+                self.shell(f"rm -f {remote}")
+            except Exception:
+                pass
+
+    def screen_size(self) -> tuple[int, int]:
+        """缓存：整条流程会反复问，每次都是一次 adb 往返。"""
+        if self._size is None:
+            out = self.shell("wm size")
+            m = re.search(r"(\d+)x(\d+)", out)
+            self._size = (int(m.group(1)), int(m.group(2))) if m else (0, 0)
+        return self._size
+
+    def model(self) -> str:
+        if self._model is None:
+            self._model = self.d.prop.get("ro.product.model") or "unknown"
+        return self._model
+
+    def stayon(self, on: bool) -> None:
+        self.shell(f"svc power stayon {'usb' if on else 'false'}")
+        self._stayon_changed = True
+
+    # ---------- 控件树 ----------
+    def dump(self) -> list[Node]:
+        raw = self.shell("uiautomator dump /dev/tty")
+        end = raw.find("</hierarchy>")
+        xml = raw[: end + len("</hierarchy>")] if end != -1 else raw
+        nodes = []
+        for m in _NODE_RE.finditer(xml):
+            nodes.append(Node(dict(_ATTR_RE.findall(m.group(0)))))
+        if not nodes:
+            raise UiError("控件树为空，dump 可能失败。原始输出前 200 字符：" + repr(raw[:200]))
+        return nodes
+
+    def find_all(self, nodes=None, **kw) -> list[Node]:
+        nodes = self.dump() if nodes is None else nodes
+        return [n for n in nodes if _match(n, **kw)]
+
+    def find_opt(self, nodes=None, **kw):
+        r = self.find_all(nodes=nodes, **kw)
+        return r[0] if r else None
+
+    def find(self, nodes=None, **kw) -> Node:
+        n = self.find_opt(nodes=nodes, **kw)
+        if n is None:
+            raise UiError(f"未找到控件 {kw}。当前界面：{self.focus()}")
+        return n
+
+    # ---------- 等待（核心提速点：一次 dump 拿树，settle 内命中就只 dump 一次） ----------
+    def wait_nodes(self, timeout: float = 10.0, settle: float = 0.0, **kw) -> list[Node]:
+        """等某个控件出现，并把命中的那次整棵控件树返回，供后续 find 复用。
+
+        settle 是"先干等一段动画时间再 dump"：界面切换通常在 1s 内完成，
+        这样一次 dump 就命中，而不是 dump 失败后再等一次（每次 dump 2.4s）。
+        """
+        if settle:
+            time.sleep(settle)
+        deadline = time.time() + timeout
+        while True:
+            try:
+                nodes = self.dump()
+            except UiError:
+                nodes = []
+            if nodes and self.find_opt(nodes=nodes, **kw) is not None:
+                return nodes
+            if time.time() >= deadline:
+                raise UiError(f"等待控件超时({timeout}s) {kw}。当前界面：{self.focus()}")
+
+    def wait_node(self, timeout: float = 10.0, settle: float = 0.9, **kw) -> Node:
+        nodes = self.wait_nodes(timeout=timeout, settle=settle, **kw)
+        return self.find_opt(nodes=nodes, **kw)
+
+    def wait_for(self, timeout: float = 10.0, settle: float = 0.0, **kw) -> Node:
+        nodes = self.wait_nodes(timeout=timeout, settle=settle, **kw)
+        return self.find_opt(nodes=nodes, **kw)
+
+    def wait_gone(self, timeout: float = 8.0, settle: float = 0.3, **kw) -> None:
+        """等控件消失（对话框关闭），按 dump 轮询。"""
+        if settle:
+            time.sleep(settle)
+        deadline = time.time() + timeout
+        while True:
+            if self.find_opt(**kw) is None:
+                return
+            if time.time() >= deadline:
+                raise UiError(f"等待控件消失超时({timeout}s) {kw}")
+            time.sleep(0.4)
+
+    # ---------- 动作 ----------
+    def tap_node(self, node: Node, settle: float = 0.4) -> None:
+        x, y = node.center
+        self.log(f"tap ({x},{y}) {node}")
+        self.tap(x, y)
+        time.sleep(settle)
+
+    def tap_by(self, settle: float = 0.5, **kw) -> Node:
+        n = self.find(**kw)
+        self.tap_node(n, settle)
+        return n
+
+    # ---------- 滚轮 ----------
+    def wheel_values(self, *rids: str, nodes: list[Node] | None = None
+                     ) -> tuple[list[Node], dict[str, int]]:
+        """一次 dump 读出多个滚轮的当前值。
+
+        逐个读时每个滚轮每轮都要 dump 一次（各 2.4s）；合并成每轮只 dump 一次，
+        日期 + 时间两组滚轮能省掉一大半 dump。nodes 可传入已抓好的控件树，
+        让首次读取复用调用方的 wait_nodes，省下第一轮 dump。
+        """
+        if nodes is None:
+            nodes = self.dump()
+        values: dict[str, int] = {}
+        for rid in rids:
+            n = self.find(nodes=nodes, rid=rid)
+            values[rid] = parse_wheel_value(rid, n.desc)
+        return nodes, values
+
+    def set_wheels(self, targets: dict[str, int], max_rounds: int = 8,
+                   nodes: list[Node] | None = None) -> list[Node]:
+        """闭环批量设定多个滚轮：每轮只 dump 一次读取全部当前值，再逐列滑动到位。
+
+        返回最后一次 dump 的控件树——此时滚轮已收敛，页面标题也是新值，
+        调用方可直接复用，不必再补一次 dump。
+        """
+        for _ in range(max_rounds):
+            nodes, cur = self.wheel_values(*targets, nodes=nodes)
+            todo = {rid: t - cur[rid] for rid, t in targets.items() if t != cur[rid]}
+            if not todo:
+                return nodes
+            for rid, delta in todo.items():
+                units = max(-WHEEL_MAX_UNITS, min(WHEEL_MAX_UNITS, delta))
+                cx, cy = self.find(nodes=nodes, rid=rid).center
+                # 上滑(终点 y 更小) = 数值增大
+                self.swipe(cx, cy, cx, cy - units * WHEEL_PX_PER_UNIT, 250)
+                self.log(f"滚轮 {rid}: {cur[rid]} -> {targets[rid]} (滑 {units} 格)")
+            time.sleep(WHEEL_SETTLE)
+            nodes = None   # 滚轮已动，下一轮必须重新 dump
+        _, cur = self.wheel_values(*targets)
+        raise UiError(f"滚轮无法收敛：目标 {targets}，当前 {cur}")

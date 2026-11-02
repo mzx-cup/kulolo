@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# Local runtime / logs
+*.log
+*.tmp
+*.bak
+
+# Downloaded APK/XAPK caches (too large, not source)
+apks/
+*.apk
+*.xapk
+
+# Screenshots / large media are not source code (can be added separately)
+screenshots/
+
+# Large bundled music assets (12.8 MB) are not needed for the code
+资源/音乐资源/
+
+# Old web backup
+_backup_web_*/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
