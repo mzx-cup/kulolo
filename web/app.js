@@ -1547,7 +1547,7 @@ function bind() {
   els.btnRetryYes.addEventListener("click", () => {
     hideModal(els.retry);
     appendLine("detail", "用户选择重新触发：目标日期平移 +1 个月");
-    runScenario({ offset_months: 1 });
+    runScenario({ offset_months: 1, retry: 1 });
   });
   els.btnRetryNo.addEventListener("click", failSettle);
   els.btnStopYes.addEventListener("click", stopRun);
