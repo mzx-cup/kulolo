@@ -31,6 +31,7 @@ import scenario_birthday
 import scenario_festival
 import scenario_greeting
 import scenario_satellite
+import scenario_summary_report
 from phone_ctl import Device, UiError
 
 HOST = "127.0.0.1"
@@ -338,6 +339,48 @@ SCENARIOS = [
             {"k": "支持", "v": "satellite.support=1"},
             {"k": "联网", "v": "3 天（>72h）"},
             {"k": "时间", "v": "10:00（09:59 起等）"},
+        ],
+    },
+    {
+        "id": "monthly_summary",
+        "title": "月度总结卡片",
+        "tag": "summary · monthly",
+        "desc": "把系统时间调到下个月的第二个周一上午 08:59，息屏等待 60 秒，"
+                "上滑解锁后等待 1-2 分钟，桌面出现月度总结体验报告卡片。",
+        "module": scenario_summary_report,
+        "group": "体验报告卡片",
+        "icon": "calendar",
+        "retryable": False,
+        "params": [
+            {"key": "wait_sec", "type": "number", "label": "解锁后等待",
+              "value": 90, "min": 30, "max": 180, "unit": "秒"},
+        ],
+        "hidden": {"report_type": "monthly"},
+        "specs": [
+            {"k": "日期", "v": "下个月第二个周一"},
+            {"k": "时间", "v": "08:59"},
+            {"k": "息屏", "v": "60s"},
+        ],
+    },
+    {
+        "id": "yearly_summary",
+        "title": "年度总结卡片",
+        "tag": "summary · yearly",
+        "desc": "把系统时间调到当年 12月25日上午 08:59，息屏等待 60 秒，"
+                "上滑解锁后等待 1-2 分钟，桌面出现年度总结体验报告卡片。",
+        "module": scenario_summary_report,
+        "group": "体验报告卡片",
+        "icon": "star",
+        "retryable": False,
+        "params": [
+            {"key": "wait_sec", "type": "number", "label": "解锁后等待",
+              "value": 90, "min": 30, "max": 180, "unit": "秒"},
+        ],
+        "hidden": {"report_type": "yearly"},
+        "specs": [
+            {"k": "日期", "v": "12月25日"},
+            {"k": "时间", "v": "08:59"},
+            {"k": "息屏", "v": "60s"},
         ],
     },
     {
