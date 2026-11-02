@@ -497,8 +497,7 @@ def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
     方向优先按「目标月份 vs 当前显示月份」决定：目标月早 → 向前翻（右滑），
     晚 → 向后翻（左滑），跨过月边界即换月；同月才按周条内日号相对位置。
     注意：翻月只能靠周条跨月，不能 swipe 中部——主页的「AI Class Timetable」
-    横幅会拦截 swipe(1089) 弹出引导弹窗，Cancel 后残留课表浮层，BACK 会把
-    日历视图重置回默认位置，造成翻月死循环。
+    横幅会拦截 swipe(1089) 弹出引导弹窗，直接按返回键退出，无需点击。
     """
     wk = dev.find(nodes=view, rid="vp_week")
     nums = []
@@ -545,13 +544,12 @@ def _ensure_calendar_month(dev: Device, r: Runner, target: date,
     for _ in range(8):
         view = nodes if nodes is not None else dev.dump()
         nodes = None
-        # 课表页守卫：日历可能停在上次的「My Class Timetable」子页，该页周条格子
-        # 的 desc 与月视图同格式，会误命中下方日期匹配。命中先返回主页再继续。
+        # AI 课程表页守卫：日历可能停在「AI Class Timetable」子页，直接按返回键退出
         tt = dev.find_opt(nodes=view, rid="toolbar_title")
         if (dev.find_opt(nodes=view, rid="school_schedule_fragment") is not None
                 or (tt and ("timetable" in (tt.text or "").lower()
                             or "课表" in (tt.text or "")))):
-            r.log(f"误入课表页（{tt.text if tt else 'school_schedule'}），按返回键回日历主页")
+            r.log(f"检测到 AI 课程表页，按返回键直接退出，无需任何点击")
             dev.key(KEY_BACK)
             time.sleep(0.7)
             continue
@@ -581,8 +579,7 @@ def _ensure_calendar_month(dev: Device, r: Runner, target: date,
             has_grid = dev.find_opt(nodes=view, rid="vp_month") is not None
             has_week = dev.find_opt(nodes=view, rid="vp_week") is not None
             if has_week and not has_grid:
-                # X6878 周条形态：翻月只能靠周条跨月边界，不能 swipe 中部——
-                # 主页「AI Class Timetable」横幅会拦截中部 swipe 弹引导窗造成死循环
+                # X6878 周条形态：翻月只能靠周条跨月边界，避开 AI 课程表横幅拦截
                 _flip_week(dev, r, view, target, shown)
                 continue
             nxt = 1 if target.month > cur_idx else -1
@@ -831,18 +828,19 @@ def _select_calendar_day(dev: Device, r: Runner, target: date, note: str,
     # 只影响 seed 流程；极速更新 fixture 不会打开日历。
     dev.shell(f"am force-stop {CALENDAR_PKG}")
     time.sleep(0.3)
-    dev.shell(f"am start -n {CALENDAR_CMP}")
+    # 直接启动日历月视图，跳过 AI 课程表入口，直接打开月视图
+    dev.shell(f"am start -a android.intent.action.VIEW -d 'content://com.transsion.calendar/events'")
     _focus_or_close_shade(dev, "calendar")
     nodes = None
-    for attempt in range(3):
+    for attempt in range(5):
         try:
             nodes = dev.wait_nodes(timeout=8, settle=0.8, rid="dateTitle")
             break
         except UiError:
-            # 日历可能停在上次留下的「我的课表」等子页，返回一层即可回到月视图
-            if attempt == 2:
+            # 日历可能停在 AI Class Timetable 课表页，直接按返回键回主页
+            if attempt == 4:
                 raise
-            r.log(f"没看到月视图（第 {attempt + 1} 次），按返回键回上一层")
+            r.log(f"没看到月视图（第 {attempt + 1} 次），按返回键退出 AI 课程表页")
             dev.key(KEY_BACK)
             time.sleep(0.7)
     nodes = _dismiss_popups(dev, r, nodes)
