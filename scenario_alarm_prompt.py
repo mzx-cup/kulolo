@@ -91,7 +91,7 @@ def _disable_daily_alarm(dev: Device, r: Runner) -> None:
     r.ok("每日闹钟已关闭（保留在闹钟列表里）")
 
 
-def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> None:
+def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> bool:
     r.step(f"系统时间调到周日 {TEST_HOUR:02d}:{TEST_MINUTE:02d}，"
            f"息屏 {wait_sec} 秒再亮屏 {wait_sec} 秒")
     set_system_datetime(dev, r, day, TEST_HOUR, TEST_MINUTE)
@@ -133,17 +133,14 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> None:
     r.shot("桌面 19:11 提前打开提示")
 
     r.step("确认提前打开提示卡片是否出现")
+    # 同「提前关闭提示」：卡片只在桌面「智慧建议」出现，通知栏里没有，
+    # 所以不展开通知栏，直接一次确认。
     if not r.confirm():
-        r.log("桌面未确认，展开通知栏再检查一次")
-        dev.shell("cmd statusbar expand-notifications")
-        time.sleep(1.0)
-        r.shot("通知栏")
-        ok = r.confirm()
-        dev.shell("cmd statusbar collapse")
-        time.sleep(0.4)
-        if not ok:
-            raise UiError("桌面和通知栏都没有确认到「提前打开提示」卡片")
+        r.shot("桌面 未出现提前打开提示")
+        r.log("桌面没有「提前打开提示」卡片，本次结束（可点重试重新触发）")
+        return False
     r.ok(f"设备时间 {now}，19:10 桌面已检查")
+    return True
 
 
 def run(dev: Device | None = None, emit=None, *, wait_sec: int = 60,
@@ -167,16 +164,22 @@ def run(dev: Device | None = None, emit=None, *, wait_sec: int = 60,
 
     _set_daily_alarm(dev, r, ALARM_HOUR, ALARM_MINUTE)
     _disable_daily_alarm(dev, r)
-    _wait_card(dev, r, day, wait_sec)
+    shown = _wait_card(dev, r, day, wait_sec)
 
     dev.stayon(False)
     result["device_time_after"] = dev.shell("date '+%Y-%m-%d %H:%M:%S'").strip()
     result["steps"] = r._no
-    result["ok"] = True
-    result["summary"] = (
-        f"完成。每天 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 闹钟已关闭；"
-        f"系统时间已到周日 {day} {TEST_HOUR:02d}:{TEST_MINUTE:02d}，"
-        f"亮屏等待 {wait_sec}s 到 19:10，桌面智慧建议应出现「要开启明天的闹钟吗？」。")
+    result["ok"] = shown
+    result["triggered"] = shown
+    if shown:
+        result["summary"] = (
+            f"完成。每天 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 闹钟已关闭；"
+            f"系统时间已到周日 {day} {TEST_HOUR:02d}:{TEST_MINUTE:02d}，"
+            f"亮屏等待 {wait_sec}s 到 19:10，桌面智慧建议应出现「要开启明天的闹钟吗？」。")
+    else:
+        result["summary"] = (
+            f"未触发。已把时间调到周日 {day} {TEST_HOUR:02d}:{TEST_MINUTE:02d} 并亮屏等待 "
+            f"{wait_sec}s，桌面没有看到「提前打开提示」卡片。")
     return result
 
 

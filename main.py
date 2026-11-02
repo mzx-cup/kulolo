@@ -560,6 +560,10 @@ _lock = threading.Lock()
 _events: list[dict] = []
 _state = {"running": False, "result": None, "error": None,
           "started_at": None, "finished_at": None}
+# 上一次跑完的场景：id + 是否算成功（confirmed_ok is False 或抛异常 → 失败）。
+# 用它兜底：同一个场景上次没触发成功，这次再点运行就自动当「重试」处理（先清原子服务），
+# 不依赖前端是否带 retry=1（老页面缓存 JS 时会漏传）。
+_prev_run = {"id": None, "ok": False}
 _ctrl = {"paused": False, "stop": False}          # 场景线程运行控制（暂停/结束）
 _confirm_evt = threading.Event()                  # 场景线程等待前端确认卡片
 _confirm_state = {"pending": False, "ok": None}   # pending=等待中；ok=True已触发/False未触发
@@ -762,21 +766,28 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         kwargs["confirm_fn"] = _confirm_fn
         kwargs["ask_fn"] = _ask_fn
         dev = get_device()
-        if is_retry:
-            # 卡片没触发 → 先清空两个原子服务的缓存，避免旧状态残留
+        # 上一次同一场景以「未触发 / 报错」收尾 → 这次也算重试，照样先清缓存
+        with _lock:
+            prev_failed = (_prev_run["id"] == scenario_id and not _prev_run["ok"])
+        if is_retry or prev_failed:
+            why = "点了重新触发" if is_retry else "上次没触发成功"
             _emit({"t": "log", "no": 0,
-                   "msg": "重新触发：先清空 atomicbrain / atomiccore"})
+                   "msg": f"重新触发（{why}）：先清空 atomicbrain / atomiccore"})
+            dev.log = lambda m: _emit({"t": "log", "no": 0, "msg": m})
             dev.clear_atomic_services()
         result = sce["module"].run(dev, emit=_emit, **kwargs)
         # 场景中途是否有过卡片确认（ok=True/False）；没有则为 None
         with _lock:
             result["confirmed_ok"] = _confirm_state["ok"]
+            _prev_run.update(id=scenario_id,
+                             ok=(result["confirmed_ok"] is not False))
         with _lock:
             _state.update(running=False, result=result, error=None,
                           finished_at=time.time())
         _emit({"t": "done", "result": result})
     except Exception as exc:
         with _lock:
+            _prev_run.update(id=scenario_id, ok=False)
             _state.update(running=False, error=str(exc), finished_at=time.time())
         _emit({"t": "error", "msg": f"{type(exc).__name__}: {exc}"})
 
@@ -814,8 +825,9 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Type", mime)
             self.send_header("Content-Length", str(len(body)))
             if not cache:
-                # 静态页每次重新校验，改前端代码后刷新即生效，不会被浏览器缓存拖住
-                self.send_header("Cache-Control", "no-cache")
+                # 静态页完全不缓存：改前端代码后刷新即生效，
+                # 也避免页面还拿着旧的 app.js 跑（老 JS 不会带 retry=1）
+                self.send_header("Cache-Control", "no-store, must-revalidate")
             self.end_headers()
             self.wfile.write(body)
         except (ConnectionError, BrokenPipeError, ConnectionAbortedError):
