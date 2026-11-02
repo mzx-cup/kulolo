@@ -34,10 +34,9 @@ from scenario_birthday import (
 TAXI_PACKAGE = "com.yandex.yango"
 FOOD_PACKAGE = "com.global.foodpanda.android"
 
-APK_DIR = Path(__file__).with_name("apks")
-TAXI_APK = APK_DIR / "yango_full.apk"
-FOOD_XAPK = APK_DIR / "foodpanda.apk"
-FOOD_EXTRACT = APK_DIR / "foodpanda_xapk"
+# 网络共享路径，直接从服务器拉取 APK
+TAXI_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\yango.apk"
+FOOD_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\foodpanda.apk"
 
 # 点餐卡片允许的时段（分钟数）
 LUNCH = (10 * 60 + 45, 13 * 60)
@@ -60,67 +59,38 @@ def _adb(dev: Device, *args: str) -> tuple[int, str]:
         return 1, f"{type(exc).__name__}: {exc}"
 
 
-def _extract_food_xapk() -> None:
-    if FOOD_EXTRACT.exists():
-        return
-    if not FOOD_XAPK.exists():
-        raise UiError(f"foodpanda XAPK 不存在：{FOOD_XAPK}")
-    FOOD_EXTRACT.mkdir(parents=True, exist_ok=True)
-    with zipfile.ZipFile(FOOD_XAPK) as z:
-        z.extractall(FOOD_EXTRACT)
-
-
 def _install_local(dev: Device, r: Runner, package: str) -> bool:
     if package == TAXI_PACKAGE:
-        if not TAXI_APK.exists():
-            return False
-        r.log(f"本地 APK 安装 Yango：{TAXI_APK.name}")
-        rc, out = _adb(dev, "install", "-r", "-g", str(TAXI_APK))
+        r.log(f"从网络共享安装 Yango：{TAXI_APK}")
+        rc, out = _adb(dev, "install", "-r", "-t", "-d", TAXI_APK)
     elif package == FOOD_PACKAGE:
-        try:
-            _extract_food_xapk()
-        except UiError as exc:
-            r.log(str(exc))
-            return False
-        base = FOOD_EXTRACT / "com.global.foodpanda.android.apk"
-        if not base.exists():
-            r.log("foodpanda 解包目录里没有 base APK")
-            return False
-        splits = sorted(FOOD_EXTRACT.glob("config.*.apk"))
-        r.log(f"本地 XAPK 安装 foodpanda：base + {len(splits)} splits")
-        rc, out = _adb(dev, "install-multiple", "-r", "-g",
-                       str(base), *[str(p) for p in splits])
+        r.log(f"从网络共享安装 foodpanda：{FOOD_APK}")
+        rc, out = _adb(dev, "install", "-r", "-t", "-d", FOOD_APK)
     else:
         return False
 
     if rc != 0:
-        r.log(f"本地安装失败：{out.strip()[:400]}")
+        r.log(f"网络共享安装失败：{out.strip()[:400]}")
         return False
     if not _app_installed(dev, package):
         r.log("adb install 返回成功但 pm path 仍找不到包")
         return False
-    r.ok("本地 APK 安装成功")
+    r.ok("网络共享 APK 安装成功")
     return True
 
 
 def _ensure_app(dev: Device, r: Runner, package: str) -> None:
-    """触发卡片前的检查：已安装直接继续；没装则本地 APK 安装，
-    本地没有安装包时打开应用商店详情页，等用户在手机上装好。"""
+    """触发卡片前的检查：已安装直接继续；没装直接从网络共享路径 adb install。"""
     r.step(f"检查应用是否已安装：{package}")
     if _app_installed(dev, package):
         r.ok("已安装")
         return
 
-    r.step(f"未检测到 {package}，触发下载/安装")
+    r.step(f"未检测到 {package}，直接从网络共享路径安装")
     if _install_local(dev, r, package):
         return
 
-    r.log("本地没有可用安装包，打开应用商店详情页，请在手机上点击安装")
-    dev.shell(
-        f'am start -a android.intent.action.VIEW '
-        f'-d "market://details?id={package}"')
-    r.log("等待商店安装完成（最多 180 秒）…")
-    for remain in range(180, 0, -1):
+    raise UiError(f"从网络共享路径安装 {package} 失败，请检查共享路径是否可访问")ge(180, 0, -1):
         r.check()
         if remain % 5 == 0:
             r.tick(remain)
