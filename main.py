@@ -513,6 +513,7 @@ class Handler(BaseHTTPRequestHandler):
                     except ValueError:
                         kwargs[key] = raw
                 dev = Device()
+                dev.clear_atomic_services()
                 scenario["module"].run(dev, **kwargs)
                 self.send_json({"ok": True})
             except Exception as e:

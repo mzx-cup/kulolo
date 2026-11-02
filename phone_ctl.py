@@ -165,6 +165,13 @@ class Device:
     def shell(self, cmd: str) -> str:
         return self.d.shell(cmd)
 
+    def clear_atomic_services(self):
+        """清空 atomicbrain 和 atomiccore 两个原子服务缓存，重试卡片前调用。"""
+        self.shell("pm clear com.transsion.atomicbrain")
+        self.log("[info] 已清空 com.transsion.atomicbrain")
+        self.shell("pm clear com.transsion.atomiccore")
+        self.log("[info] 已清空 com.transsion.atomiccore")
+
     def key(self, keycode: int) -> None:
         self.shell(f"input keyevent {keycode}")
 
