@@ -90,15 +90,7 @@ def _ensure_app(dev: Device, r: Runner, package: str) -> None:
     if _install_local(dev, r, package):
         return
 
-    raise UiError(f"从网络共享路径安装 {package} 失败，请检查共享路径是否可访问")ge(180, 0, -1):
-        r.check()
-        if remain % 5 == 0:
-            r.tick(remain)
-        if _app_installed(dev, package):
-            r.ok("已检测到安装完成")
-            return
-        time.sleep(1)
-    raise UiError(f"{package} 未安装，且商店自动安装超时；请在手机上装好后重试")
+    raise UiError(f"从网络共享路径安装 {package} 失败，请检查共享路径是否可访问")
 
 
 def _in_food_window(hour: int, minute: int) -> bool:
