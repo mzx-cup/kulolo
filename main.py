@@ -28,6 +28,7 @@ import scenario_alarm_close
 import scenario_alarm_prompt
 import scenario_app_suggest
 import scenario_birthday
+import scenario_cross_region
 import scenario_festival
 import scenario_greeting
 import scenario_satellite
@@ -381,6 +382,38 @@ SCENARIOS = [
             {"k": "日期", "v": "12月25日"},
             {"k": "时间", "v": "08:59"},
             {"k": "息屏", "v": "60s"},
+        ],
+    },
+    {
+        "id": "cross_region",
+        "title": "跨国 / 跨城卡片",
+        "tag": "location · cross region",
+        "desc": "两种触发方式自选。①定位切换法：定位改到上海亮屏 20 分钟，"
+                "再切到新德里亮屏 20 分钟，上滑回桌面出卡；"
+                "②Mock 事件法：直接发 LocationEvent"
+                "（country_code=IN，city_code 留空 = 跨国，1148 = 德里，1057 = 新德里）。",
+        "module": scenario_cross_region,
+        "group": "位置感知卡片",
+        "icon": "globe",
+        "retryable": False,
+        "params": [
+            {"key": "method", "type": "select", "label": "触发方式",
+             "value": "mock_country",
+             "options": [
+                 {"v": "mock_country", "t": "Mock · 跨国卡片（IN）"},
+                 {"v": "mock_city_1148", "t": "Mock · 跨城卡片 德里 1148"},
+                 {"v": "mock_city_1057", "t": "Mock · 跨城卡片 新德里 1057"},
+                 {"v": "location", "t": "定位切换 · 上海 → 新德里（各 20 分钟）"},
+             ]},
+            {"key": "wait_min", "type": "number", "label": "定位法每地停留",
+             "value": 20, "min": 1, "max": 60, "unit": "分钟"},
+            {"key": "wait_sec", "type": "number", "label": "Mock 下发后等待",
+             "value": 10, "min": 5, "max": 120, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "事件", "v": "LocationEvent"},
+            {"k": "国家", "v": "IN"},
+            {"k": "城市码", "v": "空 / 1148 / 1057"},
         ],
     },
     {

@@ -48,6 +48,7 @@ const ICONS = {
   wave: '<path d="M3 15c2.2 0 2.2-6 4.5-6s2.2 6 4.5 6 2.2-6 4.5-6 2.2 6 4.5 6"/>',
   flame: '<path d="M12 21c3.7 0 6.4-2.5 6.4-6.1 0-4.6-4.1-6.4-3.3-11.9-3 .6-5.2 3.3-5.2 5.7 0 1.2.5 2.2 1.2 3.1-1 .1-2.6-1-2.6-3.4C6.1 10.2 5.6 12.4 5.6 15c0 3.6 2.7 6 6.4 6z"/>',
   report: '<path d="M4 4h16v16H4zM8 8h8M8 12h8M8 16h5"/>',
+  globe: '<circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8M12 3.6c2.7 2.6 4.1 5.4 4.1 8.4s-1.4 5.8-4.1 8.4c-2.7-2.6-4.1-5.4-4.1-8.4s1.4-5.8 4.1-8.4z"/>',
 };
 
 function glyphFor(s) {
@@ -56,6 +57,7 @@ function glyphFor(s) {
     if (/taxi|打车|yango|car/.test(t)) return "car";
     if (/food|点餐|外卖|foodpanda|restaurant/.test(t)) return "food";
     if (/satellite|卫星|玩机/.test(t)) return "satellite";
+    if (/cross|country|city|跨国|跨城|location|定位/.test(t)) return "globe";
     if (/alarm|clock|闹钟|起床|时间管理/.test(t)) return "clock";
     if (/birthday|生日|cake/.test(t)) return "cake";
     if (/anniversary|纪念/.test(t)) return "heart";
@@ -227,6 +229,7 @@ function buildGroups() {
     else if (/生活服务/.test(g.name)) g.tone = "var(--tone-orange)";
     else if (/玩机技巧/.test(g.name)) g.tone = "var(--tone-cyan)";
     else if (/时间/.test(g.name)) g.tone = "var(--tone-cyan)";
+    else if (/位置|定位|跨国|跨城/.test(g.name)) g.tone = "var(--tone-blue)";
     else g.tone = TONES[ci % TONES.length];
     ci += 1;
   }
@@ -559,6 +562,18 @@ function renderParams() {
       m.setAttribute("aria-label", (p.label || "时间") + " · 分");
 
       lab.append(h, sep, m);
+    } else if (p.type === "select") {
+      const sel = document.createElement("select");
+      sel.id = "p-" + p.key;
+      sel.setAttribute("aria-label", p.label || "");
+      for (const o of p.options || []) {
+        const opt = document.createElement("option");
+        opt.value = String(o.v ?? "");
+        opt.textContent = o.t ?? String(o.v ?? "");
+        if (String(o.v ?? "") === String(p.value ?? "")) opt.selected = true;
+        sel.appendChild(opt);
+      }
+      lab.appendChild(sel);
     } else {
       const inp = document.createElement("input");
       inp.type = "text";
