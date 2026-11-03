@@ -932,6 +932,12 @@ class Handler(BaseHTTPRequestHandler):
         self._json(info)
 
     def _events_after(self, after: str):
+        """返回 id > after 的事件。
+
+        注意：暂停/结束/确认等控制类事件不经过 _emit（直接 append），
+        id 和 seq 不一定连续，所以前端游标必须用 id；另外结果事件里带着
+        _events 的引用，serialize 时必须排除 "result"，否则会把整个历史
+        回放一遍、前端看到的永远是旧场景的 done。"""
         try:
             after_id = int(after)
         except ValueError:
@@ -940,7 +946,13 @@ class Handler(BaseHTTPRequestHandler):
             out = [e for e in _events if e["id"] > after_id]
             run = {k: _state[k] for k in ("running", "result", "error")}
             run["paused"] = _ctrl["paused"]
-        self._json({"events": out, "run": run})
+        # 回放历史事件时不带完整 result（可能很大且已经通过 done 事件给过）
+        slim = []
+        for e in out:
+            if e.get("t") == "done" and isinstance(e.get("result"), dict):
+                e = {k: v for k, v in e.items() if k != "result"}
+            slim.append(e)
+        self._json({"events": slim, "run": run})
 
     def _screenshot(self):
         try:

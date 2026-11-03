@@ -1049,13 +1049,27 @@ def _ensure_datetime_page(dev: Device, r: Runner) -> None:
     raise UiError("设置页找不到日期行，也未找到 System / Date & time 入口")
 
 
+def _to_hm(hour, minute) -> tuple[int, int]:
+    """把 (hour, minute) 归一化成整数。外部脚本可能传 "9:30" 这种整串，
+    也可能传 "9"/"30"；"9:30" 时忽略 minute 参数、直接拆串。"""
+    if isinstance(hour, str) and ":" in hour:
+        h, m = hour.split(":", 1)
+        return int(h), int(m)
+    return int(hour), int(minute)
+
+
 def set_system_datetime(dev: Device, r: Runner, target: date,
                         hour: int, minute: int) -> str:
     """关闭自动时间，把系统日期设为 target、时间设为 hour:minute。
 
     优先走极速路径：shell 有 SET_TIME 时直接 `cmd alarm set-time`，约几十毫秒；
     不行再回退到设置页滚轮（兼容老设备）。返回日期标题。
+
+    hour / minute 统一转 int：调用方可能传字符串（Web 端固定传数字，但命令行
+    或外部脚本传 "9:30" 时会被拆成 "9"/"30"），一旦是字符串，下面 f-string 里的
+    :02d 就会抛 ValueError: Unknown format code 'd' for object of type 'str'。
     """
+    hour, minute = _to_hm(hour, minute)
     r.step(f"系统日期改为 {target}、时间 {hour:02d}:{minute:02d}")
     title = f"{target.year}年{target.month}月{target.day}日"
     if fast_clock.set_datetime(dev, target, hour, minute, log=r.log):
@@ -1198,6 +1212,9 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
         ev_value: str = CAL_TYPE_BIRTHDAY, ev_display: str = "生日",
         control: dict | None = None, confirm_fn=None, ask_fn=None) -> dict:
     dev = dev or Device()
+    # Web 端固定传数字；命令行/外部脚本可能传 "9"/"30" 甚至 "9:30" 字符串，
+    # 这里统一归一化，否则后面 f-string 的 :02d 会抛 Unknown format code 'd'
+    hour, minute = _to_hm(hour, minute)
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
 

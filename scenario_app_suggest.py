@@ -207,6 +207,7 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
     result["app_installed"] = True
 
     if hour is not None and minute is not None:
+        hour, minute = int(hour), int(minute)   # 外部脚本可能传字符串，:02d 要求 int
         if app_package == FOOD_PACKAGE and not _in_food_window(hour, minute):
             raise UiError(
                 f"点餐卡片只在午餐 10:45~13:00 或晚餐 17:00~19:00 出现，"

@@ -61,6 +61,7 @@ _TIME_RE = re.compile(r"(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})")
 
 def _check_time_range(hour: int, minute: int) -> None:
     """系统时间必须在 9:00~22:00 之间，否则节日卡片不触发。"""
+    hour, minute = int(hour), int(minute)
     ok = 9 <= hour <= 21 or (hour == 22 and minute == 0)
     if not ok:
         raise UiError(f"系统时间 {hour:02d}:{minute:02d} 不在 9:00~22:00 之间，"
