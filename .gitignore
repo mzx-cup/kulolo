@@ -30,3 +30,6 @@ _backup_web_*/
 Thumbs.db
 .idea/
 .vscode/
+# One-off local test scripts (temporary harnesses, not part of the tool)
+_t_*.py
+_t_*.json
