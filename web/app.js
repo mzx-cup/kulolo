@@ -1346,6 +1346,9 @@ function shotSchedule() {
 }
 
 function shotStateTick() {
+  // #shot-state 缺失时直接跳过：以前 HTML 一旦被写坏（属性引号丢失导致元素
+  // 没解析出来），这里就会抛 TypeError 并把整个刷新循环带崩。
+  if (!els.shotState) return;
   let text;
   let on = false;
   if (wasRunning) {
