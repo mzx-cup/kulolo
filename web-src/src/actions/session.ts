@@ -13,6 +13,54 @@ let runStart = 0;
 let runEstimateSec = 0;
 let uiRunToken = 0;
 
+/** 这一份 run.result 属于哪个场景。
+ *
+ *  没有它就会出「切到别张卡片还显示上一张的完成结果」：服务端 `_state`
+ *  会一直抱着上一轮的 result，轮询每秒都在，`resetRunUi` 清完界面，
+ *  下一次 poll 又把旧 summary 写回来。 */
+let runOwner: string | null = null;
+
+export function setRunOwner(id: string | null | undefined): void {
+  runOwner = id ?? null;
+}
+
+/** 只有「结果归属的场景就是当前选中的场景」时才允许渲染它 */
+export function runOwnerIs(id: string | null | undefined): boolean {
+  return runOwner !== null && runOwner === id;
+}
+
+/** 当前这一轮归属的场景 id（没有归属就是 null） */
+export function currentRunOwner(): string | null {
+  return runOwner;
+}
+
+/* ── 每张卡片各自的触发状态 ────────────────────────────────────────
+   服务端只有一个全局 result，所以归属由前端记。跑完把结果存到它自己
+   那张卡片名下；换卡片时只还原该卡片自己的那份，绝不会串到别的卡片。 */
+type RunMemory = { tone: "ok" | "fail"; text: string; progress: number };
+const runMemory = new Map<string, RunMemory>();
+
+export function rememberRun(id: string | null | undefined, rec: RunMemory | null): void {
+  if (!id) return;
+  if (rec) runMemory.set(id, rec);
+  else runMemory.delete(id);
+}
+
+/** 把当前选中卡片自己的状态套回界面（没有就回到「就绪」） */
+export function applyRunMemory(): void {
+  const id = state.selected?.id;
+  const rec = id ? runMemory.get(id) : undefined;
+  if (rec) {
+    state.runTone = rec.tone;
+    state.runStateText = rec.text;
+    state.progress = rec.progress;
+  } else {
+    state.runTone = "idle";
+    state.runStateText = "就绪。点按钮后全程自动，请勿拔线。";
+    state.progress = 0;
+  }
+}
+
 export function bumpRunToken(): number {
   uiRunToken += 1;
   return uiRunToken;
@@ -118,6 +166,8 @@ export function resetRunUi(): void {
   elapsedClearTimer = null;
   runStart = 0;
   runEstimateSec = 0;
+  /* 换场景 / 新开一轮：上一轮的 result 不再属于当前界面 */
+  runOwner = null;
 
   state.steps = [];
   state.stepsLive = false;
@@ -134,7 +184,7 @@ export function resetRunUi(): void {
   state.pendingConfirm = false;
   state.pendingAsk = false;
   state.runTone = "idle";
-  state.runStateText = "就绪。点按按钮后全程自动，请勿拔线。";
+  state.runStateText = "就绪。点按钮后全程自动，请勿拔线。";
   state.fxOpen = false;
   state.fxOut = false;
 }

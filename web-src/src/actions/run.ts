@@ -1,4 +1,4 @@
-﻿import { api } from "@/lib/api";
+import { api } from "@/lib/api";
 import { refs } from "@/lib/refs";
 import { RETRYABLE, estimateRunSeconds, pad2 } from "@/lib/format";
 import { state } from "@/stores/core";
@@ -15,6 +15,10 @@ import {
   finishStep,
   pushStep,
   resetRunUi,
+  setRunOwner,
+  runOwnerIs,
+  currentRunOwner,
+  rememberRun,
   startClock,
   stopClock,
   runToken,
@@ -40,6 +44,8 @@ export async function runScenario(extra: Record<string, string | number> = {}): 
   const params = collectParams();
   state.starting = true;
   resetRunUi();
+  /* 这一轮的 result 只属于当前选中的场景，切走后不允许再渲染它 */
+  setRunOwner(state.selected.id);
   state.runDisabled = true;
   state.runBusy = true;
   state.runLabel = "启动中…";
@@ -57,6 +63,7 @@ export async function runScenario(extra: Record<string, string | number> = {}): 
       state.runLabel = "一键运行";
       state.runTone = "fail";
       state.runStateText = r.error;
+      rememberRun(state.selected?.id, { tone: "fail", text: r.error, progress: 1 });
       appendLine("err", "!! " + r.error);
       toast(r.error, true);
     } else {
@@ -72,6 +79,7 @@ export async function runScenario(extra: Record<string, string | number> = {}): 
     state.runLabel = "一键运行";
     state.runTone = "fail";
     state.runStateText = "启动失败：本地服务无响应";
+    rememberRun(state.selected?.id, { tone: "fail", text: "启动失败：本地服务无响应", progress: 1 });
     toast("启动失败：本地服务无响应", true);
   }
 }
@@ -184,6 +192,8 @@ export async function poll(): Promise<void> {
     suppressStaleResult = false;
     if (!wasRunning) {
       wasRunning = true;
+      /* 页面刷新时后端正在跑，我们没有归属信息，就把它记到当前选中的场景名下 */
+      if (!runOwnerIs(state.selected?.id)) setRunOwner(state.selected?.id);
       startClock(estimateRunSeconds(state.selected, state.params));
       shotStateRefresh();
     }
@@ -205,29 +215,32 @@ export async function poll(): Promise<void> {
     if (wasRunning) {
       wasRunning = false;
       suppressStaleResult = false;
-      stopClock();
-      state.countdown = "";
-      state.countdownLive = false;
-      finishClock(Boolean(run.result && run.result.confirmed_ok !== false));
-      shotStateRefresh();
+      /* 切走了就别把这一轮的结算动效/进度套到别的卡片上（按钮状态照常复位） */
+      if (runOwnerIs(state.selected?.id)) {
+        stopClock();
+        state.countdown = "";
+        state.countdownLive = false;
+        finishClock(Boolean(run.result && run.result.confirmed_ok !== false));
+        shotStateRefresh();
 
-      const token = runToken();
-      const sid = state.selected?.id;
-      if (run.result && !run.error && !state.pendingConfirm) {
-        if (run.result.confirmed_ok === true) {
-          window.setTimeout(() => {
-            if (token !== runToken() || wasRunning) return;
-            settleOk();
-          }, 900);
-        } else if (run.result.confirmed_ok === false) {
-          const sel = state.selected;
-          const canRetry = Boolean(sel) && (typeof sel?.retryable === "boolean" ? sel.retryable : RETRYABLE.has(sel!.id));
-          window.setTimeout(() => {
-            if (token !== runToken() || wasRunning) return;
-            if (state.selected?.id !== sid) return;
-            if (canRetry) showRetry();
-            else settleFail();
-          }, 900);
+        const token = runToken();
+        const sid = state.selected?.id;
+        if (run.result && !run.error && !state.pendingConfirm) {
+          if (run.result.confirmed_ok === true) {
+            window.setTimeout(() => {
+              if (token !== runToken() || wasRunning) return;
+              settleOk();
+            }, 900);
+          } else if (run.result.confirmed_ok === false) {
+            const sel = state.selected;
+            const canRetry = Boolean(sel) && (typeof sel?.retryable === "boolean" ? sel.retryable : RETRYABLE.has(sel!.id));
+            window.setTimeout(() => {
+              if (token !== runToken() || wasRunning) return;
+              if (state.selected?.id !== sid) return;
+              if (canRetry) showRetry();
+              else settleFail();
+            }, 900);
+          }
         }
       }
     }
@@ -236,14 +249,25 @@ export async function poll(): Promise<void> {
       state.runDisabled = false;
       state.runBusy = false;
       state.runLabel = "一键运行";
+      /* 结果先记到它自己那张卡片名下，再决定要不要渲染到当前界面——
+         否则服务端抱着上一轮的 result，每张卡片都会显示上一张的完成结果。 */
+      const owned = runOwnerIs(state.selected?.id);
       if (!suppressStaleResult && run.error) {
-        state.progress = 1;
-        state.runTone = "fail";
-        state.runStateText = "失败：" + run.error;
+        const text = "失败：" + run.error;
+        rememberRun(currentRunOwner(), { tone: "fail", text, progress: 1 });
+        if (owned) {
+          state.progress = 1;
+          state.runTone = "fail";
+          state.runStateText = text;
+        }
       } else if (!suppressStaleResult && run.result) {
-        state.progress = 1;
-        state.runTone = "ok";
-        state.runStateText = run.result.summary || "完成。";
+        const text = run.result.summary || "完成。";
+        rememberRun(currentRunOwner(), { tone: "ok", text, progress: 1 });
+        if (owned) {
+          state.progress = 1;
+          state.runTone = "ok";
+          state.runStateText = text;
+        }
       }
     }
   }

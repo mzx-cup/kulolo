@@ -3,7 +3,7 @@ import type { Scenario, ScenarioGroup, ScenarioView } from "@/types/api";
 import { STORAGE_KEYS, readJSON, readText, writeJSON, writeText } from "@/lib/storage";
 import { toast } from "./toast";
 import { resetParams } from "./params";
-import { resetRunUi } from "./session";
+import { applyRunMemory, resetRunUi } from "./session";
 
 /** 分组强调色。顺序有讲究：先匹配到的赢，所以「节日」要排在「重要日」前面，
  *  否则「节日祝福卡片」会先被「重要|日历」那条吃掉。 */
@@ -123,8 +123,8 @@ export function selectScenario(id: string, opts: { force?: boolean; silent?: boo
   state.runLabel = "一键运行";
   state.runBusy = false;
   state.runDisabled = false;
-  state.runTone = "idle";
-  state.runStateText = "就绪。点按钮后全程自动，请勿拔线。";
+  /* 只还原这张卡片自己的触发状态（没跑过就是「就绪」） */
+  applyRunMemory();
 
   document.title = `${s.title} · 手机遥控台`;
   writeText(STORAGE_KEYS.last, s.id);
