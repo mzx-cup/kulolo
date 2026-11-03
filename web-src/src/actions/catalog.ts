@@ -18,6 +18,7 @@ const TONES = [
 ];
 
 const TONE_RULES: ReadonlyArray<readonly [RegExp, string]> = [
+  [/boomplay|音乐/i, "var(--tone-violet)"],
   [/节日/, "var(--tone-rose)"],
   [/重要|日历/, "var(--tone-amber)"],
   [/生活服务/, "var(--tone-orange)"],

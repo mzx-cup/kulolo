@@ -29,6 +29,7 @@ import scenario_alarm_close
 import scenario_alarm_prompt
 import scenario_app_suggest
 import scenario_birthday
+import scenario_boomplay_music
 import scenario_cross_region
 import scenario_festival
 import scenario_greeting
@@ -333,6 +334,41 @@ SCENARIOS = [
             {"k": "应用", "v": "foodpanda"},
             {"k": "午餐", "v": "10:45~13:00"},
             {"k": "晚餐", "v": "17:00~19:00"},
+        ],
+    },
+    {
+        "id": "boomplay_recent_music",
+        "title": "最近音乐卡片",
+        "tag": "boomplay · music",
+        "desc": "进入 Boomplay 随机播放一首海外音乐（约 10 秒），"
+                "mock 发 AppSuggestEvent（app_list=com.afmobi.boomplayer）触发"
+                "最近播放音乐卡片；再打开系统蓝牙开关、mock 发 HEADSET_PLUG"
+                "（state=1,type=1）连接蓝牙耳机，卡片即可出现。"
+                "再次触发时先把系统时间拨到 2 小时后或隔天，以满足频率控制"
+                "（每天最多 2 次、触发后 2 小时才可再次触发）。",
+        "module": scenario_boomplay_music,
+        "group": "BoomPlay",
+        "icon": "music",
+        "retryable": False,
+        "params": [
+            {"key": "gap", "type": "select", "label": "间隔（频率控制）",
+             "value": "2h",
+             "options": [
+                 {"v": "2h", "t": "2 小时后（过冷却）"},
+                 {"v": "next_day", "t": "隔天（重置每日额度）"},
+                 {"v": "skip", "t": "不改时间（首次触发）"},
+             ]},
+            {"key": "wait_sec", "type": "number", "label": "等待卡片",
+             "value": 30, "min": 5, "max": 300, "unit": "秒"},
+            {"key": "play_sec", "type": "number", "label": "播放时长",
+             "value": 10, "min": 3, "max": 120, "unit": "秒"},
+        ],
+        "hidden": {"app_package": "com.afmobi.boomplayer"},
+        "specs": [
+            {"k": "应用", "v": "Boomplay"},
+            {"k": "mock 事件", "v": "AppSuggestEvent + HEADSET_PLUG"},
+            {"k": "每天上限", "v": "2 次"},
+            {"k": "触发冷却", "v": "2 小时"},
         ],
     },
     {

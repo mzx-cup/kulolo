@@ -39,3 +39,6 @@ Thumbs.db
 # One-off local test scripts (temporary harnesses, not part of the tool)
 _t_*.py
 _t_*.json
+
+# Runtime state written by scenarios at run time (not source)
+boomplay_music_state.json

@@ -188,6 +188,81 @@ launcher 被清后会自己重启，实测清完首页控件仍齐全、`at_laun
 - 跑完整条触发流程后，在 `finally` 里 `svc data enable` + `svc wifi enable` 恢复，
   并等待网络回来（保证失败/异常路径也不会把设备留在断网状态）
 
+## 最近音乐卡片（BoomPlay）
+
+`boomplay_recent_music`，分组 `BoomPlay`。按需求的做法拆成 7 步：
+
+1. 频率控制校验（每天最多 2 次 / 触发后 2 小时冷却）
+2. 需要时把系统时间往后拨（`2h` = 2 小时后，`next_day` = 隔天，`skip` = 不拨）
+3. 进 Boomplay，随机播放一首歌约 10 秒
+4. 回桌面，发 `AppSuggestEvent`（最近播放音乐卡片）
+5. 打开系统蓝牙开关 + 发 `HEADSET_PLUG`（模拟连上蓝牙耳机，没有耳机也照发）
+6. 等卡片出现，回桌面首页确认
+7. 记账（`boomplay_music_state.json`，不入库、不进 git）
+
+mock 投递是**双通道**的：
+
+```bash
+# 通道 1：需求给的原命令（要装 com.example.tpk.client/.RuleMockService）
+adb shell am start-foreground-service --user 0 \
+  -a "core.intent.action.DISPATCH_EVENT" \
+  --es "data_type" "AppSuggestEvent" --es "action_type" "listener" \
+  --es "json_data" '{"app_list":["com.afmobi.boomplayer"]}'
+
+# 通道 2：通道 1 报 "Not found; no service started." 时自动改走 TransAtomicBrain
+adb shell am start-service --user 0 \
+  -n com.transsion.atomicbrain/.debug.DebugService \
+  -a "brain.intent.action.DISPATCH_EVENT" \
+  --es "data_type" "HEADSET_PLUG" --es "action_type" "listener" \
+  --es "json_data" '{"state":1,"type":1}'
+```
+
+> 通道 2 **只能用 `am start-service`**。`am start-foreground-service` 会在 5 秒后抛
+> `ForegroundServiceDidNotStartInTimeException: Context.startForegroundService()
+> did not then call Service.startForeground()`，然后弹「Application Error:
+> com.transsion.atomicbrain」把桌面焦点抢走（X6765 实测已复现）。
+
+投递有没有送达，看 logcat 的 `TAB.DebugService: onAction:ACTION_DISPATCH_EVENT`。
+
+### 出卡规则（已从规则引擎读出）
+
+发一条 mock 事件后 `logcat` 会打印每条 rule 的每个 ability 判定，是唯一的真值来源。
+这张卡对应 **`rule_id=10022`，开关 `atomic_switch_item_boomplayer_recent`**：
+
+| ability | 类型 | 条件 |
+|---|---|---|
+| 9 | `AppSuggestAbility` | `values=[com.afmobi.boomplayer]`，`app_rank=2` → `app_list` 前 2 位里要有 boomplayer |
+| 13 | `AppInstallCheckAbility` | 该包已安装 |
+| 21 | `MinTimeIntervalAbility` | `type=HOUR, value=2` → 2 小时冷却 |
+| 22 | `DayCountAbility` | `value=2` → 每天最多 2 次 |
+| 25 | `PermissionCheckAbility` | `com.transsion.atomicbrain.action.BLUETOOTH` |
+
+第 21、22 条正好就是需求里的频率控制（2 小时冷却 / 每天 2 次），代码里那套
+`_freq_guard` / `_freq_record` 是跟它对齐的，改时间再触发的流程（2 小时后 / 隔天）
+也是为了绕过这两条。
+
+`app_rank=N` 的语义是「白名单 app 必须落在 `app_list` 的**前 N 位**」，
+实测三种组合验证过：`["com.shazam.android"]`（size 1）match、
+`["com.afmobi.boomplayer","com.shazam.android"]`（shazam 在 index 1）match、
+`["boomplayer","boomplayer","com.shazam.android"]`（shazam 在 index 2）not match。
+
+### 这张卡为什么还没出
+
+两台机器上 `logcat` 都显示规则走完了 5 条 ability，但 `RuleManager` 仍判
+`isRuleMatch AND not match:sb=9,13,21,22,25, ruleId=10022`，
+而且**连 TransAtomicBrain 里官方的 `MOCK_APP_SUGGEST` 按钮也出不了这张卡**
+（同一台机器上 `MOCK 睡得有点晚卡` 等闹钟 mock 是能出卡的，说明桌面出卡通路是好的）。
+
+根因是 **`MinTimeIntervalAbility` 恒打印 `formatStr=1970-01-01 03_00_00`**，
+即时间戳 0 —— 这张卡是「**最近**播放音乐」，必须先有真实的播放记录喂给规则引擎，
+而 Boomplay 在本机永远 `error_tx`「无网络连接」、`music_name`「未知」、
+`dumpsys media_session` 里 `state=STOPPED(1)`；设备本身 `wifi_on=1`、
+`ping 8.8.8.8` 通、连 AdMob 广告都加载得出来，所以是 **Boomplay 自己的接口被墙 /
+地区限制**，产不出播放记录。
+
+也就是说：命令发对了、规则也读明白了，**卡在「Boomplay 播不了歌」这一环**。
+换一台能正常播歌的机器（或给 Boomplay 通上它自己的服务），这张卡应该就能出来。
+
 ## 界面
 
 界面按「场景目录 / 工作台 / 实时画面」三块重做，场景数涨到 30+ 也不会挤：
@@ -202,6 +277,10 @@ launcher 被清后会自己重启，实测清完首页控件仍齐全、`at_laun
 - **快捷键**：`/` 或 `Ctrl+K` 搜场景，`↑/↓` 切换场景，`Ctrl+Enter` 运行，
   `Esc` 关闭抽屉 / 大图或清空搜索。
 - **动效**：入场错峰、卡片悬浮、步骤盖章；确认/重试在右下角，成功/失败结算也是右下角小提示条，不遮全屏。
+- **下拉菜单**：参数里的「下拉选项」是自绘的 listbox（`SelectMenu.vue`），
+  不再用浏览器原生 `<select>`——原生的**选项浮层**由浏览器/系统绘制，CSS 够不着，
+  永远是白底系统字体。自绘后触发器、浮层、圆角、高亮、hover、Esc 关闭、
+  点外面关闭全部跟着主题走（深色「夜航」/ 浅色「纸感」都核对过计算样式）。
 
 ## 新增场景
 
@@ -212,7 +291,7 @@ HTML / CSS / JS。除 `id / title / tag / desc / params / specs` 外，可按需
 |---|---|
 | `group` | 左侧目录分组名；不写则按 id 前缀推断 |
 | `retryable` | 未触发时是否提供「下月同日重跑」；不写则节日场景 false、其余 true |
-| `icon` | 卡片图标键：`cake` / `heart` / `exam` / `ticket` / `pin` / `lantern` / `spark` / `calendar` / `gift` / `star` / `moon` / `wave` / `flame` / `clock` / `car` / `food` / `satellite` |
+| `icon` | 卡片图标键：`cake` / `heart` / `exam` / `ticket` / `pin` / `lantern` / `spark` / `calendar` / `gift` / `star` / `moon` / `wave` / `flame` / `clock` / `car` / `food` / `satellite` / `music` |
 
 分组会自动分配强调色；搜索、筛选、折叠、键盘切换都对新场景生效。
 

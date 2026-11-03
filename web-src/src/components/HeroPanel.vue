@@ -9,11 +9,13 @@ import { toast } from "@/actions/toast";
 import { refs } from "@/lib/refs";
 import { pad2 } from "@/lib/format";
 import { replayClass } from "@/lib/dom";
+import SelectMenu from "@/components/SelectMenu.vue";
 
 /** 主面板。class 名与原 web/index.html + web/style.css 严格一致，
  *  改动这里的任何 class 都会让样式表里的选择器落空。 */
 export default defineComponent({
   name: "HeroPanel",
+  components: { SelectMenu },
   setup() {
     const sel = computed(() => state.selected);
     const params = computed<ScenarioParam[]>(() => sel.value?.params ?? []);
@@ -66,8 +68,8 @@ export default defineComponent({
       replayClass(el, "pop", 220);
     }
 
-    function onSelect(p: ScenarioParam, e: Event): void {
-      setParam(p.key, (e.target as HTMLSelectElement).value);
+    function onSelect(p: ScenarioParam, value: string): void {
+      setParam(p.key, value);
     }
 
     function timeH(p: ScenarioParam): string {
@@ -236,16 +238,13 @@ export default defineComponent({
           </template>
 
           <template v-else-if="p.type === 'select'">
-            <select
+            <SelectMenu
               :id="`p-${p.key}`"
-              :aria-label="p.label"
-              :value="state.params[p.key] ?? String(p.value ?? '')"
-              @change="onSelect(p, $event)"
-            >
-              <option v-for="o in p.options ?? []" :key="o.v" :value="String(o.v)">
-                {{ o.t ?? o.v }}
-              </option>
-            </select>
+              :label="p.label"
+              :options="(p.options ?? []).map((o) => ({ v: String(o.v), t: o.t }))"
+              :model-value="state.params[p.key] ?? String(p.value ?? '')"
+              @update:model-value="(v: string) => onSelect(p, v)"
+            />
           </template>
 
           <template v-else>

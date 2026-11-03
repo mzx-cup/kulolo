@@ -24,6 +24,7 @@ export const ICONS = {
     '<circle cx="12" cy="12.4" r="7.8"/><path d="M12 8.2v4.6l3.1 2M7.4 4.8 5.6 3M16.6 4.8 18.4 3M8.2 2.8h7.6"/>',
   car: '<path d="M4.2 16.5h15.6M5.6 16.5l1-4.6a2 2 0 0 1 2-1.6h6.8a2 2 0 0 1 2 1.6l1 4.6M6.6 16.5v2.1M17.4 16.5v2.1M7.2 13.4h9.6"/><circle cx="7.8" cy="16.5" r="1.1"/><circle cx="16.2" cy="16.5" r="1.1"/>',
   food: '<path d="M4 12h16a6 6 0 0 1-6 6h-4a6 6 0 0 1-6-6zM7.2 9.2c0-1.4 1-1.9 1-3.4M12 9.2c0-1.4 1-1.9 1-3.4M16.8 9.2c0-1.4 1-1.9 1-3.4M3 20.2h18"/>',
+  music: '<path d="M9 17.4V6.2l9.2-2v11"/><ellipse cx="6.5" cy="17.8" rx="2.7" ry="2.3"/><ellipse cx="15.7" cy="15.6" rx="2.7" ry="2.3"/>',
   satellite:
     '<path d="M4.5 19.5 8 16M4.8 13.2a8.2 8.2 0 0 1 6-6M7.8 16.2a4.4 4.4 0 0 1 3.2-3.2M10.2 10.2l3.6-3.6 3.6 3.6-3.6 3.6zM14 6.4 17.6 2.8M16.6 9 21.2 6.4M14.4 13.8l3 3"/>',
   wave: '<path d="M3 15c2.2 0 2.2-6 4.5-6s2.2 6 4.5 6 2.2-6 4.5-6 2.2 6 4.5 6"/>',
@@ -40,6 +41,7 @@ export type IconKey = keyof typeof ICONS;
 const RULES: ReadonlyArray<readonly [RegExp, IconKey]> = [
   [/taxi|打车|yango|car/, "car"],
   [/food|点餐|外卖|foodpanda|restaurant/, "food"],
+  [/boomplay|music|音乐|最近播放/, "music"],
   [/satellite|卫星|玩机/, "satellite"],
   [/cross|country|city|跨国|跨城|location|定位/, "globe"],
   [/alarm|clock|闹钟|起床|时间管理/, "clock"],

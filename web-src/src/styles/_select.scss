@@ -1,0 +1,125 @@
+// ═══════════════════════════════════════════════════════════════════
+//   自绘下拉菜单（SelectMenu.vue）
+//   原生 <select> 的选项浮层 CSS 够不着，只能整只换掉
+// ═══════════════════════════════════════════════════════════════════
+
+.sel {
+  position: relative;
+  display: inline-flex;
+  vertical-align: middle;
+}
+
+// ── 触发器：跟 .field select 一模一样的观感 ───────────────────────
+.sel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  max-width: 260px;
+  padding: 0 9px 0 11px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--field-bg);
+  color: var(--ink);
+  font: 12px/1 var(--sans);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color .18s var(--ease-out),
+              box-shadow .18s var(--ease-out),
+              background-color .18s var(--ease-out);
+}
+.sel-btn:hover { border-color: var(--ink-4); }
+.sel-btn:focus-visible,
+.sel.open .sel-btn {
+  outline: none;
+  border-color: var(--amber-line);
+  background-color: var(--field-focus);
+  box-shadow: 0 0 0 3px var(--amber-soft);
+}
+
+.sel-val {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sel-caret {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: var(--ink-4);
+  transition: transform .18s var(--ease-out), color .18s var(--ease-out);
+}
+.sel.open .sel-caret {
+  transform: rotate(180deg);
+  color: var(--amber);
+}
+
+// ── 选项浮层 ─────────────────────────────────────────────────────
+.sel-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 60;
+  min-width: 100%;
+  max-width: 320px;
+  max-height: 248px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 5px;
+  list-style: none;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--modal-bg);
+  box-shadow: var(--shadow-pop);
+  overscroll-behavior: contain;
+}
+
+.sel-opt {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  color: var(--ink-2);
+  font: 12px/1.45 var(--sans);
+  cursor: pointer;
+  transition: background-color .13s var(--ease-out), color .13s var(--ease-out);
+}
+.sel-opt:hover {
+  background: var(--card-hover);
+  color: var(--ink);
+}
+.sel-opt.on {
+  background: var(--amber-soft);
+  color: var(--amber-bright);
+}
+
+.sel-opt-txt {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.sel-tick {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  color: var(--amber);
+}
+
+// ── 出场/退场 ─────────────────────────────────────────────────────
+.sel-pop-enter-active {
+  transition: opacity .15s var(--ease-out), transform .15s var(--ease-out);
+}
+.sel-pop-leave-active {
+  transition: opacity .1s var(--ease-in-out), transform .1s var(--ease-in-out);
+}
+.sel-pop-enter-from {
+  opacity: 0;
+  transform: translateY(-5px) scale(.985);
+}
+.sel-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-3px) scale(.99);
+}
