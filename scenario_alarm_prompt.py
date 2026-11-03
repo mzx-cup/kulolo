@@ -28,6 +28,9 @@ from scenario_birthday import (
     _unlock_with_retries,
     _wait_screen_on,
     device_date,
+    disconnect_network,
+    ensure_home_before_confirm,
+    restore_network,
     set_system_datetime,
 )
 
@@ -161,6 +164,7 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> bool:
 
     time.sleep(0.3)
     now = dev.shell("date '+%H:%M:%S'").strip()
+    ensure_home_before_confirm(dev, r)
     r.shot("桌面 19:11 提前打开提示")
 
     r.step("确认提前打开提示卡片是否出现")
@@ -181,6 +185,15 @@ def run(dev: Device | None = None, emit=None, *, wait_sec: int = 60,
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
 
+    # 时间管理三张卡片：第一步就断网（卡片只靠本地时间 + 本地闹钟判定）。
+    disconnect_network(dev, r)
+    try:
+        return _run_trigger(dev, r, wait_sec=wait_sec, method=method)
+    finally:
+        restore_network(dev, r)
+
+
+def _run_trigger(dev: Device, r: Runner, *, wait_sec: int, method: str) -> dict:
     # Mock 触发：装 TransAtomicBrain → 点「MOCK 工作日开闹卡」→ 回桌面出卡。
     if method == "mock":
         from scenario_atomic_mock import run_mock

@@ -17,7 +17,7 @@ import time
 from phone_ctl import KEY_HOME, KEY_WAKEUP, Device, UiError
 
 from scenario_app_suggest import _adb, _app_installed, _zip_broken
-from scenario_birthday import Runner, _unlock_with_retries, _wait_screen_on
+from scenario_birthday import Runner, _unlock_with_retries, _wait_screen_on, ensure_home_before_confirm
 
 ATOMIC_PACKAGE = "com.transsion.atomicbrain"
 ATOMIC_ACTIVITY = "com.transsion.atomicbrain/.debug.Test"
@@ -122,6 +122,7 @@ def wait_and_confirm(dev: Device, r: Runner, wait_sec: int, card_title: str) -> 
         r.tick(remain)
         time.sleep(1)
     time.sleep(1.0)
+    ensure_home_before_confirm(dev, r)
     r.shot(f"Mock · {card_title}")
 
     r.step(f"确认{card_title}是否出现")
@@ -138,6 +139,7 @@ def wait_and_confirm(dev: Device, r: Runner, wait_sec: int, card_title: str) -> 
     time.sleep(0.4)
     if not ok:
         raise UiError(f"Mock 触发后，桌面和通知栏都没有确认到「{card_title}」")
+    ensure_home_before_confirm(dev, r)
     r.ok("通知栏已确认卡片")
     return "通知栏"
 

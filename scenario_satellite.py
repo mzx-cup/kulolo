@@ -29,6 +29,7 @@ from scenario_birthday import (
     _unlock_with_retries,
     _wait_screen_on,
     device_date,
+    ensure_home_before_confirm,
     set_system_datetime,
 )
 
@@ -135,6 +136,7 @@ def _check_card_after_lock(dev: Device, r: Runner, unlock_retries: int = 3) -> b
     _unlock_with_retries(dev, r, unlock_retries)
     dev.stayon(True)
     time.sleep(0.8)
+    ensure_home_before_confirm(dev, r)
     r.shot("解锁后")
     return r.confirm()
 
@@ -183,6 +185,7 @@ def run(dev: Device | None = None, emit=None, *, wait_sec: int = 75,
     r.shot("卫星通话卡片")
 
     r.step("确认智慧建议卡片")
+    ensure_home_before_confirm(dev, r)
     ok = r.confirm()
     if not ok:
         r.step("锁屏后再检查智慧建议卡片")

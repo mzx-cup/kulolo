@@ -38,6 +38,7 @@ from scenario_birthday import (
     _unlock_with_retries,
     _wait_screen_on,
     device_date,
+    ensure_home_before_confirm,
     set_system_datetime,
 )
 
@@ -127,6 +128,7 @@ def _run_one_festival(dev: Device, r: Runner, f: dict, hour: int, minute: int,
     _stayon_wait_lock_unlock(dev, r, wait_sec, unlock_retries)
 
     r.step(f"确认 {f['name']} 卡片是否已触发")
+    ensure_home_before_confirm(dev, r)
     r.confirm()
     r.ok()
     r.shot("解锁后")

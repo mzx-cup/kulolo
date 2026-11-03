@@ -819,7 +819,7 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         if is_retry or prev_failed:
             why = "点了重新触发" if is_retry else "上次没触发成功"
             _emit({"t": "log", "no": 0,
-                   "msg": f"重新触发（{why}）：先清空 atomicbrain / atomiccore"})
+                   "msg": f"重新触发（{why}）：先清空 launcher3 / atomicbrain / atomiccore"})
             dev.log = lambda m: _emit({"t": "log", "no": 0, "msg": m})
             dev.clear_atomic_services()
         result = sce["module"].run(dev, emit=_emit, **kwargs)

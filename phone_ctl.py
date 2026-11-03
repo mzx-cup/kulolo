@@ -38,6 +38,18 @@ KEY_POWER = 26
 KEY_WAKEUP = 224
 KEY_ESC = 111
 
+# 桌面（launcher）包名与「首页」特征。
+# 为什么不能用 page_indicator：XOS 的 page_indicator 每一页都存在且 content-desc
+# 恒为「主屏幕」，它只表示「桌面页指示器」，不表示当前停在第几页。
+# 也不能靠 dumpsys：TrCellLayout 各页的坐标在所有页上完全一致，TrWorkSpace
+# 里没有 scrollX / mCurrentPage 可读。唯一可靠的信号是首页专属控件是否存在：
+# 时钟 widget（tc_time / tc_date）、温度（tv_temperature）、「智慧建议」标题。
+LAUNCHER_PKG = "com.transsion.launcher3"
+ATOMIC_PKG = "com.transsion.atomicbrain"
+ATOMIC_CORE_PKG = "com.transsion.atomiccore"
+HOME_PAGE_RIDS = ("tc_time", "tc_date", "tv_temperature")
+HOME_PAGE_TEXTS = ("智慧建议",)
+
 # 英文月份（缩写或全名，startswith 匹配：Oct / October 都命中）
 _EN_MONTH = ["january", "february", "march", "april", "may", "june",
              "july", "august", "september", "october", "november", "december"]
@@ -166,11 +178,15 @@ class Device:
         return self.d.shell(cmd)
 
     def clear_atomic_services(self):
-        """清空 atomicbrain 和 atomiccore 两个原子服务缓存，重试卡片前调用。"""
-        self.shell("pm clear com.transsion.atomicbrain")
-        self.log("[info] 已清空 com.transsion.atomicbrain")
-        self.shell("pm clear com.transsion.atomiccore")
-        self.log("[info] 已清空 com.transsion.atomiccore")
+        """清空原子服务缓存 + 桌面数据，重试卡片前调用。
+
+        launcher3 也要清：智慧建议卡片区是桌面的一部分，上一轮的卡片状态、
+        停留页、卡片被划走的位置都在 launcher 的 SharedPreferences 里，
+        不清的话重试时经常「新卡片被旧状态挡住」。
+        """
+        for pkg in (LAUNCHER_PKG, ATOMIC_PKG, ATOMIC_CORE_PKG):
+            self.shell(f"pm clear {pkg}")
+            self.log(f"[info] 已清空 {pkg}")
 
     def key(self, keycode: int) -> None:
         self.shell(f"input keyevent {keycode}")
@@ -289,6 +305,44 @@ class Device:
     def stayon(self, on: bool) -> None:
         self.shell(f"svc power stayon {'usb' if on else 'false'}")
         self._stayon_changed = True
+
+    # ---------- 桌面首页 ----------
+    def launcher_visible(self) -> bool:
+        """廉价判断（一次 dumpsys，约 0.17s）：焦点窗口是不是桌面。"""
+        return LAUNCHER_PKG in self.focus().lower()
+
+    def at_launcher_home(self, nodes: list[Node] | None = None) -> bool:
+        """是不是停在桌面「首页」（有智慧建议卡片区的那一页）。
+
+        桌面有好几页，page_indicator 每页都在、content-desc 恒为「主屏幕」，
+        区分不了；只有首页才挂着时钟 widget（tc_time / tc_date /
+        tv_temperature）和「智慧建议」标题。所以按这些控件判断。
+
+        先做 0.17s 的焦点判断，不在桌面上就直接 False，省掉 2.4s 的 dump。
+        """
+        if not self.launcher_visible():
+            return False
+        nodes = self.dump() if nodes is None else nodes
+        rid_tail = {(n.rid or "").split("/")[-1] for n in nodes}
+        if any(t in rid_tail for t in HOME_PAGE_RIDS):
+            return True
+        texts = {(n.text or "").strip() for n in nodes}
+        return any(t in texts for t in HOME_PAGE_TEXTS)
+
+    def goto_launcher_home(self, max_presses: int = 3,
+                           settle: float = 0.8) -> bool:
+        """回到桌面首页，返回是否成功。
+
+        按一次 HOME 系统就会从任意分页跳回首页，所以通常一次就够；
+        多按几次是为了兜住「HOME 被动画/弹窗吞掉」的情况。每次都重新判定，
+        避免在已经回到首页时还多按（多按会把页面上的卡片划走）。
+        """
+        for i in range(max_presses):
+            self.key(KEY_HOME)
+            time.sleep(settle if i == 0 else 0.5)
+            if self.at_launcher_home():
+                return True
+        return False
 
     # ---------- 控件树 ----------
     def dump(self) -> list[Node]:

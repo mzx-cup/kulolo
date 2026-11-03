@@ -153,6 +153,41 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
   先 0 再恢复原值）。顺序反了会让 gps provider 变成「不是 test provider」，之后 add/remove
   全部失效，mock 坐标就永久留在 `dumpsys location` 里（X6765 实测）
 
+## 回到桌面首页
+
+卡片在锁屏、通知栏、桌面都能出，但**桌面首页**（有「智慧建议」卡片区的那一页）
+才是要交付的最终界面。所以每次截图确认卡片之前，所有场景都会先执行一次
+`ensure_home_before_confirm()`：
+
+1. `Device.at_launcher_home()` 先看焦点窗口是不是 launcher（~170ms，非 launcher 直接返回 False）
+2. 是 launcher 才 `uiautomator dump` 一次，按**首页专属控件**判定：
+   `tc_time`（时钟 widget）/ `tc_date`（日期）/ `tv_temperature`（温度）任一存在，
+   或出现文本「智慧建议」，即为首页
+3. 不是首页就按 `KEYCODE_HOME` 回首页，最多 3 次，每次都重新判定
+
+> 走弯路记录：`page_indicator`（`content-desc="主屏幕"`）在**每一页都存在且完全一样**，
+> 不能用；`dumpsys activity com.transsion.launcher3` 里三页的 `TrCellLayout` 坐标也完全
+> 一致，`TrWorkSpace` 上没有 `scrollX` / `mCurrentPage`；`dumpsys activity top` 更不含页信息。
+> 最后只剩「首页专属控件是否存在」这一条可靠信号（X6766 / X6765 双机实测一致）。
+
+列表页上按 HOME **一次**即回首页，重复按也不会翻页，所以这一步很便宜。
+回首页失败只记日志、**不判失败**——锁屏/通知栏类卡片本来就回不到桌面首页。
+
+**未出卡重试时会多清一次桌面**：前端点「未出卡，重试」或上一次运行失败再跑时，
+除了原本的 `pm clear com.transsion.atomicbrain` 和 `com.transsion.atomiccore`，
+还会执行 `adb shell pm clear com.transsion.launcher3`（`Device.clear_atomic_services()`
+现在遍历 `LAUNCHER_PKG / ATOMIC_PKG / ATOMIC_CORE_PKG`），把残留的卡片状态彻底清掉。
+launcher 被清后会自己重启，实测清完首页控件仍齐全、`at_launcher_home()` 仍为 True。
+
+## 时间管理卡片先断网
+
+`wake_alarm_delay` / `alarm_early_prompt` / `alarm_early_close` 三个场景的**第一步**
+（真实触发和 Mock 触发都一样）都是断网：
+
+- `svc wifi disable` + `svc data disable`，然后 ping `8.8.8.8` 轮询最多 10 次确认真的不通
+- 跑完整条触发流程后，在 `finally` 里 `svc data enable` + `svc wifi enable` 恢复，
+  并等待网络回来（保证失败/异常路径也不会把设备留在断网状态）
+
 ## 界面
 
 界面按「场景目录 / 工作台 / 实时画面」三块重做，场景数涨到 30+ 也不会挤：
@@ -255,14 +290,15 @@ python main.py
 
 | 文件 | 职责 |
 |---|---|
-| `phone_ctl.py` | 设备控制层：dump 解析、控件查找、点击/滑动/滚轮闭环 |
+| `phone_ctl.py` | 设备控制层：dump 解析、控件查找、点击/滑动/滚轮闭环、桌面首页判定与回首页、清原子化服务 |
 | `fast_clock.py` | 极速系统时间：`cmd alarm set-time`，带权限探测、校验和旧界面回退 |
 | `fixtures.py` | fixture 事件登记 / 更新；`fixtures.json` 按设备串号保存 |
 | `scenario_birthday.py` | 策划案场景 + fixture 快路径 + 可复用动作库（唤屏/选日期/建生日/改系统时间/息屏解锁） |
 | `scenario_greeting.py` | 祝福卡片场景：fixture 快路径 + 旧流程兼容，`PHONE_REMOTE_LEGACY=1` 可切回旧查找/复用逻辑 |
-| `scenario_alarm.py` | 起床闹钟延迟：10 分钟预热 + SET_ALARM 每日闹钟 + 周三 23:39 亮屏等待卡片 |
-| `scenario_alarm_prompt.py` | 提前打开提示：关闭每天 04:05 闹钟 + 周日 19:09 桌面等待 |
-| `scenario_alarm_close.py` | 提前关闭提示：保持每天 04:05 闹钟开启 + 周五 19:09 桌面等待 |
+| `scenario_alarm.py` | 起床闹钟延迟：先断网 + 10 分钟预热 + SET_ALARM 每日闹钟 + 周三 23:39 亮屏等待卡片；支持 Mock 触发 |
+| `scenario_alarm_prompt.py` | 提前打开提示：先断网 + 关闭每天 04:05 闹钟 + 周日 19:09 桌面等待；支持 Mock 触发 |
+| `scenario_alarm_close.py` | 提前关闭提示：先断网 + 保持每天 04:05 闹钟开启 + 周五 19:09 桌面等待；支持 Mock 触发 |
+| `scenario_atomic_mock.py` | Mock 触发：装 TransAtomicBrain → 点 mock 按钮 → 回桌面出卡（不改时间、不建闹钟） |
 | `scenario_app_suggest.py` | 生活服务：一键打车（Yango）/ 一键点餐（foodpanda）；共享路径装包，XAPK 自动拆包 install-multiple |
 | `scenario_satellite.py` | 玩机技巧：卫星通话卡片，支持检查 + 清原子化模拟器 + 断网重连 + 3 天/10:00 |
 | `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
@@ -314,6 +350,13 @@ dump 慢是因为每次都要在设备侧起一个 JVM，换 `--compressed` 或�
 
 ## 注意
 
+- **卡片确认前先回桌面首页**：所有场景在截图确认卡片之前都会把界面拉回
+  桌面首页（有「智慧建议」卡片区的那一页），判定依据是首页专属控件
+  `tc_time` / `tc_date` / `tv_temperature` / 文本「智慧建议」，详见上文
+- **未出卡重试会清 launcher3**：点「未出卡，重试」时除清理 atomicbrain /
+  atomiccore，还会 `pm clear com.transsion.launcher3`，桌面会短暂重启
+- **时间管理三个场景先断网**：`wake_alarm_delay` / `alarm_early_prompt` /
+  `alarm_early_close` 第一步会关掉 Wi-Fi 和数据，跑完（含异常）自动恢复
 - **设备自动重连**：后端每次查询都实时枚举 adb（不缓存），拔插/换机后前端
   3~5 秒内自动识别到新设备，无需重启服务；顶栏设备状态一栏是按钮，可点击立即重测。
   检测不到时若 adb 卡死会自动 `start-server` / 必要时 `kill-server` 恢复，前端会在

@@ -30,6 +30,7 @@ from scenario_birthday import (
     _cli_emit,
     _prepare,
     device_date,
+    ensure_home_before_confirm,
     set_system_datetime,
 )
 
@@ -318,6 +319,7 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
         r.tick(remain)
         time.sleep(1)
     time.sleep(1.0)
+    ensure_home_before_confirm(dev, r)
     r.shot("生活服务卡片")
 
     r.step("确认生活服务卡片是否出现")
@@ -331,6 +333,7 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
         time.sleep(0.4)
         if not ok:
             raise UiError("桌面和通知栏都没有确认到生活服务卡片")
+    ensure_home_before_confirm(dev, r)
     r.ok("已确认生活服务卡片")
 
     dev.stayon(False)

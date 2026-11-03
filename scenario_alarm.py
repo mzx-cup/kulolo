@@ -27,6 +27,9 @@ from scenario_birthday import (
     _unlock_with_retries,
     _wait_screen_on,
     device_date,
+    disconnect_network,
+    ensure_home_before_confirm,
+    restore_network,
     set_system_datetime,
 )
 
@@ -144,6 +147,7 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int,
     _unlock_with_retries(dev, r, unlock_retries)
     dev.stayon(True)
     time.sleep(0.8)
+    ensure_home_before_confirm(dev, r)
     r.shot("解锁后")
     r.step("确认起床闹钟延迟卡片是否出现（已自动解锁到桌面）")
     if r.confirm():
@@ -159,6 +163,7 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int,
     time.sleep(0.4)
     if not ok:
         raise UiError("桌面和通知栏都没有确认到「起床闹钟延迟」卡片")
+    ensure_home_before_confirm(dev, r)
     r.ok("通知栏已看到卡片")
     return "通知栏"
 
@@ -171,6 +176,18 @@ def run(dev: Device | None = None, emit=None, *, warmup_min: int = 10,
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
 
+    # 时间管理三张卡片：第一步就断网。卡片只靠本地时间 + 本地闹钟判定，
+    # 联网会引入在线时长之类的额外条件，把触发结果搞脏。
+    disconnect_network(dev, r)
+    try:
+        return _run_trigger(dev, r, warmup_min=warmup_min, wait_sec=wait_sec,
+                            unlock_retries=unlock_retries, method=method)
+    finally:
+        restore_network(dev, r)
+
+
+def _run_trigger(dev: Device, r: Runner, *, warmup_min: int, wait_sec: int,
+                 unlock_retries: int, method: str) -> dict:
     # Mock 触发：装 TransAtomicBrain → 点「MOCK 睡得有点晚卡」→ 回桌面出卡。
     # 不建闹钟、不改系统时间、不息屏等待，几秒钟就能出卡。
     if method == "mock":

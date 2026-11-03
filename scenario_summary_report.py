@@ -16,6 +16,7 @@ from scenario_birthday import (
     _cli_emit,
     _prepare,
     device_date,
+    ensure_home_before_confirm,
     set_system_datetime,
 )
 
@@ -81,6 +82,7 @@ def run(dev: Device | None = None, emit=None, *,
     r.step(f"等待卡片出现 {wait_sec} 秒…")
     time.sleep(wait_sec)
 
+    ensure_home_before_confirm(dev, r)
     r.shot("桌面")
     ok = r.confirm()
     dev.shell("cmd statusbar expand-notifications")
@@ -88,6 +90,9 @@ def run(dev: Device | None = None, emit=None, *,
     r.shot("通知栏")
     ok = ok or r.confirm()
     dev.shell("cmd statusbar collapse")
+    time.sleep(0.4)
+    if ok:
+        ensure_home_before_confirm(dev, r)
 
     if not ok:
         raise UiError("桌面和通知栏都没有确认到体验报告卡片")

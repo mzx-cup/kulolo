@@ -34,6 +34,7 @@ from scenario_birthday import (
     _cli_emit,
     _prepare,
     _unlock_with_retries,
+    ensure_home_before_confirm,
 )
 from scenario_app_suggest import _service_component
 
@@ -217,6 +218,7 @@ def _run_location(dev: Device, r: Runner, wait_min: int, settle_sec: int) -> boo
             time.sleep(1)
         r.shot("桌面 跨国跨城卡片")
         r.step("确认跨国 / 跨城卡片是否出现")
+        ensure_home_before_confirm(dev, r)
         ok = bool(r.confirm())
         if not ok:
             r.shot("桌面 未出现跨国跨城卡片")
@@ -247,6 +249,7 @@ def _run_mock(dev: Device, r: Runner, method: str, wait_sec: int) -> bool:
         r.check()
         r.tick(remain)
         time.sleep(1)
+    ensure_home_before_confirm(dev, r)
     r.shot(label)
 
     r.step(f"确认{label}是否出现")

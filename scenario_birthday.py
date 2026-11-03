@@ -386,6 +386,63 @@ def _wait_screen_on(dev: Device, on: bool, timeout: float = 3.0) -> bool:
     return dev.screen_on() == on
 
 
+def goto_launcher_home(dev: Device, r: Runner) -> None:
+    """回到桌面「首页」，也就是挂着智慧建议卡片区的那一页。
+
+    为什么必须回首页：桌面有好几页，智慧建议卡片只在首页显示；
+    停在别的分页时截图和用户确认都会落空，白等一轮。
+    判定走 Device.at_launcher_home()（看首页专属控件，不是看 page_indicator）。
+    """
+    if dev.goto_launcher_home():
+        r.log("已回到桌面首页（有智慧建议卡片区的那一页）")
+        return
+    raise UiError(f"没能回到桌面首页，当前窗口 {dev.focus()!r}")
+
+
+def ensure_home_before_confirm(dev: Device, r: Runner) -> None:
+    """卡片触发后的收口：确保停在桌面首页，再交给前端确认。
+
+    所有场景在 r.confirm() 之前都调它。回不去只记日志不抛错——
+    有的卡片在锁屏/通知栏，回不到首页不该把整条流程判失败。
+    """
+    try:
+        goto_launcher_home(dev, r)
+    except UiError as exc:
+        r.log(f"回到桌面首页失败（不影响本次确认）：{exc}")
+
+
+def disconnect_network(dev: Device, r: Runner, settle: float = 5.0) -> None:
+    """断网：Wi-Fi + 移动数据一起关掉，再 ping 确认真的断了。
+
+    时间管理三张卡片按测试说明第一步就要断网：卡片靠本地时间 + 本地闹钟
+    判定，联网反而会引入「在线时长」这类额外条件，把触发结果搞脏。
+    """
+    r.step("第一步：断开网络")
+    dev.shell("svc wifi disable")
+    dev.shell("svc data disable")
+    time.sleep(settle)
+    offline = False
+    for _ in range(10):
+        r.check()
+        out = dev.shell("ping -c 1 -W 1 8.8.8.8")
+        if "1 received" not in out and "1 packets received" not in out:
+            offline = True
+            break
+        time.sleep(1)
+    if offline:
+        r.ok("Wi-Fi 与移动数据已关闭，设备已断网")
+    else:
+        r.log("警告：ping 仍然通，网络可能没完全断开，继续执行")
+
+
+def restore_network(dev: Device, r: Runner, settle: float = 5.0) -> None:
+    """跑完后把网络开回来，别把设备丢在断网状态。"""
+    r.step("恢复网络")
+    dev.shell("svc data enable")
+    dev.shell("svc wifi enable")
+    time.sleep(settle)
+    r.ok("Wi-Fi 与移动数据已重新打开")
+
 def _settings_row_tap(dev: Device, labels: tuple[str, ...], settle: float = 0.3,
                       retries: int = 3, expect_rid: str | None = None) -> None:
     """设置页的行：点标题中心即可（+35px 偏移曾点出行下缘导致滚轮不弹）。
@@ -1148,6 +1205,7 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
         _unlock_with_retries(dev, r, unlock_retries)
         dev.stayon(True)
         time.sleep(0.8)
+        ensure_home_before_confirm(dev, r)
         r.shot("解锁后")
         r.step("确认卡片是否已触发（已自动解锁到桌面）")
         r.confirm()
@@ -1190,6 +1248,7 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
     _unlock_with_retries(dev, r, unlock_retries)
     dev.stayon(True)
     time.sleep(0.8)                     # 等桌面渲染完再截，避免截到锁屏残影
+    ensure_home_before_confirm(dev, r)
     r.shot("解锁后")
     r.step("确认卡片是否已触发（已自动解锁到桌面）")
     r.confirm()
