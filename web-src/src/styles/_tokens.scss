@@ -1,0 +1,195 @@
+// 主题令牌：尺寸 / 缓动 / 字体 / 色调 + 深浅两套配色
+// 源：web/style.css 第 7~198 行（原样搬运，未改规则）
+
+/* ── 主题令牌 ───────────────────────────────────────────────────── */
+:root {
+  --topbar-h: 68px;
+  --catalog-w: clamp(300px, 20vw, 356px);
+  --dock-w: clamp(258px, 18vw, 318px);
+  --radius-xl: 22px;
+  --radius-lg: 18px;
+  --radius-md: 13px;
+  --radius-sm: 9px;
+
+  --ease-out: cubic-bezier(.22, 1, .36, 1);
+  --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
+  --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+
+  --sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
+          "Hiragino Sans GB", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --display: "Palatino Linotype", "Iowan Old Style", "Songti SC",
+             "Noto Serif SC", "Source Han Serif SC", "SimSun", Georgia, serif;
+  --mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Consolas,
+          ui-monospace, monospace;
+
+  --tone-amber: #e8b264;
+  --tone-rose: #ff9fb0;
+  --tone-jade: #6fd6b0;
+  --tone-blue: #7fb4ff;
+  --tone-violet: #b99bff;
+  --tone-cyan: #7fd9e8;
+  --tone-orange: #ffa46b;
+}
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #080b10;
+  --bg-elev: #0b0f15;
+  --panel: rgba(18, 24, 32, .72);
+  --panel-solid: #121821;
+  --panel-2: rgba(244, 236, 220, .045);
+  --panel-3: rgba(244, 236, 220, .075);
+  --field-bg: #0d131b;
+  --field-focus: #0b1017;
+  --input-bg: rgba(5, 8, 12, .55);
+  --card-hover: rgba(244, 236, 220, .035);
+  --card-active: rgba(232, 178, 100, .075);
+
+  --line: rgba(244, 236, 220, .09);
+  --line-strong: rgba(244, 236, 220, .18);
+
+  --ink: #f4ecdc;
+  --ink-2: #d0c7b5;
+  --ink-3: #a79d8b;
+  --ink-4: #8a8172;
+
+  --amber: #e8b264;
+  --amber-bright: #ffd28f;
+  --amber-deep: #a97529;
+  --amber-soft: rgba(232, 178, 100, .13);
+  --amber-line: rgba(232, 178, 100, .42);
+  --accent-grad: linear-gradient(180deg, #ffd28f, #e8b264 52%, #b57c2f);
+  --on-accent: #1a1204;
+
+  --jade: #6fd6b0;
+  --jade-deep: #2a7d63;
+  --jade-soft: rgba(111, 214, 176, .12);
+  --jade-grad: linear-gradient(180deg, #9cebd0, #4bb28e 52%, #2a7d63);
+  --on-jade: #041611;
+
+  --rust: #ef7c6a;
+  --rust-deep: #8e2f25;
+  --rust-soft: rgba(239, 124, 106, .12);
+  --blue: #7fb4ff;
+  --blue-soft: rgba(127, 180, 255, .12);
+
+  --hero-glow: rgba(232, 178, 100, .12);
+  --glow-amber: rgba(232, 178, 100, .10);
+  --glow-jade: rgba(111, 214, 176, .055);
+  --glow-blue: rgba(127, 180, 255, .045);
+  --grid: rgba(244, 236, 220, .032);
+  --star: rgba(244, 236, 220, .55);
+  --star-opacity: .16;
+  --grain-opacity: .04;
+  --grain-blend: screen;
+
+  --topbar-bg: rgba(8, 11, 16, .78);
+  --scrim: rgba(3, 5, 8, .66);
+  --modal-bg: #121821;
+  --toast-bg: rgba(18, 24, 32, .95);
+  --device-frame: #05070a;
+  --phone-glow: rgba(232, 178, 100, .22);
+  --scroll-thumb: rgba(244, 236, 220, .17);
+  --kbd-bg: rgba(244, 236, 220, .06);
+  --ripple: rgba(244, 236, 220, .16);
+  --mark-bg: rgba(232, 178, 100, .24);
+  --mark-ink: #ffe0a8;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .035) inset,
+                  0 26px 64px -38px #000;
+  --shadow-pop: 0 50px 120px -30px rgba(0, 0, 0, .85),
+                0 0 0 1px rgba(244, 236, 220, .06) inset;
+  --shadow-lift: 0 18px 36px -24px rgba(0, 0, 0, .9);
+  --accent-glow: rgba(232, 178, 100, .42);
+  --fx-veil-a: rgba(9, 13, 19, .96);
+  --fx-veil-b: rgba(14, 20, 28, .90);
+  --fx-ok-ink: #9cebd0;
+  --fx-fail-ink: #ff9d8c;
+  --glass: blur(18px) saturate(1.18);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --bg: #f2ebdd;
+  --bg-elev: #ece3d2;
+  --panel: rgba(253, 250, 244, .80);
+  --panel-solid: #fdfaf4;
+  --panel-2: rgba(42, 36, 25, .045);
+  --panel-3: rgba(42, 36, 25, .08);
+  --field-bg: #fffdf8;
+  --field-focus: #ffffff;
+  --input-bg: rgba(42, 36, 25, .045);
+  --card-hover: rgba(42, 36, 25, .04);
+  --card-active: rgba(154, 107, 31, .095);
+
+  --line: rgba(42, 36, 25, .105);
+  --line-strong: rgba(42, 36, 25, .19);
+
+  --ink: #2a2419;
+  --ink-2: #5a5244;
+  --ink-3: #766d5d;
+  --ink-4: #8f8676;
+
+  --amber: #9a6b1f;
+  --amber-bright: #c9962e;
+  --amber-deep: #6b4a10;
+  --amber-soft: rgba(154, 107, 31, .10);
+  --amber-line: rgba(154, 107, 31, .38);
+  --accent-grad: linear-gradient(180deg, #c9962e, #9a6b1f 52%, #6b4a10);
+  --on-accent: #fff8e9;
+
+  --jade: #2f7d4f;
+  --jade-deep: #1e5c38;
+  --jade-soft: rgba(47, 125, 79, .10);
+  --jade-grad: linear-gradient(180deg, #6fae84, #3d8a5d 52%, #2f7d4f);
+  --on-jade: #ffffff;
+
+  --rust: #b23c28;
+  --rust-deep: #7c2117;
+  --rust-soft: rgba(178, 60, 40, .09);
+  --blue: #3b6fb0;
+  --blue-soft: rgba(59, 111, 176, .09);
+
+  --hero-glow: rgba(217, 164, 65, .13);
+  --glow-amber: rgba(217, 164, 65, .12);
+  --glow-jade: rgba(47, 125, 79, .05);
+  --glow-blue: rgba(59, 111, 176, .04);
+  --grid: rgba(52, 44, 30, .035);
+  --star: rgba(52, 44, 30, .4);
+  --star-opacity: .10;
+  --grain-opacity: .05;
+  --grain-blend: multiply;
+
+  --topbar-bg: rgba(253, 250, 244, .84);
+  --scrim: rgba(30, 25, 18, .34);
+  --modal-bg: #fdfaf4;
+  --toast-bg: rgba(253, 250, 244, .97);
+  --device-frame: #17130d;
+  --phone-glow: rgba(95, 68, 16, .18);
+  --scroll-thumb: rgba(42, 36, 25, .18);
+  --kbd-bg: rgba(42, 36, 25, .05);
+  --ripple: rgba(42, 36, 25, .12);
+  --mark-bg: rgba(217, 164, 65, .38);
+  --mark-ink: #5b3c0a;
+
+  --shadow-panel: 0 1px 2px rgba(45, 36, 22, .05),
+                  0 24px 54px -42px rgba(45, 36, 22, .38);
+  --shadow-pop: 0 40px 100px -32px rgba(40, 30, 15, .45);
+  --shadow-lift: 0 18px 36px -26px rgba(45, 36, 22, .35);
+  --accent-glow: rgba(154, 107, 31, .40);
+  --fx-veil-a: rgba(255, 252, 246, .96);
+  --fx-veil-b: rgba(243, 238, 226, .92);
+  --fx-ok-ink: #1e6b48;
+  --fx-fail-ink: #b23c28;
+  --tone-amber: #9a6b1f;
+  --tone-rose: #b0465c;
+  --tone-jade: #2f7d4f;
+  --tone-blue: #3b6fb0;
+  --tone-violet: #6d54b8;
+  --tone-cyan: #1f7a8c;
+  --tone-orange: #b85a24;
+}
+

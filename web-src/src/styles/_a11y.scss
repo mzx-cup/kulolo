@@ -1,0 +1,18 @@
+// 无障碍：减少动态效果
+// 源：web/style.css 第 2666~2680 行（原样搬运，未改规则）
+
+/* ── 无障碍：减少动态效果 ───────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .ambient .stars,
+  .ph-glyph,
+  .scan { animation: none !important; }
+  .bar::after { opacity: .35; }
+}

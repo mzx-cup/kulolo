@@ -283,8 +283,23 @@ python main.py
 - adbutils、Pillow（`pip install adbutils pillow`，本机已装）
 - 手机：开发者选项 → USB 调试开启，插线后在弹窗点「允许」
 
-零 pip 新装、零构建工具；uiautomator2 因 Android 17 兼容问题未使用，
+零 pip 新装；uiautomator2 因 Android 17 兼容问题未使用，
 控件定位走平台自带 `uiautomator dump`。
+
+**只想用不改前端的话，不需要 Node**：`web/` 里已经是构建好的产物，
+`python main.py` 直接打开就能用。只有改前端界面时才需要 Node 20+：
+
+```bash
+cd web-src
+npm install       # 首次
+npm run build     # 类型检查（vue-tsc）+ 打包，产物直接写进 ../web/
+npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理到 8765
+```
+
+前端技术栈：Vue 3 + TypeScript + SCSS + Vite。样式由原来的单个
+`style.css`（2600+ 行）拆成 `web-src/src/styles/` 下的 17 个 partial，
+视觉与原版逐像素一致；逻辑按职责拆到 `src/actions/`（目录、运行、设备、
+截图、主题、会话）与 `src/stores/core.ts`（唯一一份响应式状态）。
 
 ## 文件
 
@@ -305,7 +320,8 @@ python main.py
 | `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |
 | `main.py` | 入口：零依赖 Web 后端（**只绑 127.0.0.1**）+ 场景注册表 + 自动开浏览器 |
-| `web/` | 前端三件套（场景目录 + 工作台 + 实时画面，深浅双主题） |
+| `web/` | 前端**构建产物**（`index.html` + `assets/`）：场景目录 + 工作台 + 实时画面，深浅双主题 |
+| `web-src/` | 前端源码：Vue 3 + TypeScript + SCSS + Vite；改前端只改这里，再 `npm run build` |
 | `fixtures.json` | 设备 fixture 登记（首次 seed 后自动生成；可删除重置） |
 
 ## 性能

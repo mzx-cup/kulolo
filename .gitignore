@@ -25,6 +25,12 @@ screenshots/
 # Old web backup
 _backup_web_*/
 
+# Front-end toolchain: dependencies and build cache are not source
+web-src/node_modules/
+web-src/.vite/
+web-src/dist/
+*.tsbuildinfo
+
 # OS/editor noise
 .DS_Store
 Thumbs.db

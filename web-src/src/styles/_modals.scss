@@ -1,0 +1,228 @@
+// 遮罩与弹层：确认 / 询问 / 重试 / 停止 + 各自响应式
+// 源：web/style.css 第 2165~2389 行（原样搬运，未改规则）
+
+/* ── 遮罩 & 弹层 ────────────────────────────────────────────────── */
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 55;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .3s var(--ease-out);
+}
+.scrim.show { opacity: 1; pointer-events: auto; }
+.scrim[hidden] { display: none !important; }
+
+.modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--scrim);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .26s var(--ease-out);
+}
+.modal.show { opacity: 1; pointer-events: auto; }
+
+/* 卡片确认 / 重试：右下角局部卡片，不再全屏遮挡 */
+.modal.corner {
+  inset: auto 20px 20px auto;
+  z-index: 86;
+  display: block;
+  padding: 0;
+  background: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+.modal.corner.show { pointer-events: none; }
+.modal.corner .modal-card {
+  width: min(338px, calc(100vw - 32px));
+  padding: 16px 16px 14px;
+  border-radius: 16px;
+  text-align: left;
+  pointer-events: auto;
+  transform: translateY(12px) scale(.98);
+}
+.modal.corner.show .modal-card { opacity: 1; transform: none; }
+.modal.corner .modal-card::before {
+  inset: 0 18px auto;
+  height: 2px;
+}
+.modal.corner .modal-icon {
+  width: 36px;
+  height: 36px;
+  margin: 0 0 8px;
+  border-radius: 10px;
+}
+.modal.corner .modal-icon svg { width: 18px; height: 18px; }
+.modal.corner .eyebrow { font-size: 8px; }
+.modal.corner h3 { margin: 6px 0 6px; font-size: 16px; }
+.modal.corner .v-detail { margin: 0 0 12px; max-width: none; font-size: 11.5px; line-height: 1.55; }
+.modal.corner .v-actions { gap: 7px; }
+.modal.corner .vbtn { height: 38px; font-size: 12px; border-radius: 9px; }
+@media (max-width: 720px) {
+  .modal.corner { inset: auto 12px 12px 12px; }
+  .modal.corner .modal-card { width: auto; }
+}
+.modal-card {
+  position: relative;
+  width: min(92vw, 414px);
+  padding: 30px 28px 24px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xl);
+  background: var(--modal-bg);
+  box-shadow: var(--shadow-pop);
+  text-align: center;
+  opacity: 0;
+  transform: translateY(18px) scale(.955);
+  transition: opacity .3s var(--ease-out),
+              transform .44s var(--ease-spring);
+}
+.modal.show .modal-card { opacity: 1; transform: none; }
+.modal-card::before {
+  content: "";
+  position: absolute;
+  inset: 0 24px auto;
+  height: 2px;
+  border-radius: 0 0 2px 2px;
+  background: linear-gradient(90deg, transparent, var(--modal-tone, var(--amber)), transparent);
+}
+.tone-jade  { --modal-tone: var(--jade); }
+.tone-blue  { --modal-tone: var(--blue); }
+.tone-amber { --modal-tone: var(--amber); }
+.tone-rust  { --modal-tone: var(--rust); }
+
+.modal-icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 15px;
+  border: 1px solid color-mix(in srgb, var(--modal-tone, var(--amber)) 28%, transparent);
+  border-radius: 15px;
+  background: color-mix(in srgb, var(--modal-tone, var(--amber)) 12%, transparent);
+  color: var(--modal-tone, var(--amber));
+  box-shadow: 0 12px 28px -20px var(--modal-tone, var(--amber));
+}
+.modal-icon svg { width: 25px; height: 25px; }
+.eyebrow {
+  display: block;
+  font: 8.5px/1 var(--mono);
+  letter-spacing: .2em;
+  text-transform: uppercase;
+  color: var(--modal-tone, var(--amber));
+}
+.modal h3 {
+  margin: 10px 0 8px;
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  color: var(--ink);
+}
+.v-detail {
+  margin: 0 auto 21px;
+  max-width: 30em;
+  color: var(--ink-3);
+  font-size: 12.5px;
+  line-height: 1.75;
+}
+.v-actions { display: flex; gap: 9px; }
+.vbtn {
+  position: relative;
+  overflow: hidden;
+  flex: 1;
+  height: 46px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font: 600 13px/1 var(--sans);
+  cursor: pointer;
+  transition: transform .14s var(--ease-out),
+              background .18s var(--ease-out),
+              border-color .18s var(--ease-out),
+              box-shadow .2s var(--ease-out),
+              color .18s;
+}
+.vbtn:hover { transform: translateY(-1px); }
+.vbtn:active { transform: translateY(1px) scale(.994); }
+.vbtn.ok {
+  background: var(--jade-grad);
+  border-color: transparent;
+  color: var(--on-jade);
+  box-shadow: 0 16px 30px -18px var(--jade);
+}
+.vbtn.ok:hover { box-shadow: 0 18px 36px -16px var(--jade); }
+.vbtn.bad {
+  background: var(--rust-soft);
+  border-color: color-mix(in srgb, var(--rust) 38%, transparent);
+  color: var(--rust);
+}
+.vbtn.bad:hover { background: color-mix(in srgb, var(--rust) 16%, transparent); box-shadow: 0 14px 28px -18px var(--rust); }
+.vbtn.plain { color: var(--ink-3); }
+.vbtn.plain:hover { color: var(--ink); background: var(--panel-3); }
+
+/* 截图大图 */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 75;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 30px;
+  background: rgba(3, 5, 8, .84);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .26s var(--ease-out);
+}
+.lightbox.show { opacity: 1; pointer-events: auto; }
+.lightbox img {
+  max-width: min(92vw, 470px);
+  max-height: 78vh;
+  border: 1px solid rgba(255, 255, 255, .15);
+  border-radius: 28px;
+  box-shadow: 0 50px 120px -24px #000;
+  transform: scale(.965);
+  transition: transform .4s var(--ease-spring);
+}
+.lightbox.show img { transform: none; }
+.lightbox-cap {
+  font: 9.5px/1.4 var(--mono);
+  letter-spacing: .1em;
+  color: rgba(255, 255, 255, .55);
+  text-align: center;
+}
+.lightbox-close {
+  position: absolute;
+  top: 22px;
+  right: 22px;
+  width: 38px;
+  height: 38px;
+  display: grid;
+  place-items: center;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, .06);
+  color: #fff;
+  cursor: pointer;
+  transition: background .18s, transform .18s;
+}
+.lightbox-close:hover { background: rgba(255, 255, 255, .14); transform: rotate(90deg); }
+.lightbox-close svg { width: 18px; height: 18px; }
+

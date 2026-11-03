@@ -1,0 +1,87 @@
+// 基础：reset、滚动条、跳转链接、无障碍焦点
+// 源：web/style.css 第 199~282 行（原样搬运，未改规则）
+
+/* ── 基础 ───────────────────────────────────────────────────────── */
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+
+html {
+  -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--ink);
+  font: 14.5px/1.65 var(--sans);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  font-kerning: normal;
+  overflow-x: hidden;
+  background: var(--bg);
+}
+
+body.drawer-open,
+body.lightbox-open { overflow: hidden; }
+
+::selection { background: var(--mark-bg); color: var(--mark-ink); }
+
+:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+/* 全局细滚动条 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
+*::-webkit-scrollbar { width: 9px; height: 9px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover { background-color: var(--ink-4); background-clip: content-box; }
+
+kbd {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  padding: 2px 4px;
+  border: 1px solid var(--line);
+  border-bottom-color: var(--line-strong);
+  border-radius: 4px;
+  background: var(--kbd-bg);
+  color: var(--ink-3);
+  font: 9.5px/1.2 var(--mono);
+  letter-spacing: 0;
+}
+
+mark {
+  background: var(--mark-bg);
+  color: var(--mark-ink);
+  border-radius: 3px;
+  padding: 0 1px;
+}
+
+.skip-link {
+  position: fixed;
+  left: 16px;
+  top: -60px;
+  z-index: 200;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--panel-solid);
+  color: var(--ink);
+  border: 1px solid var(--amber-line);
+  text-decoration: none;
+  font-size: 12px;
+  transition: top .2s var(--ease-out);
+}
+.skip-link:focus { top: 12px; }
+

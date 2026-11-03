@@ -1,0 +1,56 @@
+// Toast 提示条
+// 源：web/style.css 第 2390~2442 行（原样搬运，未改规则）
+
+/* ── Toast ──────────────────────────────────────────────────────── */
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 26px;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  max-width: min(88vw, 540px);
+  padding: 11px 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: 11px;
+  background: var(--toast-bg);
+  -webkit-backdrop-filter: blur(14px);
+  backdrop-filter: blur(14px);
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.5;
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  transform: translate(-50%, 14px) scale(.98);
+  transition: opacity .26s var(--ease-out), transform .34s var(--ease-out);
+  pointer-events: none;
+  overflow: hidden;
+}
+.toast::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--amber);
+  box-shadow: 0 0 9px var(--amber);
+}
+.toast::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: 2px;
+  background: linear-gradient(90deg, var(--amber), transparent);
+  transform: scaleX(0);
+  transform-origin: left;
+}
+.toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
+.toast.show::after { animation: toastbar 3.2s linear forwards; }
+.toast.err { color: var(--rust); border-color: color-mix(in srgb, var(--rust) 34%, transparent); }
+.toast.err::before { background: var(--rust); box-shadow: 0 0 9px var(--rust); }
+.toast.err::after { background: linear-gradient(90deg, var(--rust), transparent); }
+@keyframes toastbar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+

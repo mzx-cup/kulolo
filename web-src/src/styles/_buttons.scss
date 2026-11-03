@@ -1,0 +1,91 @@
+// 按钮：btn / commit / icon-btn / vbtn / filter
+// 源：web/style.css 第 476~563 行（原样搬运，未改规则）
+
+/* ── 按钮 ───────────────────────────────────────────────────────── */
+.btn {
+  position: relative;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--ink-2);
+  font: 11.5px/1 var(--sans);
+  letter-spacing: .01em;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .18s var(--ease-out),
+              border-color .18s var(--ease-out),
+              color .18s var(--ease-out),
+              transform .14s var(--ease-out),
+              box-shadow .2s var(--ease-out);
+}
+.btn svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  opacity: .82;
+}
+.btn:hover:not(:disabled) {
+  background: var(--panel-3);
+  border-color: var(--line-strong);
+  color: var(--ink);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-lift);
+}
+.btn:active:not(:disabled) { transform: translateY(1px) scale(.99); }
+.btn:disabled { opacity: .36; cursor: not-allowed; }
+.btn.ghost { background: transparent; }
+.btn.ghost:hover:not(:disabled) { background: var(--panel-2); }
+.btn.sm { height: 30px; padding: 0 11px; font-size: 11px; }
+.btn.danger { color: var(--rust); border-color: color-mix(in srgb, var(--rust) 30%, transparent); }
+.btn.danger:hover:not(:disabled) {
+  color: #fff;
+  background: var(--rust-deep);
+  border-color: var(--rust-deep);
+  box-shadow: 0 14px 28px -18px var(--rust);
+}
+.btn.is-busy svg { animation: spin .8s linear infinite; opacity: .6; }
+.btn.is-busy { pointer-events: none; opacity: .7; }
+
+.icon-btn {
+  position: relative;
+  overflow: hidden;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background .18s var(--ease-out),
+              border-color .18s var(--ease-out),
+              color .18s var(--ease-out),
+              transform .14s var(--ease-out);
+}
+.icon-btn svg { width: 18px; height: 18px; }
+.icon-btn:hover { border-color: var(--line-strong); background: var(--panel-3); color: var(--ink); transform: translateY(-1px); }
+.icon-btn:active { transform: translateY(1px) scale(.97); }
+.icon-btn.sm { width: 30px; height: 30px; border-radius: 8px; }
+.icon-btn.sm svg { width: 15px; height: 15px; }
+.icon-btn.is-busy svg { animation: spin .8s linear infinite; opacity: .6; }
+.icon-btn.is-busy { pointer-events: none; opacity: .7; }
+
+.catalog-toggle { display: none; }
+.close-catalog { display: none; }
+
+/* 主题切换按钮里的太阳/月亮 */
+.icon-moon { display: none; }
+:root[data-theme="light"] .icon-sun { display: none; }
+:root[data-theme="light"] .icon-moon { display: block; }
+#theme-toggle svg { transition: transform .45s var(--ease-spring); }
+#theme-toggle:hover svg { transform: rotate(18deg) scale(1.06); }
+
