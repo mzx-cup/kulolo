@@ -90,6 +90,31 @@
 > 也没有卫星通话卡片。该卡片是桌面智慧建议，不是「玩机技巧」App 里的内容。
 > X6765 的 support 为空，不满足条件 1。
 
+**体验报告卡片**（monthly_summary / yearly_summary · 体验报告卡片）
+
+1. 月度总结：目标时间 = **下个月的第二个周一 08:59**（例：11-04 → 12-14 08:59）
+2. 年度总结：目标时间 = **当年 12 月 25 日 08:59**
+3. 极速直设系统时间 → **息屏 60 秒** → 上滑解锁 → 等待 **90 秒**让卡片渲染 → 截图确认
+
+**跨国 / 跨城卡片**（cross_region · 位置感知卡片）
+
+`method` 可选四种：
+
+| method | 做法 | 结果 |
+|---|---|---|
+| `mock_country` | 直接发 LocationEvent，`json_data={"country_code":"IN","city_code":""}` | 跨国卡片 |
+| `mock_city_1148` | 同上，`city_code="1148"` | 跨城卡片 · 德里 |
+| `mock_city_1057` | 同上，`city_code="1057"` | 跨城卡片 · 新德里 |
+| `location` | 真实改定位：上海 (31.230416,121.473701) 亮屏 `wait_min` 分钟 → 新德里 (28.6139,77.209) 亮屏 `wait_min` 分钟 → 上滑回桌面 | 跨国 / 跨城卡片 |
+
+- 发事件用 `am start-foreground-service -n <组件> -a core.intent.action.DISPATCH_EVENT`，
+  组件由 `cmd package query-services --brief` 查出（XOS 17 的分块输出也认）
+- `location` 路径用 test provider 打点：`appops set 2000 android:mock_location allow` →
+  `add-test-provider gps` → `set-test-provider-location` → `set-test-provider-enabled gps true`
+- 收尾必须**先 `remove-test-provider gps` 再重开一次定位开关**（`settings put secure location_mode`
+  先 0 再恢复原值）。顺序反了会让 gps provider 变成「不是 test provider」，之后 add/remove
+  全部失效，mock 坐标就永久留在 `dumpsys location` 里（X6765 实测）
+
 ## 界面
 
 界面按「场景目录 / 工作台 / 实时画面」三块重做，场景数涨到 30+ 也不会挤：
@@ -202,6 +227,8 @@ python main.py
 | `scenario_alarm_close.py` | 提前关闭提示：保持每天 04:05 闹钟开启 + 周五 19:09 桌面等待 |
 | `scenario_app_suggest.py` | 生活服务：一键打车（Yango）/ 一键点餐（foodpanda），发送 AppSuggestEvent |
 | `scenario_satellite.py` | 玩机技巧：卫星通话卡片，支持检查 + 清原子化模拟器 + 断网重连 + 3 天/10:00 |
+| `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
+| `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |
 | `main.py` | 入口：零依赖 Web 后端（**只绑 127.0.0.1**）+ 场景注册表 + 自动开浏览器 |
 | `web/` | 前端三件套（场景目录 + 工作台 + 实时画面，深浅双主题） |
