@@ -1,6 +1,7 @@
 import { api } from "@/lib/api";
 import { shortSerial } from "@/lib/format";
 import { state } from "@/stores/core";
+import type { DeviceEntry } from "@/types/api";
 import { appendLine } from "./session";
 import { toast } from "./toast";
 import { shotStateRefresh, fetchShot } from "./shot";
@@ -87,7 +88,8 @@ export async function pickDevice(serial: string): Promise<void> {
       return;
     }
     state.selectedSerial = serial;
-    appendLine("detail", `切换到设备 ${serial}`);
+    const dev = state.devices.find((d) => d.serial === serial);
+    appendLine("detail", `切换到设备 ${dev ? deviceLabel(dev) : shortSerial(serial)}`);
     void refreshStatus();
   } catch {
     toast("选择设备失败：本地服务无响应", true);
@@ -113,4 +115,8 @@ export function statusSchedule(): void {
   }, lastConnected ? 5000 : 3000);
 }
 
-export const serialLabel = shortSerial;
+/** 设备徽标文字：优先显示机型名（如 X6765），拿不到再退回串号缩写。
+ *  串号是内部编号，界面上给用户看机型更直观。 */
+export function deviceLabel(d: DeviceEntry): string {
+  return (d.model || "").trim() || shortSerial(d.serial);
+}

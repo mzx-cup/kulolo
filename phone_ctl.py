@@ -32,6 +32,15 @@ _NODE_RE = re.compile(r"<node\b[^>]*>")
 _ATTR_RE = re.compile(r'([\w:-]+)="([^"]*)"')
 _BOUNDS_RE = re.compile(r"\[(-?\d+),(-?\d+)\]\[(-?\d+),(-?\d+)\]")
 
+# adb 传输层掉线的特征。只有这类错误才值得「等设备回来再重试」；
+# 其它 AdbError（比如 Unknown command、命令本身写错）重试也没用，直接抛。
+_TRANSPORT_DOWN_RE = re.compile(
+    r"device '[^']*' not found|device offline|device still connecting|"
+    r"no devices/emulators found|connection (?:reset|refused|closed|aborted)|"
+    r"error: closed|broken pipe|EOF|timed? ?out|TimeoutError|socket",
+    re.I,
+)
+
 KEY_BACK = 4
 KEY_HOME = 3
 KEY_POWER = 26
@@ -172,10 +181,54 @@ class Device:
         self._stayon_changed = False
         self._size: tuple[int, int] | None = None
         self._model: str | None = None
+        # 刚插上/刚换机时 transport 可能还没注册好，先确认一次再开工，
+        # 否则第一步就报 `device 'xxx' not found`。
+        self._call(lambda: self.d.shell("echo ok"))
 
     # ---------- 基础 ----------
+    def _wait_transport(self, timeout: float = 20.0) -> None:
+        """等设备重新注册回 adb server，回来后重建 adbutils 句柄。
+
+        USB 抖一下 / adb server 刚被重启时，transport 会短暂消失，这时任何
+        adb 命令都会报 `device 'xxx' not found`。整条流程动辄几十步，
+        中途抖一次就整场报废太脆，所以这里等它回来。
+        """
+        deadline = time.time() + timeout
+        while True:
+            try:
+                for d in adbutils.adb.device_list():
+                    if d.serial == self.serial and d.get_state() == "device":
+                        self.d = adbutils.adb.device(serial=self.serial)
+                        return
+            except Exception:
+                pass
+            if time.time() >= deadline:
+                raise UiError(
+                    f"设备 {self.serial} 掉线了，等了 {timeout:.0f} 秒还没回来。"
+                    "请检查 USB 线是否插稳、手机有没有弹出「允许 USB 调试」。"
+                )
+            time.sleep(0.5)
+
+    def _call(self, fn):
+        """跑一次 adb 操作 fn()（无参闭包，内部自己取 self.d）。
+
+        遇到传输层错误就等设备回来再试，最多 3 次；3 次都失败才抛 UiError，
+        把最后一次的原始报错带上，方便定位是掉线还是命令本身有问题。
+        """
+        last = None
+        for attempt in range(3):
+            try:
+                return fn()
+            except Exception as exc:  # noqa: BLE001 —— 只挑传输层错误重试
+                if not _TRANSPORT_DOWN_RE.search(str(exc)):
+                    raise
+                last = exc
+                self.log(f"[warn] adb 暂时连不上 {self.serial}（{exc}），等它回来…")
+                self._wait_transport()
+        raise UiError(f"adb 与设备 {self.serial} 通信失败（重试 3 次）：{last}")
+
     def shell(self, cmd: str) -> str:
-        return self.d.shell(cmd)
+        return self._call(lambda: self.d.shell(cmd))
 
     def clear_atomic_services(self):
         """清空原子服务缓存 + 桌面数据，重试卡片前调用。
@@ -272,7 +325,7 @@ class Device:
             self.shell(f"screencap -p {remote}")
             fd, local = tempfile.mkstemp(suffix=".png")
             os.close(fd)
-            self.d.sync.pull(remote, local)
+            self._call(lambda: self.d.sync.pull(remote, local))
             with open(local, "rb") as fh:
                 data = fh.read()
             if not data.startswith(b"\x89PNG"):
@@ -299,7 +352,8 @@ class Device:
 
     def model(self) -> str:
         if self._model is None:
-            self._model = self.d.prop.get("ro.product.model") or "unknown"
+            self._model = (self._call(lambda: self.d.prop.get("ro.product.model"))
+                           or "unknown")
         return self._model
 
     def stayon(self, on: bool) -> None:

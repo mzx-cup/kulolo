@@ -1,7 +1,7 @@
 <script lang="ts">
 import { defineComponent } from "vue";
 import { state } from "@/stores/core";
-import { recheckDevice, launchScrcpy, serialLabel } from "@/actions/device";
+import { recheckDevice, launchScrcpy, deviceLabel } from "@/actions/device";
 import { toggleTheme } from "@/actions/theme";
 import { manualShot } from "@/actions/shot";
 import { pickDevice } from "@/actions/device";
@@ -9,7 +9,7 @@ import { pickDevice } from "@/actions/device";
 export default defineComponent({
   name: "TheTopbar",
   setup() {
-    return { state, recheckDevice, launchScrcpy, toggleTheme, manualShot, pickDevice, serialLabel };
+    return { state, recheckDevice, launchScrcpy, toggleTheme, manualShot, pickDevice, deviceLabel };
   },
 });
 </script>
@@ -52,7 +52,7 @@ export default defineComponent({
           :title="d.serial"
           @click="pickDevice(d.serial)"
         >
-          {{ serialLabel(d.serial) }}
+          {{ deviceLabel(d) }}
         </button>
       </span>
     </div>

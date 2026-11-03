@@ -14,10 +14,16 @@
         "registered_at": "2026-10-27T17:55:08"
       },
       "birthday": {
-        "event_id": 77,
+        "event_id": 1,
         "calendar_id": 1,
-        "title": "Bday111143",
-        "registered_at": "2026-10-30T14:34:04"
+        "title": "Bday091899",
+        "registered_at": "2026-11-03T16:45:04"
+      },
+      "performance": {
+        "event_id": 2,
+        "calendar_id": 1,
+        "title": "Bday101279",
+        "registered_at": "2026-11-03T17:10:37"
       }
     },
     "16667705BV000031": {

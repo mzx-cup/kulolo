@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import threading
 import time
+import traceback
 import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -618,6 +619,7 @@ _ask_evt = threading.Event()                      # 场景线程等待前端回�
 _ask_state = {"pending": False, "ok": None, "prompt": ""}   # 触发前询问（如 OOBE 国家）
 _dev: Device | None = None
 _selected: str | None = None   # 用户在多个设备里指定的首选串号；失效后自动回落
+_model_cache: dict[str, str] = {}   # serial -> ro.product.model，读过就记住
 _last_adb_chase = 0.0   # 最近一次 adb 自愈尝试的时间戳（节流用）
 _SCRCPY_UNSET = object()
 _scrcpy: object = _SCRCPY_UNSET   # 未解析哨兵；解析后缓存 str | None
@@ -658,6 +660,23 @@ def _find_scrcpy() -> str | None:
     return _scrcpy  # type: ignore[return-value]
 
 
+def _device_model(serial: str) -> str:
+    """机型名（如 Infinix X6765）。串号是内部编号，界面上给用户看机型更直观。
+
+    只读一次就缓存：同一台机器的 ro.product.model 不会变，而 /api/status
+    每 5 秒被拉一次，每次都去问 adb 纯属浪费往返。
+    """
+    if serial in _model_cache:
+        return _model_cache[serial]
+    try:
+        name = adbutils.adb.device(serial=serial).prop.get("ro.product.model") or ""
+    except Exception:
+        name = ""
+    if name:
+        _model_cache[serial] = name
+    return name
+
+
 def _adb_devs() -> list[tuple[str, str]]:
     """实时设备列表 [(serial, state)]，state ∈ device / offline / unauthorized。
 
@@ -677,13 +696,16 @@ def _adb_devs() -> list[tuple[str, str]]:
     if devs or time.time() - _last_adb_chase < 10:
         return devs
     _last_adb_chase = time.time()
+    # 只做 start-server，绝不再 kill-server：一杀 adb server，所有 transport
+    # 立刻消失，正在跑的场景会集体报 `device 'xxx' not found` 直接整场报废
+    # （实际踩过：一轮 tick 到一半突然 AdbError: device not found）。
+    # 运行中更不许自愈，等这一轮跑完再说。
+    with _lock:
+        if _state["running"]:
+            return devs
     try:
         subprocess.run(["adb", "start-server"], capture_output=True, timeout=15)
         devs = _list()
-        if not devs:
-            subprocess.run(["adb", "kill-server"], capture_output=True, timeout=15)
-            time.sleep(1.5)
-            devs = _list()
     except Exception:
         pass
     return devs
@@ -741,9 +763,17 @@ def _allowed_params(sce: dict, params: dict) -> dict:
     sce["hidden"] 是隐藏参数（如纪念日场景的 ev_value），不显示在表单里，
     但允许随请求下发，且缺失时填入默认值。"""
     keys: set[str] = set()
+    numeric: dict[str, str] = {}   # key -> "int" / "float"，按声明的类型强制转
     for p in sce["params"]:
-        keys.update(("hour", "minute") if p["type"] == "time" else (p["key"],))
+        if p["type"] == "time":
+            keys.update(("hour", "minute"))
+            numeric["hour"] = numeric["minute"] = "int"
+        else:
+            keys.add(p["key"])
+            if p["type"] == "number":
+                numeric[p["key"]] = "float" if isinstance(p.get("value"), float) else "int"
     keys.add("offset_months")
+    numeric["offset_months"] = "int"
     keys.add("retry")
     keys.add("festival")   # 节日场景可指定单个节日（如 "duanwu"），留空遍历全部
     hidden = sce.get("hidden", {})
@@ -751,6 +781,27 @@ def _allowed_params(sce: dict, params: dict) -> dict:
     out = {k: params[k] for k in keys if k in params}
     for k, v in hidden.items():
         out.setdefault(k, v)
+    # 表单/接口拿到的一律是字符串，场景里却直接做 timedelta(days=...)、
+    # range()、f"{x:02d}" 之类的数值运算，不在这里转就会炸
+    # （实际踩过：TypeError: unsupported type for timedelta days component: str）。
+    # 但 hour/minute 可能是 "9:30" 这种合并写法（场景里 _to_hm 负责拆），
+    # 这种原样往下传，只有纯数字才在这里转。
+    for k, kind in numeric.items():
+        if k not in out:
+            continue
+        v = out[k]
+        if isinstance(v, (int, float)):
+            continue
+        s = str(v).strip()
+        if s == "":
+            continue
+        try:
+            num = float(s)
+        except ValueError:
+            if k in ("hour", "minute"):
+                continue          # 交给场景里的 _to_hm 拆
+            raise UiError(f"参数 {k}={v!r} 不是合法数字")
+        out[k] = int(num) if kind == "int" else num
     return out
 
 
@@ -807,8 +858,10 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         if sce is None:
             raise ValueError(f"未知场景 {scenario_id!r}")
         kwargs = dict(params)
-        # retry 是「重新触发」开关，只在这里消费，不往下传给场景 run()
-        is_retry = bool(kwargs.pop("retry", False))
+        # retry 是「重新触发」开关，只在这里消费，不往下传给场景 run()。
+        # 表单给过来的是字符串，bool("0") 是 True，必须按字面值判。
+        is_retry = str(kwargs.pop("retry", "") or "").strip().lower() in (
+            "1", "true", "yes", "on")
         kwargs["control"] = _ctrl
         kwargs["confirm_fn"] = _confirm_fn
         kwargs["ask_fn"] = _ask_fn
@@ -836,6 +889,9 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         with _lock:
             _prev_run.update(id=scenario_id, ok=False)
             _state.update(running=False, error=str(exc), finished_at=time.time())
+        # 只留 str(exc) 会把真正的出错位置弄丢，排障全靠猜；
+        # 这里把完整 traceback 打到 stderr（服务日志里能看）。
+        traceback.print_exc()
         _emit({"t": "error", "msg": f"{type(exc).__name__}: {exc}"})
 
 
@@ -891,6 +947,15 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- GET ----------
     def do_GET(self):
+        # 兜住一切异常：以前 handler 里一旦抛错，连接会被直接掐断，
+        # 前端只看到 RemoteDisconnected，真正的原因全丢。现在统一回 JSON 500。
+        try:
+            self._route_get()
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+
+    def _route_get(self):
         url = urlparse(self.path)
         path = url.path
         if path == "/api/status":
@@ -922,7 +987,8 @@ class Handler(BaseHTTPRequestHandler):
             info["run"] = {k: _state[k] for k in ("running", "result", "error")}
             info["run"]["paused"] = _ctrl["paused"]
         devs = _adb_devs()   # 实时列表，前端每 3~5 秒拉一次，插线/换机自动识别
-        info["devices"] = [{"serial": s, "state": st} for s, st in devs]
+        info["devices"] = [{"serial": s, "state": st, "model": _device_model(s)}
+                           for s, st in devs]
         info["selected"] = _selected
         if not devs:
             info["error"] = ("未检测到设备。请确认 USB 已连接、已在开发者选项开启 USB 调试，"
@@ -977,6 +1043,13 @@ class Handler(BaseHTTPRequestHandler):
 
     # ---------- POST ----------
     def do_POST(self):
+        try:
+            self._route_post()
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            self._json({"error": f"{type(exc).__name__}: {exc}"}, 500)
+
+    def _route_post(self):
         path = urlparse(self.path).path
         if path == "/api/scenario/pause":
             return self._ctrl_action("pause")
@@ -1055,7 +1128,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "已有任务在运行"}, 409)
             _state.update(running=True, result=None, error=None,
                           started_at=time.time(), finished_at=None)
-        allowed = _allowed_params(sce, self._body())
+        try:
+            allowed = _allowed_params(sce, self._body())
+        except UiError as exc:
+            with _lock:
+                _state.update(running=False, error=str(exc), finished_at=time.time())
+            return self._json({"error": str(exc)}, 400)
         threading.Thread(target=_run_scenario, args=(scenario_id, allowed),
                          daemon=True).start()
         self._json({"started": True, "scenario": scenario_id, "params": allowed})

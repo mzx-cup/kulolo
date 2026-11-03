@@ -309,9 +309,18 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
 
     r.step(f"发送 AppSuggestEvent：{app_package}")
     out = dispatch_app_suggest(dev, app_package)
-    if "Error" in out or "Exception" in out:
-        raise UiError(f"AppSuggestEvent 发送失败：{out.strip()[:400]}")
-    r.ok(out.strip()[:200])
+    err = ("Error" in out or "Exception" in out
+           or "Not found" in out or "no service started" in out)
+    if err:
+        # 这条 DISPATCH_EVENT 只是额外的一条投递路径：没装 com.example.tpk.client
+        # 的机器上 query-services 返回 "No services found"，回退隐式启动必然报
+        # "Not found; no service started."。卡片实际由已安装的 App 自身触发，
+        # 所以这里只降级成警告，不判失败。
+        r.log("提示：AppSuggestEvent 投递未成功（"
+              f"{out.strip()[:160]}），这台机器没有 DISPATCH_EVENT mock 服务；"
+              "卡片由 App 自身触发，继续等待出卡")
+    else:
+        r.ok(out.strip()[:200])
 
     r.step(f"等待 {wait_sec} 秒检查生活服务卡片")
     for remain in range(wait_sec, 0, -1):

@@ -177,6 +177,8 @@ export interface EventsResponse {
 export interface DeviceEntry {
   serial: string;
   state: string;
+  /** 机型名（如 Infinix X6765），界面上优先展示它而不是串号 */
+  model?: string;
 }
 
 export interface StatusResponse {
