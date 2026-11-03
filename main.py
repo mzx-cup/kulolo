@@ -46,6 +46,14 @@ WEB = Path(__file__).parent / "web"
 #   retryable  卡片未触发时是否提供「下月同日重跑」；不写则节日场景 False、其余 True
 #   icon       卡片图标键：cake / heart / exam / ticket / pin / lantern / spark / calendar / gift / star / clock ...
 #   accent     保留字段，前端目前按 group 自动配色
+
+# 时间管理三张卡片的触发方式：真实触发要改系统时间 + 建/关闹钟 + 息屏等待；
+# Mock 触发靠 TransAtomicBrain 调试页一键注入事件，几秒钟出卡。
+METHOD_OPTIONS = [
+    {"v": "real", "t": "真实触发（改时间 + 建闹钟）"},
+    {"v": "mock", "t": "Mock 触发（TransAtomicBrain 一键出卡）"},
+]
+
 SCENARIOS = [
     {
         "id": "greeting",
@@ -226,6 +234,8 @@ SCENARIOS = [
         "icon": "clock",
         "retryable": False,
         "params": [
+            {"key": "method", "type": "select", "label": "触发方式",
+             "value": "real", "options": METHOD_OPTIONS},
             {"key": "warmup_min", "type": "number", "label": "刷机预热",
              "value": 10, "min": 0, "max": 30, "unit": "分钟"},
             {"key": "wait_sec", "type": "number", "label": "息屏等待",
@@ -249,6 +259,8 @@ SCENARIOS = [
         "icon": "clock",
         "retryable": False,
         "params": [
+            {"key": "method", "type": "select", "label": "触发方式",
+             "value": "real", "options": METHOD_OPTIONS},
             {"key": "wait_sec", "type": "number", "label": "息屏/亮屏各等待",
              "value": 60, "min": 30, "max": 300, "unit": "秒"},
         ],
@@ -269,6 +281,8 @@ SCENARIOS = [
         "icon": "clock",
         "retryable": False,
         "params": [
+            {"key": "method", "type": "select", "label": "触发方式",
+             "value": "real", "options": METHOD_OPTIONS},
             {"key": "wait_sec", "type": "number", "label": "息屏/亮屏各等待",
              "value": 60, "min": 30, "max": 300, "unit": "秒"},
         ],

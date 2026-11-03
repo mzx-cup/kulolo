@@ -70,23 +70,55 @@ def _has_alarm(raw: str) -> bool:
     return re.search(r"Alarm clock:\s*\n\s*triggerTime=", raw) is not None
 
 
-def _open_alarm_list(dev: Device) -> None:
-    dev.shell(f"am start -a android.intent.action.SHOW_ALARMS -p {DESKCLOCK_PKG}")
-    time.sleep(1.2)
+def _open_alarm_list(dev: Device, r: Runner) -> None:
+    """先亮屏解锁，再打开时钟 App 的闹钟列表。
+
+    之前直接 am start：设备息屏/上锁时，启动被锁屏挡住，界面停在
+    NotificationShade，截图里一个橙色开关都找不到，_disable_daily_alarm
+    的循环第一轮就 break，闹钟根本没关掉（报「闹钟没有成功关闭」）。
+    """
+    dev.stayon(True)
+    dev.key(KEY_WAKEUP)
+    _wait_screen_on(dev, True, timeout=3.0)
+    time.sleep(0.6)
+    if dev.keyguard_showing():
+        _unlock_with_retries(dev, r)
+    for attempt in range(3):
+        dev.shell(f"am start -a android.intent.action.SHOW_ALARMS -p {DESKCLOCK_PKG}")
+        for _ in range(10):
+            time.sleep(0.4)
+            if "deskclock" in dev.focus().lower():
+                time.sleep(0.8)          # 等列表动画结束，避免 dump 报 idle
+                return
+        r.log(f"闹钟列表没起来（第 {attempt + 1} 次），当前窗口 {dev.focus()}，重试")
+    raise UiError(f"打不开时钟 App 的闹钟列表，当前窗口是 {dev.focus()}")
 
 
 def _disable_daily_alarm(dev: Device, r: Runner) -> None:
     r.step(f"关闭每日闹钟 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d}")
-    _open_alarm_list(dev)
-    for _ in range(4):
+    _open_alarm_list(dev, r)
+    for i in range(4):
         center = _orange_switch(dev.screenshot_png())
         if center is None:
             break
+        r.log(f"点击闹钟开关 ({center[0]}, {center[1]})")
         dev.tap(center[0], center[1])
         time.sleep(1.0)
     raw = dev.shell("dumpsys alarm")
     if _has_alarm(raw):
-        raise UiError(f"{ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 每日闹钟没有成功关闭")
+        # 截图找不到橙色开关时兜底：按控件树里的 Switch 再点一次。
+        nodes = dev.dump()
+        sw = [n for n in nodes
+              if (n.cls.endswith("Switch") or (n.rid or "").lower().endswith("switch"))
+              and n.clickable]
+        for n in sw[:3]:
+            r.log(f"兜底点击开关 {n.rid or n.cls} @ {n.center}")
+            dev.tap(n.center[0], n.center[1])
+            time.sleep(1.0)
+        raw = dev.shell("dumpsys alarm")
+    if _has_alarm(raw):
+        raise UiError(f"{ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 每日闹钟没有成功关闭"
+                      f"（当前窗口 {dev.focus()}）")
     r.ok("每日闹钟已关闭（保留在闹钟列表里）")
 
 
@@ -143,10 +175,19 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> bool:
 
 
 def run(dev: Device | None = None, emit=None, *, wait_sec: int = 60,
-        control: dict | None = None, confirm_fn=None, ask_fn=None) -> dict:
+        method: str = "real", control: dict | None = None,
+        confirm_fn=None, ask_fn=None) -> dict:
     dev = dev or Device()
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
+
+    # Mock 触发：装 TransAtomicBrain → 点「MOCK 工作日开闹卡」→ 回桌面出卡。
+    if method == "mock":
+        from scenario_atomic_mock import run_mock
+        return run_mock(dev, r, "open", wait_sec)
+    if method != "real":
+        raise UiError(f"未知触发方式 {method!r}，只能是 real / mock")
+
     if not (5 <= wait_sec <= 300):
         raise UiError("wait_sec 必须在 5~300 秒之间")
 

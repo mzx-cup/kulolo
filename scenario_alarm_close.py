@@ -90,10 +90,19 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int) -> bool:
 
 
 def run(dev: Device | None = None, emit=None, *, wait_sec: int = 60,
-        control: dict | None = None, confirm_fn=None, ask_fn=None) -> dict:
+        method: str = "real", control: dict | None = None,
+        confirm_fn=None, ask_fn=None) -> dict:
     dev = dev or Device()
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
+
+    # Mock 触发：装 TransAtomicBrain → 点「MOCK 休息日关闹卡」→ 回桌面出卡。
+    if method == "mock":
+        from scenario_atomic_mock import run_mock
+        return run_mock(dev, r, "close", wait_sec)
+    if method != "real":
+        raise UiError(f"未知触发方式 {method!r}，只能是 real / mock")
+
     if not (5 <= wait_sec <= 300):
         raise UiError("wait_sec 必须在 5~300 秒之间")
 

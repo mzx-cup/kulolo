@@ -28,6 +28,36 @@
 > 闹钟会留在手机里，如不再需要请在时钟 App 里关闭；反复测试可能累积同一时间的
 > 闹钟，请定期清理。
 
+**Mock 触发（三张时间管理卡片通用）**
+
+三个时间管理场景的参数列表第一项都是「触发方式」，可选：
+
+| 选项 | 行为 |
+| --- | --- |
+| 真实触发（改时间 + 建闹钟） | 上面各节描述的完整流程，会真的改系统时间、建闹钟、息屏等待 |
+| Mock 触发（TransAtomicBrain 一键出卡） | 装测试 App → 点对应的 mock 按钮 → 回桌面即出卡，**不改系统时间、不建闹钟、不息屏等待** |
+
+Mock 触发对应关系：
+
+| 场景 | Mock 按钮 | 卡片 |
+| --- | --- | --- |
+| 起床闹钟延迟 `wake_alarm_delay` | MOCK 睡得有点晚卡 | 睡得有点晚 / 要将 07:30 的闹钟延后吗？ |
+| 提前打开提示 `alarm_early_prompt` | MOCK 工作日开闹卡 | 明天是工作日 / 要开启明天的闹钟吗？ |
+| 提前关闭提示 `alarm_early_close` | MOCK 休息日关闹卡 | 明天休息日 / 要关闭明天的闹钟吗？ |
+
+Mock 触发流程（`scenario_atomic_mock.py`）：
+
+1. 检查 `com.transsion.atomicbrain` 是否已安装；未装则从网络共享装
+   `\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\TransAtomicBrain_full_signed.apk`
+2. `am start -n com.transsion.atomicbrain/.debug.Test` 打开调试页
+3. 按 resource-id 点击对应 mock 按钮（`btn_mock_early_wakeup_alarm_delay` /
+   `btn_mock_early_alarm_open` / `btn_mock_early_alarm_dismissal`）
+4. 唤醒 → 上滑解锁 → 回桌面，等待并截图确认卡片（最多 30 秒）
+
+> 注意：点完 mock 后调试 App 仍在前台，且屏幕常常已经熄灭或上锁；直接按 HOME
+> 只会落到通知栏黑图。脚本内部已按「唤醒 → 上滑解锁 → HOME」的顺序处理。
+> 也可以命令行直接跑：`python scenario_atomic_mock.py delay|open|close`。
+
 **提前打开提示卡片**（alarm_early_prompt · 时间管理）
 
 1. 创建每天 **04:05** 闹钟，然后在时钟 App 列表里把每日闹钟**关闭**（保留闹钟行）

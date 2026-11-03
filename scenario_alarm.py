@@ -164,11 +164,22 @@ def _wait_card(dev: Device, r: Runner, day: _dt.date, wait_sec: int,
 
 
 def run(dev: Device | None = None, emit=None, *, warmup_min: int = 10,
-        wait_sec: int = 60, unlock_retries: int = 3, control: dict | None = None,
+        wait_sec: int = 60, unlock_retries: int = 3, method: str = "real",
+        control: dict | None = None,
         confirm_fn=None, ask_fn=None) -> dict:
     dev = dev or Device()
     r = Runner(dev, emit, control=control, confirm_fn=confirm_fn, ask_fn=ask_fn)
     dev.log = r.log
+
+    # Mock 触发：装 TransAtomicBrain → 点「MOCK 睡得有点晚卡」→ 回桌面出卡。
+    # 不建闹钟、不改系统时间、不息屏等待，几秒钟就能出卡。
+    if method == "mock":
+        from scenario_atomic_mock import run_mock
+        result = run_mock(dev, r, "delay", wait_sec)
+        result["warmup_min"] = 0
+        return result
+    if method != "real":
+        raise UiError(f"未知触发方式 {method!r}，只能是 real / mock")
 
     if not (0 <= warmup_min <= 30):
         raise UiError("warmup_min 必须在 0~30 分钟之间")
