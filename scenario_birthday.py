@@ -40,6 +40,40 @@ CALENDAR_ACT = "com.android.calendar.AllInOneActivity"
 CALENDAR_CMP = f"{CALENDAR_PKG}/{CALENDAR_ACT}"
 DATE_SETTINGS_CMP = "com.android.settings/com.android.settings.Settings$DateTimeSettingsActivity"
 
+# 日历的 VIEW content URI。注意：英文系统下系统会把它当成可打开的文件（Google /
+# Phone Master / Terabox 等都声明了 content:// 的 VIEW 过滤），弹出「Open With」
+# 选择框（com.transsion.resolver）。所以只能作为显式组件启动的兜底，且启动后
+# 必须检查是否落到 resolver 上，落上了就关掉重来。
+CALENDAR_VIEW_URI = "content://com.transsion.calendar/events"
+
+
+def launch_calendar(dev: Device, timeout: float = 10.0) -> bool:
+    """显式组件启动日历月视图，绕开「Open With」选择框。返回是否真的进到日历。
+
+    历史：早期用 `am start -a VIEW -d <content uri>` 直接打开月视图，但它只是
+    「内容 URI」，任何声明了 VIEW + content scheme 的应用（Google App、
+    Phone Master、Terabox）都能接，英文系统 + 这些应用后装时会弹选择框。
+    现在优先用显式组件（不需要任何 intent filter 解析），失败才退回 VIEW。
+    """
+    # 只用显式组件、不按 HOME：调用方刚从日历页返回时 HOME 会被 launcher 的动画
+    # 吃掉一部分（实测焦点仍是日历，于是退化成「什么都不做」），而日历在前台时
+    # 显式组件启动就是一次 NO-OP 的 bringToFront。真没起来再退回 VIEW。
+    for i, cmd in enumerate((
+            f"am start -f 0x10000000 -n {CALENDAR_CMP}",
+            f"am start -a android.intent.action.VIEW -d '{CALENDAR_VIEW_URI}'")):
+        dev.shell(cmd)
+        try:
+            dev.wait_focus("calendar", timeout=timeout)
+            return True
+        except UiError:
+            focus = dev.focus() or ""
+            if "resolver" not in focus:
+                continue
+            dev.log(f"打开日历时弹出了「Open With」选择框（{focus}），按返回键关掉重试")
+            dev.key(KEY_BACK)
+            time.sleep(0.6)
+    return False
+
 CN_WEEK = "一二三四五六日"
 CN_MONTH = ["一月", "二月", "三月", "四月", "五月", "六月",
             "七月", "八月", "九月", "十月", "十一月", "十二月"]
@@ -555,6 +589,22 @@ def _ensure_calendar_month(dev: Device, r: Runner, target: date,
             continue
         if any(dev.find_opt(nodes=view, desc=d) for d in descs):
             return view
+        # 事件详情页守卫：上一条事件（如重要日提醒）建完会弹出详情页，
+        # 它没有 dateTitle，一直按「关弹窗」是空转，必须按返回键退出详情页。
+        # 详情页有两种布局：普通事件带 btn_more，重要日详情只有 toolbar_title='Event Info'。
+        if dev.find_opt(nodes=view, rid="btn_more") is not None and \
+                dev.find_opt(nodes=view, rid="qv_title") is None:
+            r.log("停在事件详情页，按返回键回到月视图")
+            dev.key(KEY_BACK)
+            time.sleep(0.7)
+            continue
+        det = [n for n in view
+               if n.rid.endswith("toolbar_title") and (n.text or "").lower() == "event info"]
+        if det:
+            r.log("停在重要日详情页，按返回键回到月视图")
+            dev.key(KEY_BACK)
+            time.sleep(0.7)
+            continue
         title = dev.find_opt(nodes=view, rid="dateTitle")
         shown = title.text if title else ""
         if not shown:
@@ -824,23 +874,22 @@ def _select_calendar_day(dev: Device, r: Runner, target: date, note: str,
     note 用在校验日志里，expect 是 tv_date 应包含的文案（默认同 note）。
     """
     r.step(f"打开日历并选中 {target.month}月{target.day}日（{note}）")
-    # 先强停再启动：避免上次残留的「新建事件/类型下拉」把月视图挡住。
+    # 先强停再启动：避免上次残留的「新建事件/类型下拉/事件详情」把月视图挡住。
     # 只影响 seed 流程；极速更新 fixture 不会打开日历。
     dev.shell(f"am force-stop {CALENDAR_PKG}")
     time.sleep(0.3)
-    # 直接启动日历月视图，跳过 AI 课程表入口，直接打开月视图
-    dev.shell(f"am start -a android.intent.action.VIEW -d 'content://com.transsion.calendar/events'")
+    # 显式组件启动日历月视图，跳过 AI 课程表入口，也不走会被「Open With」截胡的 VIEW
+    launch_calendar(dev)
     _focus_or_close_shade(dev, "calendar")
+    r.log(f"启动后当前窗口：{dev.focus()}")
     nodes = None
-    for attempt in range(5):
+    for attempt in range(6):
         try:
             nodes = dev.wait_nodes(timeout=8, settle=0.8, rid="dateTitle")
             break
         except UiError:
-            # 日历可能停在 AI Class Timetable 课表页，直接按返回键回主页
-            if attempt == 4:
-                raise
-            r.log(f"没看到月视图（第 {attempt + 1} 次），按返回键退出 AI 课程表页")
+            # 可能残留在课表页或上一条事件的详情页，按返回键回到月视图
+            r.log(f"没看到月视图（第 {attempt + 1} 次），当前窗口 {dev.focus()}，按返回键")
             dev.key(KEY_BACK)
             time.sleep(0.7)
     nodes = _dismiss_popups(dev, r, nodes)
@@ -1203,10 +1252,20 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
             created = True
             r.ok(f"已重新登记 fixture #{fx['_id']}")
     else:
+        before = fixtures.newest_event_id(dev)
         _seed_event()
-        fx = fixtures.find_latest(dev, ev_value, name)
+        # 新种子事件的标题和计划标题不一定完全一致（输入被截断时更明显），
+        # 所以先按「本次新建的、比建库时更新的那条」找，再退回按标题/类型找。
+        fx = fixtures.find_by_title(dev, name)
+        if fx is None or int(fx["_id"]) <= before:
+            fx = fixtures.newest_event(dev, newer_than=before)
+        if not fx:
+            fx = fixtures.find_latest(dev, ev_value, name)
         if not fx:
             raise UiError("首次创建后仍未在 CalendarProvider 中找到 fixture 事件")
+        got_title = (fx.get("title") or "").strip()
+        if got_title != name:
+            r.log(f"日历里保存的名称是「{got_title}」，与计划名称「{name}」不同，沿用日历里的写法")
         fixtures.register(dev, ev_value, fx)
         created = True
         r.log(f"已登记 fixture #{fx['_id']}，下次开始走极速更新，不再进日历 UI")

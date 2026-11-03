@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -38,6 +39,10 @@ FOOD_PACKAGE = "com.global.foodpanda.android"
 TAXI_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\yango.apk"
 FOOD_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\foodpanda.apk"
 
+# 在其他设备上「adb install 成功过」的完整版本大小（字节），用于识别没传完的文件
+TAXI_OK_SIZES = ()
+FOOD_OK_SIZES = (129913559,)
+
 # 点餐卡片允许的时段（分钟数）
 LUNCH = (10 * 60 + 45, 13 * 60)
 DINNER = (17 * 60, 19 * 60)
@@ -59,18 +64,57 @@ def _adb(dev: Device, *args: str) -> tuple[int, str]:
         return 1, f"{type(exc).__name__}: {exc}"
 
 
+def _zip_broken(path: str, ok_sizes: tuple[int, ...]) -> str | None:
+    """本地预检：共享上的文件可能是没传完的 APK，或其实是被改名的 XAPK。
+
+    返回问题描述（None 表示可以交给 adb install）。
+    """
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        return f"读不到共享文件：{exc}"
+    if size not in ok_sizes:
+        return f"共享上的文件大小是 {size} 字节，与其他设备上能装成功的版本大小不一致，疑似没传完"
+
+    def _issue(issue: str) -> str | None:
+        return f"{issue}（文件大小 {size} 字节）"
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            bad = zf.testzip()
+            if bad:
+                return _issue(f"压缩包内部条目 {bad} 已损坏")
+            names = set(zf.namelist())
+            if "AndroidManifest.xml" not in names:
+                if "manifest.json" in names:
+                    return _issue("这其实是 XAPK 安装包（内含 manifest.json 与多个拆分 APK），"
+                                  "需要改名成 .xapk 用 split 安装，不能直接 adb install")
+                return _issue("压缩包里没有 AndroidManifest.xml，不像正常的 APK")
+    except zipfile.BadZipFile:
+        return _issue("不是完整的 zip 包（缺少中央目录/EOCD，典型是上传过程中被截断）")
+    except Exception as exc:  # noqa: BLE001  预检本身出错就当未知问题放行，让 adb 给出真实报错
+        return f"预检失败：{type(exc).__name__}: {exc}"
+    return None
+
+
 def _install_local(dev: Device, r: Runner, package: str) -> bool:
     if package == TAXI_PACKAGE:
-        r.log(f"从网络共享安装 Yango：{TAXI_APK}")
-        rc, out = _adb(dev, "install", "-r", "-t", "-d", TAXI_APK)
+        path, ok_sizes, label = TAXI_APK, TAXI_OK_SIZES, "Yango"
     elif package == FOOD_PACKAGE:
-        r.log(f"从网络共享安装 foodpanda：{FOOD_APK}")
-        rc, out = _adb(dev, "install", "-r", "-t", "-d", FOOD_APK)
+        path, ok_sizes, label = FOOD_APK, FOOD_OK_SIZES, "foodpanda"
     else:
         return False
 
+    r.log(f"从网络共享安装 {label}：{path}")
+    problem = _zip_broken(path, ok_sizes)
+    if problem:
+        r.log(f"预检不通过：{problem}")
+        r.log("先按原命令试装一次，报错原样回传")
+    rc, out = _adb(dev, "install", "-r", "-t", "-d", path)
     if rc != 0:
         r.log(f"网络共享安装失败：{out.strip()[:400]}")
+        if problem:
+            r.log(f"安装失败的根因：{problem}")
         return False
     if not _app_installed(dev, package):
         r.log("adb install 返回成功但 pm path 仍找不到包")
@@ -90,7 +134,11 @@ def _ensure_app(dev: Device, r: Runner, package: str) -> None:
     if _install_local(dev, r, package):
         return
 
-    raise UiError(f"从网络共享路径安装 {package} 失败，请检查共享路径是否可访问")
+    path = TAXI_APK if package == TAXI_PACKAGE else FOOD_APK
+    sizes = TAXI_OK_SIZES if package == TAXI_PACKAGE else FOOD_OK_SIZES
+    problem = _zip_broken(path, sizes)
+    hint = f"根因：{problem}" if problem else "共享路径可能不可访问"
+    raise UiError(f"从网络共享路径安装 {package} 失败，{hint}。共享路径：{path}")
 
 
 def _in_food_window(hour: int, minute: int) -> bool:
@@ -103,6 +151,11 @@ def _service_component(dev: Device) -> str | None:
 
     某些系统上 am 对隐式 service intent 会报 "Not found"，必须用
     cmd package query-services 找到组件名再用 -n 显式启动。
+
+    输出格式两种都认：
+      · 一行一个：com.example.tpk.client/.RuleMockService
+      · 分块格式（XOS 17）：Service #0: / priority=... / com.xxx/.Yyy
+    之前只认第一种，第二种设备上会静默退化成隐式启动，然后报 "Not found"。
     """
     out = dev.shell(
         'cmd package query-services --brief '
@@ -111,7 +164,8 @@ def _service_component(dev: Device) -> str | None:
         line = line.strip()
         if re.fullmatch(r"[A-Za-z0-9_.]+/[\w.$]+", line):
             return line
-    return None
+    m = re.search(r"^\s*([A-Za-z0-9_.]+/[\w.$]+)\s*$", out, re.MULTILINE)
+    return m.group(1) if m else None
 
 
 def dispatch_app_suggest(dev: Device, app_package: str) -> str:

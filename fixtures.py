@@ -138,6 +138,29 @@ def _by_title(dev: Device, title: str) -> dict | None:
     return max(rows, key=lambda r: int(r.get("_id", "0")))
 
 
+def find_by_title(dev: Device, title: str) -> dict | None:
+    """按标题找事件（对外暴露，供 UI 建完事件后定位用）。"""
+    return _by_title(dev, title)
+
+
+def newest_event_id(dev: Device) -> int:
+    """当前日历里最大的事件 id；建完事件后用它判断哪条是新建的。"""
+    rows = _query(dev, EVENTS_URI, "_id", "1=1")
+    ids = [int(r["_id"]) for r in rows if str(r.get("_id", "")).isdigit()]
+    return max(ids) if ids else 0
+
+
+def newest_event(dev: Device, *, newer_than: int = 0) -> dict | None:
+    """取 id 大于 newer_than 的最新事件（没有就返回 None）。"""
+    rows = _query(dev, EVENTS_URI,
+                  "_id:title:calendar_id:dtstart:dtend:duration:allDay:rrule",
+                  f"_id>{int(newer_than)}")
+    rows = [r for r in rows if str(r.get("_id", "")).isdigit()]
+    if not rows:
+        return None
+    return max(rows, key=lambda r: int(r["_id"]))
+
+
 def find_latest(dev: Device, ev_value: str, title: str | None = None) -> dict | None:
     """优先按类型找最新事件；无类型或找不到时按标题找。"""
     if ev_value != "none":

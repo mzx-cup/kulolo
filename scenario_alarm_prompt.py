@@ -62,13 +62,12 @@ def _orange_switch(png: bytes) -> tuple[int, int] | None:
 
 
 def _has_alarm(raw: str) -> bool:
-    pat = re.compile(
-        r"Alarm clock:\s*\n\s*triggerTime=\d{4}-\d{2}-\d{2} "
-        r"(\d{2}):(\d{2}):(\d{2})")
-    for m in pat.finditer(raw):
-        if (int(m.group(1)), int(m.group(2))) == (ALARM_HOUR, ALARM_MINUTE):
-            return True
-    return False
+    """是否还有任意启用的闹钟（Alarm clock）。
+
+    不再按具体分钟比对：本机每天 04:05 的闹钟即使被关掉，AlarmManager 里
+    仍会留下前一分钟的条目（其他场景/系统闹钟），按分钟匹配会误判成没关掉。
+    """
+    return re.search(r"Alarm clock:\s*\n\s*triggerTime=", raw) is not None
 
 
 def _open_alarm_list(dev: Device) -> None:

@@ -68,10 +68,11 @@ def _ensure_location_enabled(dev: Device, r: Runner) -> None:
     if _location_enabled(dev):
         return
     r.log("定位服务是关闭的，先打开")
-    dev.shell("cmd location set-location-enabled true")
+    mode = _location_mode(dev) or "3"
+    dev.shell(f"settings put secure location_mode {mode}")
     time.sleep(1.0)
     if not _location_enabled(dev):
-        raise UiError("无法打开定位服务（cmd location set-location-enabled true 无效）")
+        raise UiError(f"无法打开定位服务（settings put secure location_mode {mode} 无效）")
 
 
 def _last_locations(dev: Device) -> dict[str, tuple[float, float]]:
@@ -113,12 +114,30 @@ def set_mock_location(dev: Device, r: Runner, loc: tuple[float, float],
     return follow
 
 
+def _location_mode(dev: Device) -> str:
+    return (dev.shell("settings get secure location_mode") or "").strip()
+
+
 def clear_mock_location(dev: Device) -> None:
-    """收尾：删掉测试 provider，并 toggle 一次定位开关清掉缓存的 mock 坐标。"""
+    """收尾：删掉测试 provider，并重开一次定位开关清掉缓存的 mock 坐标。
+
+    本机（X6765 / XOS 17）实测：
+      · `cmd location providers set-location-enabled` 这个子命令根本不存在
+        （报 Unknown command），之前用它做 toggle 等于什么都没做；
+      · 正确的是改 secure setting location_mode（0=全关，3=高精度）；
+      · 顺序必须是先 remove-test-provider、再关再开。反过来（先 toggle）
+        会让 gps provider 进入「不是 test provider」状态，之后 add 返回
+        False、remove 返回 False，最后一条 mock 坐标就永久留在
+        dumpsys location 里（last location 一直挂着 28.6139,77.209）。
+    """
     dev.shell("cmd location providers remove-test-provider gps")
-    dev.shell("cmd location providers set-location-enabled false")
-    time.sleep(0.8)
-    dev.shell("cmd location providers set-location-enabled true")
+    dev.shell("cmd location providers set-test-provider-enabled gps false")
+    mode = _location_mode(dev)
+    if mode:
+        dev.shell("settings put secure location_mode 0")
+        time.sleep(0.8)
+        dev.shell(f"settings put secure location_mode {mode}")
+        time.sleep(1.5)
 
 
 # ---------------------------------------------------------------- 桌面 / 等待
@@ -189,24 +208,23 @@ def _run_location(dev: Device, r: Runner, wait_min: int, settle_sec: int) -> boo
         set_mock_location(dev, r, NEW_DELHI, "新德里")
         _sit_on_desktop(dev, r, minutes * 60, "新德里")
         _swipe_up_to_home(dev, r)
+        # 先拍照确认桌面卡片，再还原定位：清缓存会让 provider 重新注册，
+        # 卡片还没来得及刷新就没了，所以确认界面必须在 finally 之前。
+        r.step(f"等待 {settle_sec} 秒检查跨国 / 跨城卡片")
+        for remain in range(settle_sec, 0, -1):
+            r.check()
+            r.tick(remain)
+            time.sleep(1)
+        r.shot("桌面 跨国跨城卡片")
+        r.step("确认跨国 / 跨城卡片是否出现")
+        ok = bool(r.confirm())
+        if not ok:
+            r.shot("桌面 未出现跨国跨城卡片")
+            r.log("桌面没有看到跨国 / 跨城卡片，本次结束（可点重试重新触发）")
+        return ok
     finally:
         clear_mock_location(dev)
-        r.log("已还原定位（删除 gps 测试 provider）")
-
-    r.step(f"等待 {settle_sec} 秒检查跨国 / 跨城卡片")
-    for remain in range(settle_sec, 0, -1):
-        r.check()
-        r.tick(remain)
-        time.sleep(1)
-    r.shot("桌面 跨国跨城卡片")
-
-    r.step("确认跨国 / 跨城卡片是否出现")
-    if not r.confirm():
-        r.shot("桌面 未出现跨国跨城卡片")
-        r.log("桌面没有看到跨国 / 跨城卡片，本次结束（可点重试重新触发）")
-        return False
-    r.ok("已确认跨国 / 跨城卡片")
-    return True
+        r.log("已还原定位（删除 gps 测试 provider，重开一次定位开关）")
 
 
 def _run_mock(dev: Device, r: Runner, method: str, wait_sec: int) -> bool:
