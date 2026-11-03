@@ -53,8 +53,9 @@
 
 1. 触发前检查 **Yango**（`com.yandex.yango`）是否已安装
    - 已安装：直接继续
-   - 未安装：优先从本地 `apks/yango_full.apk` 自动安装
-   - 本地没有 APK：打开应用商店详情页，等待 180 秒内安装完成
+   - 未安装：从网络共享直接装
+     `\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\yango_full.apk`
+     （329467629 字节，普通 APK）→ `adb install -r -t -d <路径>`
 2. 任何时间发送 `AppSuggestEvent`，`app_list=["com.yandex.yango"]`
 3. 桌面出现一键打车卡片 → 截图确认
 
@@ -62,15 +63,22 @@
 
 1. 触发前检查 **foodpanda**（`com.global.foodpanda.android`）是否已安装
    - 已安装：直接继续
-   - 未安装：优先从本地 `apks/foodpanda.apk`（XAPK，base + splits）自动安装
-   - 本地没有 APK：打开应用商店详情页，等待 180 秒内安装完成
+   - 未安装：从网络共享装
+     `\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\foodpanda.apk`
+     （129913559 字节）。**这个文件是 XAPK**：内含 `manifest.json` +
+     base `com.global.foodpanda.android.apk` + 19 个 `config.*.apk` 分包，
+     **没有 AndroidManifest.xml**，所以 `adb install` 必然报
+     `INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION: ... AndroidManifest.xml`。
+     脚本检测到 `manifest.json` 会自动解包到临时目录，按 base → ABI → 密度 →
+     语言 的顺序，用 `adb install-multiple -r -t -d <20 个 apk>` 一次装完，装完删临时目录。
 2. 午餐 **10:45~13:00**、晚餐 **17:00~19:00** 才会出现；场景会先把系统时间设到参数
    指定的窗口内时间
 3. 发送 `AppSuggestEvent`，`app_list=["com.global.foodpanda.android"]`
 4. 桌面出现一键点餐卡片 → 截图确认
 
-> `apks/` 是本地安装包缓存，不参与 Web 静态文件服务。检查/安装流程不会接收任何
-> Google 账号密码；商店安装由用户在手机上操作，后端只轮询 `pm path` 判断是否装好。
+> 安装全程只用网络共享上的安装包，不需要任何 Google 账号密码；后端装完用 `pm path`
+> 校验，两个 App 都已在 X6765 上实测装好并成功触发卡片。
+> 共享上的旧 `yango.apk`（195772416 字节）是上传中途截断的坏包，已被 `yango_full.apk` 取代。
 
 **卫星通话卡片**（satellite_call · 玩机技巧卡片）
 
@@ -225,7 +233,7 @@ python main.py
 | `scenario_alarm.py` | 起床闹钟延迟：10 分钟预热 + SET_ALARM 每日闹钟 + 周三 23:39 亮屏等待卡片 |
 | `scenario_alarm_prompt.py` | 提前打开提示：关闭每天 04:05 闹钟 + 周日 19:09 桌面等待 |
 | `scenario_alarm_close.py` | 提前关闭提示：保持每天 04:05 闹钟开启 + 周五 19:09 桌面等待 |
-| `scenario_app_suggest.py` | 生活服务：一键打车（Yango）/ 一键点餐（foodpanda），发送 AppSuggestEvent |
+| `scenario_app_suggest.py` | 生活服务：一键打车（Yango）/ 一键点餐（foodpanda）；共享路径装包，XAPK 自动拆包 install-multiple |
 | `scenario_satellite.py` | 玩机技巧：卫星通话卡片，支持检查 + 清原子化模拟器 + 断网重连 + 3 天/10:00 |
 | `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
 | `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |

@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import time
 import zipfile
 from pathlib import Path
@@ -36,11 +37,15 @@ TAXI_PACKAGE = "com.yandex.yango"
 FOOD_PACKAGE = "com.global.foodpanda.android"
 
 # 网络共享路径，直接从服务器拉取 APK
-TAXI_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\yango.apk"
+TAXI_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\yango_full.apk"
 FOOD_APK = r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk\foodpanda.apk"
 
-# 在其他设备上「adb install 成功过」的完整版本大小（字节），用于识别没传完的文件
-TAXI_OK_SIZES = ()
+# 在其他设备上「adb install 成功过」的完整版本大小（字节），用于识别没传完的文件。
+# yango_full.apk 2026-10-30 实测 329467629 字节，`adb install -r -t -d` 直接 Success；
+# foodpanda.apk 129913559 字节，其实是 XAPK（manifest.json + base + 19 个 config 分包），
+# 走 `adb install` 一定报 INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION: AndroidManifest.xml，
+# 必须解包后用 install-multiple 一次装进同一个 session。
+TAXI_OK_SIZES = (329467629,)
 FOOD_OK_SIZES = (129913559,)
 
 # 点餐卡片允许的时段（分钟数）
@@ -68,12 +73,14 @@ def _zip_broken(path: str, ok_sizes: tuple[int, ...]) -> str | None:
     """本地预检：共享上的文件可能是没传完的 APK，或其实是被改名的 XAPK。
 
     返回问题描述（None 表示可以交给 adb install）。
+    注意：XAPK 不算「坏文件」——它只是不能走 adb install，_install_local 会改用
+    install-multiple 拆包装，所以这里只在真正装不下去（截断/无清单）时返回。
     """
     try:
         size = os.path.getsize(path)
     except OSError as exc:
         return f"读不到共享文件：{exc}"
-    if size not in ok_sizes:
+    if ok_sizes and size not in ok_sizes:
         return f"共享上的文件大小是 {size} 字节，与其他设备上能装成功的版本大小不一致，疑似没传完"
 
     def _issue(issue: str) -> str | None:
@@ -85,16 +92,84 @@ def _zip_broken(path: str, ok_sizes: tuple[int, ...]) -> str | None:
             if bad:
                 return _issue(f"压缩包内部条目 {bad} 已损坏")
             names = set(zf.namelist())
-            if "AndroidManifest.xml" not in names:
-                if "manifest.json" in names:
-                    return _issue("这其实是 XAPK 安装包（内含 manifest.json 与多个拆分 APK），"
-                                  "需要改名成 .xapk 用 split 安装，不能直接 adb install")
-                return _issue("压缩包里没有 AndroidManifest.xml，不像正常的 APK")
+            if "AndroidManifest.xml" not in names and "manifest.json" not in names:
+                return _issue("压缩包里既没有 AndroidManifest.xml 也没有 manifest.json，不像正常的 APK/XAPK")
     except zipfile.BadZipFile:
         return _issue("不是完整的 zip 包（缺少中央目录/EOCD，典型是上传过程中被截断）")
     except Exception as exc:  # noqa: BLE001  预检本身出错就当未知问题放行，让 adb 给出真实报错
         return f"预检失败：{type(exc).__name__}: {exc}"
     return None
+
+
+def _xapk_modules(path: str) -> list[str]:
+    """如果 path 是 XAPK（zip 里有 manifest.json），返回里面待安装的 .apk 条目名，否则返回 []。
+
+    安装顺序按 manifest.json 的 split_apks：
+      1. base 包（id=base）必须排第一，adb install-multiple 会把它当主包；
+      2. 再按 ABI（arm64_v8a / armeabi 等）→ 屏幕密度（xxhdpi 等）→ 语言 → 其它。
+    adb 走 streamed install 时会把所有分包塞进同一个 session，顺序错了系统会
+    直接报 INSTALL_FAILED_INVALID_APK，所以这里不依赖 zip 里的物理顺序。
+    """
+
+    def _rank(item: dict) -> int:
+        sid = str(item.get("id") or "").lower()
+        if sid == "base":
+            return 0
+        if "arm" in sid or "x86" in sid or "mips" in sid:
+            return 1
+        if "dpi" in sid:          # hdpi/xhdpi/xxhdpi/...
+            return 2
+        return 3
+
+    try:
+        with zipfile.ZipFile(path) as zf:
+            names = zf.namelist()
+            if "manifest.json" not in names:
+                return []
+            manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+            entries = [e for e in (manifest.get("split_apks") or [])
+                       if isinstance(e, dict) and e.get("file") in names
+                       and e["file"].endswith(".apk")]
+            order = {e["file"]: (i, _rank(e)) for i, e in enumerate(entries)}
+            # 分包列表里没列、但 zip 里有的 .apk 也一起装，排在最后
+            mods = [e["file"] for e in entries]
+            mods += [n for n in names if n.endswith(".apk") and n not in order]
+            mods.sort(key=lambda n: order.get(n, (len(entries), 9)))
+            return mods
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _install_xapk(dev: Device, r: Runner, path: str, package: str,
+                  label: str) -> bool:
+    """XAPK 拆包安装：解到临时目录后 `adb install-multiple -r -t -d base + splits`。"""
+    mods = _xapk_modules(path)
+    if not mods:
+        return False
+    r.log(f"{label} 是 XAPK 安装包（{len(mods)} 个分包），改用 install-multiple 拆包安装")
+    tmp = tempfile.mkdtemp(prefix=f"xapk_{package.split('.')[-1]}_")
+    try:
+        with zipfile.ZipFile(path) as zf:
+            for name in mods:
+                zf.extract(name, tmp)
+        files = [os.path.join(tmp, name) for name in mods]
+        missing = [f for f in files if not os.path.exists(f)]
+        if missing:
+            r.log(f"解包后缺少文件：{missing[:3]}")
+            return False
+        r.log("安装分包：" + ", ".join(os.path.basename(f) for f in files[:4])
+              + (f" … 共 {len(files)} 个" if len(files) > 4 else ""))
+        rc, out = _adb(dev, "install-multiple", "-r", "-t", "-d", *files)
+        if rc != 0:
+            r.log(f"install-multiple 失败：{out.strip()[:400]}")
+            return False
+        if not _app_installed(dev, package):
+            r.log("install-multiple 返回成功但 pm path 仍找不到包")
+            return False
+        r.ok(f"XAPK 拆包安装成功（{len(files)} 个分包）")
+        return True
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 def _install_local(dev: Device, r: Runner, package: str) -> bool:
@@ -110,6 +185,13 @@ def _install_local(dev: Device, r: Runner, package: str) -> bool:
     if problem:
         r.log(f"预检不通过：{problem}")
         r.log("先按原命令试装一次，报错原样回传")
+
+    # XAPK（带 manifest.json）不能用 adb install，先拆包走 install-multiple
+    if _xapk_modules(path):
+        if _install_xapk(dev, r, path, package, label):
+            return True
+        r.log("XAPK 拆包安装失败，退回单文件 adb install 再试一次")
+
     rc, out = _adb(dev, "install", "-r", "-t", "-d", path)
     if rc != 0:
         r.log(f"网络共享安装失败：{out.strip()[:400]}")
