@@ -9,7 +9,7 @@
 <title>手机遥控台 · 场景工坊</title>
 <link rel="stylesheet" href="style.css?v=13">
 <script>
-  /* 涓婚?灏芥棭钀戒綅锛岄伩鍏嶉?灞忛棯涓€涓?*/
+  /* 主题尽早落位，避免首屏闪一下 */
   (function () {
     try {
       var t = localStorage.getItem("ui.theme");
@@ -20,7 +20,7 @@
 </head>
 <body>
 <div class="ambient" aria-hidden="true"><span class="stars"></span></div>
-<a class="skip-link" href="#sc-title">璺冲埌鍦烘櫙鍐呭?</a>
+<a class="skip-link" href="#sc-title">跳到场景内容</a>
 
 <header class="topbar">
   <div class="brand">
@@ -39,7 +39,7 @@
 
   <div class="topbar-mid">
     <button id="devstatus" class="devstatus loading" type="button" title="title?">
-      <span class="led" aria-hidden="true"></span><span class="txt">妫€娴嬭?澶囦腑鈥?</span>
+      <span class="led" aria-hidden="true"></span><span class="txt">检测设备中…</span>
     </button>
     <span id="devpick" class="devpick" hidden></span>
   </div>
@@ -49,23 +49,23 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
         <path d="M4 7h16M4 12h16M4 17h10"/>
       </svg>
-      <span class="txt">鍦烘櫙鐩?　綍</span>
+      <span class="txt">场景目录</span>
     </button>
-    <button id="btn-shot" class="btn ghost" type="button" title="绔嬪嵆鍒锋柊涓€娆℃墜鏈烘埅鍥">
+    <button id="btn-shot" class="btn ghost" type="button" title="立即刷新一次手机截图">
       <svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M20.5 11a8.5 8.5 0 1 0-2.4 6"/>
         <path d="M20.5 4.5V11h-6.5"/>
       </svg>
-      <span class="txt">鍒锋柊鎴?浘</span>
+      <span class="txt">刷新截图</span>
     </button>
-    <button id="btn-scrcpy" class="btn ghost" type="button" title="鍚?姩 scrcpy 瀹炴椂闀滃儚">
+    <button id="btn-scrcpy" class="btn ghost" type="button" title="启动 scrcpy 实时镜像">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <rect x="6" y="2.8" width="12" height="18.4" rx="2.6"/>
         <path d="M10 9.2 14.6 12 10 14.8z"/>
       </svg>
       <span class="txt">scrcpy</span>
     </button>
-    <button id="theme-toggle" class="btn ghost icon-btn" type="button" title="鍒囨崲鏄庢殫涓婚?" aria-label="切换明暗主题" aria-pressed="false">
+    <button id="theme-toggle" class="btn ghost icon-btn" type="button" title="切换明暗主题" aria-label="切换明暗主题" aria-pressed="false">
       <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="4.2"/>
         <path d="M12 2.6v2M12 19.4v2M4.4 4.4l1.4 1.4M18.2 18.2l1.4 1.4M2.6 12h2M19.4 12h2M4.4 19.6l1.4-1.4M18.2 5.8l1.4-1.4"/>
@@ -82,10 +82,10 @@
     <div class="catalog-head">
       <div class="catalog-heading">
         <span class="kicker">Library</span>
-        <h2>鍦烘櫙鐩?　綍</h2>
+        <h2>场景目录</h2>
       </div>
       <div class="catalog-head-right">
-        <span id="sc-total" class="count-badge" title="场景数量">鈥?</span>
+        <span id="sc-total" class="count-badge" title="场景数量">0</span>
         <button id="btn-close-catalog" class="icon-btn close-catalog" type="button" aria-label="场景目录">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
         </button>
@@ -104,7 +104,7 @@
     </div>
 
     <div id="recent" class="recent" hidden>
-      <span class="recent-label">鏈€杩?</span>
+      <span class="recent-label">最近</span>
       <div id="recent-chips" class="recent-chips"></div>
     </div>
 
@@ -121,15 +121,15 @@
         <span class="nr-glyph" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.2 4.2M8.5 11h5"/></svg>
         </span>
-        <p>娌℃湁鍖归厤鐨勫満鏅?</p>
-        <span>鎹?釜鍏抽敭璇嶏紝鎴栫湅鐪嬪埆鐨勫垎缁?</span>
-        <button id="btn-clear-filter" class="btn ghost sm" type="button">娓呴櫎绛涢€?</button>
+        <p>没有匹配的场景</p>
+        <span>换个关键词，或看看别的分组</span>
+        <button id="btn-clear-filter" class="btn ghost sm" type="button">清除筛选</button>
       </div>
     </div>
 
     <div class="catalog-foot">
-      <span><kbd>鈫?</kbd><kbd>鈫?</kbd> 鍒囨崲</span>
-      <span><kbd>Ctrl</kbd><kbd>鈫?</kbd> 杩愯?</span>
+      <span><kbd>↑</kbd><kbd>↓</kbd> 切换</span>
+      <span><kbd>Ctrl</kbd><kbd>↑</kbd> 运行</span>
     </div>
   </aside>
 
@@ -140,39 +140,39 @@
         <section id="hero" class="panel hero reveal" style="--i:0">
           <div class="hero-main">
             <div class="crumbs">
-              <span id="sc-group" class="crumb-group">鈥?</span>
+              <span id="sc-group" class="crumb-group">—</span>
               <span class="crumb-dot" aria-hidden="true"></span>
               <span id="sc-eyebrow" class="crumb-no">SCENARIO</span>
             </div>
-            <h2 id="sc-title">鈥?</h2>
-            <p class="lede" id="sc-desc">姝ｅ湪杞藉叆鍦烘櫙鈥?</p>
+            <h2 id="sc-title">—</h2>
+            <p class="lede" id="sc-desc">正在载入场景…</p>
             <ul class="spec" id="spec"></ul>
           </div>
 
           <div class="hero-act">
             <button id="btn-run" class="commit" type="button">
               <svg class="play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M8.5 5.8c0-.8.9-1.3 1.6-.9l8.2 5.9c.6.4.6 1.3 0 1.7l-8.2 5.9c-.7.4-1.6-.1-1.6-.9z"/></svg>
-              <span class="lbl">涓€閿?繍琛?</span>
+              <span class="lbl">一键运行</span>
               <span class="spin" aria-hidden="true"></span>
-              <span class="kbd">Ctrl 鈫?</span>
+              <span class="kbd">Ctrl ↑</span>
             </button>
             <span id="ctrl-btns" class="ctrl-btns" hidden>
-              <button id="btn-pause" class="btn ghost" type="button">鏆傚仠</button>
-              <button id="btn-stop" class="btn ghost danger" type="button">缁撴潫</button>
+              <button id="btn-pause" class="btn ghost" type="button">暂停</button>
+              <button id="btn-stop" class="btn ghost danger" type="button">结束</button>
             </span>
-            <p id="runstate" class="runstate idle">灏辩华銆傜偣鎸夐挳鍚庡叏绋嬭嚜鍔?紝璇峰嬁鎷旂嚎銆?</p>
+            <p id="runstate" class="runstate idle">就绪。点按按钮后全程自动，请勿拔线。</p>
           </div>
 
           <div class="progress-row">
-            <span class="progress-label">杩涘害 <em id="prog-pct">0%</em></span>
+            <span class="progress-label">进度 <em id="prog-pct">0%</em></span>
             <div class="progress" aria-hidden="true"><div id="prog" class="bar"></div></div>
             <span id="elapsed" class="elapsed"></span>
           </div>
 
           <div class="params-wrap">
             <div class="params-head">
-              <span class="params-kicker">杩愯?鍙傛暟 <em>parameters</em></span>
-              <button id="btn-reset" class="link-btn" type="button">閲嶇疆榛樿?</button>
+              <span class="params-kicker">运行参数 <em>parameters</em></span>
+              <button id="btn-reset" class="link-btn" type="button">重置默认</button>
             </div>
             <div class="params" id="params"></div>
           </div>
@@ -181,7 +181,7 @@
         <section class="panel steps-panel reveal" style="--i:1">
           <div class="panel-head">
             <div class="panel-title">
-              <h3>鎵ц?搴忓垪</h3>
+              <h3>执行序列</h3>
               <span class="head-note">sequence</span>
             </div>
             <span id="countdown" class="countdown"></span>
@@ -193,8 +193,8 @@
                   <circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="3.2"/><path d="M12 3.5v3M12 17.5v3M3.5 12h3M17.5 12h3"/>
                 </svg>
               </span>
-              <span>鐐瑰嚮銆屼竴閿?繍琛屻€嶅悗<br>姝ラ?浼氬湪杩欓噷閫愭潯鐐逛寒</span>
-              <em class="ph-tip">杩愯?鏃跺彲闅忔椂鏆傚仠鎴栫粨鏉燂紝鍙充晶鐢婚潰浼氳嚜鍔ㄥ埛鏂?</em>
+              <span>点击「一键运行」后<br>步骤会在这里逐条点亮</span>
+              <em class="ph-tip">运行时可持续暂停或结束，右侧画面会自动刷新</em>
             </li>
           </ol>
         </section>
@@ -202,10 +202,10 @@
         <section class="panel log-panel reveal" style="--i:2">
           <div class="panel-head">
             <div class="panel-title">
-              <h3>杩愯?鏃ュ織</h3>
+              <h3>运行日志</h3>
               <span id="logcount" class="head-note"></span>
             </div>
-            <button id="btn-clear-log" class="icon-btn sm" type="button" title="娓呯┖鏃ュ織" aria-label="清空日志">
+            <button id="btn-clear-log" class="icon-btn sm" type="button" title="清空日志" aria-label="清空日志">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 7h16M9 7V5h6v2M7 7l.8 12h8.4L17 7M10 11v4M14 11v4"/>
               </svg>
@@ -217,7 +217,7 @@
       <aside class="panel device-panel reveal" style="--i:3">
         <div class="panel-head">
           <div class="panel-title">
-            <h3>瀹炴椂鐢婚潰</h3>
+            <h3>实时画面</h3>
             <span class="head-note">device</span>
           </div>
           <button id="btn-shot-dock" class="icon-btn sm" type="button" title="查看大图" aria-label="查看大图">
@@ -239,9 +239,9 @@
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <rect x="7" y="2.8" width="10" height="18.4" rx="2.4"/><path d="M10.5 5.5h3"/>
                 </svg>
-                <span>灏氭湭鎴?浘</span>
+                <span>尚未截图</span>
               </span>
-              <button id="btn-expand" class="expand-btn" type="button" title="鏀惧ぇ鏌ョ湅" aria-label="查看大图" aria-label hidden>
+              <button id="btn-expand" class="expand-btn" type="button" title="放大查看" aria-label="查看大图" hidden>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                   <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5"/>
                 </svg>
@@ -249,100 +249,100 @@
               <span class="home-bar" aria-hidden="true"></span>
             </div>
           </div>
-          <p id="shottag" class="shottag">鏈?埅鍥?</p>
-          <p id="dev-meta" class="dev-meta">绛夊緟璁惧?鎺ュ叆鈥?</p>
+          <p id="shottag" class="shottag">手机截图</p>
+          <p id="dev-meta" class="dev-meta">等待设备接入…</p>
           <div class="shot-ctrl">
-            <span class="k">鑷?姩鍒锋柊</span>
+            <span class="k">自动刷新</span>
             <label class="interval">
               <input id="shot-gap" type="number" min="1" max="60" step="1" value="5" aria-label="截图自动刷新间隔（秒）">
               <span>s</span>
             </label>
             <span id="shot-state" class="state" aria-live="polite"></span>
           </div>
-          <p class="device-tip">鐐瑰嚮鐢婚潰鍙?斁澶ф煡鐪?</p>
+          <p class="device-tip">点击画面可放大查看</p>
         </div>
       </aside>
     </div>
   </div>
 </main>
 
-<!-- 杩愯?涓?細绛夌敤鎴风‘璁ら攣灞忓崱鐗囨槸鍚﹀凡瑙﹀彂 --">
+<!-- 运行中：等用户确认锁屏卡片是否已触发 -->
 <div id="verify" class="modal corner" hidden>
   <div class="modal-card tone-jade" role="dialog" aria-modal="false" aria-labelledby="verify-title">
     <span class="modal-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.2 4.2L19 6.8"/></svg>
     </span>
-    <span class="eyebrow">confirm&nbsp;路&nbsp;card</span>
-    <h3 id="verify-title">鍗＄墖鏄?惁宸叉垚鍔熻Е鍙戯紵</h3>
-    <p class="v-detail">鎵嬫満宸蹭笂婊戣В閿併€?br">鐪嬩竴涓嬪垰鎵嶉攣灞忎笂鐨勫崱鐗囷紝鏄?笉鏄?凡缁忓嚭鏉ヤ簡锛?</p>
+    <span class="eyebrow">confirm&nbsp;·&nbsp;card</span>
+    <h3 id="verify-title">卡片是否已成功触发？</h3>
+    <p class="v-detail">手机已上滑解锁。<br>看一下刚才锁屏上的卡片，是不是已经出来了？</p>
     <div class="v-actions">
-      <button id="btn-success" class="vbtn ok" type="button">宸茶Е鍙?</button>
-      <button id="btn-fail" class="vbtn bad" type="button">鏈?Е鍙?</button>
+      <button id="btn-success" class="vbtn ok" type="button">已触发</button>
+      <button id="btn-fail" class="vbtn bad" type="button">未触发</button>
     </div>
   </div>
 </div>
 
-<!-- 瑙﹀彂鍓嶏細璇㈤棶鐢ㄦ埛 OOBE 鍥藉?鏄?惁宸茶皟鏁村埌涓?浗 --">
+<!-- 触发前：询问用户 OOBE 国家是否已调整到中国 -->
 <div id="ask" class="modal" hidden>
   <div class="modal-card tone-blue" role="dialog" aria-modal="true" aria-labelledby="ask-title">
     <span class="modal-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8.8"/><path d="M3.2 12h17.6M12 3.2c2.3 2.4 3.5 5.5 3.5 8.8s-1.2 6.4-3.5 8.8c-2.3-2.4-3.5-5.5-3.5-8.8S9.7 5.6 12 3.2z"/></svg>
     </span>
-    <span class="eyebrow">ask&nbsp;路&nbsp;oobe</span>
-    <h3 id="ask-title">OOBE 鍥藉?鏄?惁宸茶皟鏁村埌涓?浗锛?</h3>
-    <p class="v-detail" id="ask-prompt">鍙?湁鎶婂浗瀹惰皟鏁村埌涓?浗锛岃妭鏃ュ崱鐗囨墠鑳芥?甯歌Е鍙戙€?br">璇风‘璁ゆ墜鏈?OOBE 閲岀殑鍥藉?鏄?腑鍥姐€?</p>
+    <span class="eyebrow">ask&nbsp;·&nbsp;oobe</span>
+    <h3 id="ask-title">OOBE 国家是否已调整到中国？</h3>
+    <p class="v-detail" id="ask-prompt">只有把国家调整到中国，节日卡片才能正常触发。<br>请确认手机 OOBE 里的国家是中国。</p>
     <div class="v-actions">
-      <button id="btn-ask-yes" class="vbtn ok" type="button">鏄?紝宸茶皟鏁?</button>
-      <button id="btn-ask-no" class="vbtn bad" type="button">鍚?</button>
+      <button id="btn-ask-yes" class="vbtn ok" type="button">是，已调整</button>
+      <button id="btn-ask-no" class="vbtn bad" type="button">否</button>
     </div>
   </div>
 </div>
 
-<!-- 鏈?Е鍙戝悗鐨勩€岄噸鏂拌Е鍙戙€嶈?闂?細鎶婄洰鏍囨棩鏈熷钩绉讳竴涓?湀鍐嶈瘯 --">
+<!-- 未触发后的「重新触发」询问：把目标日期平移一个月再试 -->
 <div id="retry" class="modal corner" hidden>
   <div class="modal-card tone-amber" role="dialog" aria-modal="false" aria-labelledby="retry-title">
     <span class="modal-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 12a8.5 8.5 0 1 0 2.6-6.1"/><path d="M3.5 4.2v5.2h5.2"/></svg>
     </span>
-    <span class="eyebrow">retry&nbsp;路&nbsp;鏈?Е鍙?</span>
-    <h3 id="retry-title">瑕侀噸鏂拌Е鍙戝悧锛?</h3>
-    <p class="v-detail">鍗＄墖娌″嚭鏉ワ紝澶氬崐鏄?繖涓?棩鏈熷凡缁忚Е鍙戣繃浜嗐€?br">鍐嶆?瑙﹀彂瑕佺瓑鍒颁笅涓?湀鈥斺€旀槸鍚︽妸鏃堕棿璋冩暣鍒颁笅鏈堝悓鏃ラ噸鏂拌瘯涓€娆★紵</p>
+    <span class="eyebrow">retry&nbsp;·&nbsp;未触发</span>
+    <h3 id="retry-title">要重新触发吗？</h3>
+    <p class="v-detail">卡片没出来，多半是这个日期已经触发过了。<br>再触发要等到下个月——是否把时间调整到下月同日重新试一次？</p>
     <div class="v-actions">
-      <button id="btn-retry-yes" class="vbtn ok" type="button">閲嶆柊瑙﹀彂</button>
-      <button id="btn-retry-no" class="vbtn bad" type="button">涓嶉噸璇?</button>
+      <button id="btn-retry-yes" class="vbtn ok" type="button">重新触发</button>
+      <button id="btn-retry-no" class="vbtn bad" type="button">不再重试</button>
     </div>
   </div>
 </div>
 
-<!-- 鑷?畾涔夈€岀粨鏉熶换鍔°€嶇‘璁わ紝鏇挎帀娴忚?鍣ㄥ師鐢?confirm --">
+<!-- 自定义「结束任务」确认，替代浏览器原生 confirm -->
 <div id="stop-confirm" class="modal" data-dismissible="true" hidden>
   <div class="modal-card tone-rust" role="dialog" aria-modal="true" aria-labelledby="stop-title">
     <span class="modal-icon" aria-hidden="true">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6.5" y="6.5" width="11" height="11" rx="2"/><path d="M4 4l16 16"/></svg>
     </span>
-    <span class="eyebrow">stop&nbsp;路&nbsp;run</span>
-    <h3 id="stop-title">缁撴潫褰撳墠浠诲姟锛?</h3>
-    <p class="v-detail">姝ｅ湪鎵ц?鐨勬?楠や細绔嬪嵆涓?柇锛屾墜鏈哄彲鑳藉仠鐣欏湪涓?棿鐘舵€併€?br">缁撴潫鍚庡彲浠ラ噸鏂拌繍琛屻€?</p>
+    <span class="eyebrow">stop&nbsp;·&nbsp;run</span>
+    <h3 id="stop-title">结束当前任务？</h3>
+    <p class="v-detail">正在执行的步骤会立即中断，手机可能停留在中间状态。<br>结束后可以重新运行。</p>
     <div class="v-actions">
-      <button id="btn-stop-yes" class="vbtn bad" type="button">缁撴潫浠诲姟</button>
-      <button id="btn-stop-no" class="vbtn plain" type="button">缁х画杩愯?</button>
+      <button id="btn-stop-yes" class="vbtn bad" type="button">结束任务</button>
+      <button id="btn-stop-no" class="vbtn plain" type="button">继续运行</button>
     </div>
   </div>
 </div>
 
-<!-- 鎵嬫満鎴?浘鏀惧ぇ --">
+<!-- 手机截图放大 -->
 <div id="shot-view" class="lightbox" hidden>
-  <button id="btn-close-shot" class="lightbox-close" type="button" aria-label="关闭场景目录">
+  <button id="btn-close-shot" class="lightbox-close" type="button" aria-label="关闭大图">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg>
   </button>
-  <img id="shot-view-img" alt="鎵嬫満灞忓箷鎴?浘澶у浘">
+  <img id="shot-view-img" alt="手机屏幕截图大图">
   <span id="shot-cap" class="lightbox-cap"></span>
 </div>
 
-<!-- 鎴愬姛/澶辫触鐨勭粨绠楀姩鏁?--">
+<!-- 成功/失败的结算动效 -->
 <div id="result-fx" class="result-fx ok" hidden></div>
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
-<script src="app.js?v=22"></script>
+<script src="app.js?v=21"></script>
 </body>
 </html>
