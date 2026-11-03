@@ -808,6 +808,9 @@ function estimateRunSeconds(s, params) {
   if (Number.isFinite(wait)) sec += Math.max(0, wait);
   const warm = Number(params && params.warmup_min);
   if (Number.isFinite(warm)) sec += Math.max(0, warm) * 60;
+  // 跨国/跨城定位法要在两个城市各亮屏 N 分钟
+  const each = Number(params && params.wait_min);
+  if (Number.isFinite(each) && each > 0) sec += each * 60 * 2;
   if (s && /anniversary/.test(s.id)) sec += 60;
   if (s && /^festival_/.test(s.id)) sec += 15;
   if (s && /^(greeting|birthday|anniversary|important_day|show_day)/.test(s.id)) {
