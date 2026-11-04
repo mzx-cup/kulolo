@@ -265,19 +265,29 @@ def _jump_time(dev: Device, r: Runner, gap: str) -> str:
 #   Boomplay 操作
 # ═══════════════════════════════════════════════════════════════════
 
-_PLAY_HINTS = ("播放", "随机播放", "play", "shuffle", "播 放")
+_PLAY_HINTS = ("播放", "随机播放", "play", "shuffle", "播 放",
+               # 阿拉伯语：Boomplay 自己的界面文案不随系统语言变，但播放页
+               # 上系统提供的媒体控件（媒体通知/播放器）会是阿拉伯语
+               "تشغيل", "عشوائي")
 # bottom_play_button 是迷你播放条上的播放/暂停键，Boomplay 各版本里最稳的一个
 _PLAY_RIDS = ("bottom_play_button", "btn_play", "iv_play", "play_btn",
               "btn_shuffle", "iv_shuffle", "btn_play_all", "fab_play",
               "iv_play_ctrl", "play_ctrl")
 
 # 首启门槛候选：EULA 勾选 + 同意 → 全屏广告关闭键 → 权限/更新弹窗
+# 这些是 Boomplay 自有页面 + 系统权限弹窗的混合：App 自己的文案不随语言变，
+# 系统权限弹窗会变（阿拉伯语 `سماح` / 英语 Allow），所以两种都收。
 _GATE_RIDS = ("iv_check", "bt_ok", "ad_self_btn_close_id", "iv_close",
-              "btn_close", "btn_ok", "btn_agree", "btn_allow")
+              "btn_close", "btn_ok", "btn_agree", "btn_allow",
+              # 系统权限对话框在 AOSP/OEM 各版本文案不同，但按钮 rid 稳定
+              "permission_allow_button", "permission_allow_foreground_only_button",
+              "permission_allow_one_time_button", "android:id/button1")
 _GATE_TEXTS = ("立即享受音乐", "关闭广告并继续打开应用", "关闭广告", "同意并继续",
                "我知道了", "开始体验", "稍后再说", "允许", "始终允许",
-               "Allow", "Allow all")
-_GATE_DESCS = ("Close", "close-button", "关闭")
+               "Allow", "Allow all",
+               # 阿拉伯语系统权限/广告弹窗
+               "سماح", "السماح", "اسمح", "موافق", "إغلاق", "تخطي", "لاحقًا")
+_GATE_DESCS = ("Close", "close-button", "关闭", "إغلاق")
 
 
 def _focus_blob(dev: Device) -> str:

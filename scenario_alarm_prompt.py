@@ -1,4 +1,4 @@
-"""提前打开提示卡片（时间管理）。
+﻿"""提前打开提示卡片（时间管理）。
 
 按测试说明：
   1. 设置每天 04:05 闹钟，然后关闭每日闹钟（保持闹钟在列表里、但处于关闭状态）。
@@ -18,6 +18,8 @@ import re
 import time
 
 from PIL import Image
+
+import locale_kit
 
 from phone_ctl import KEY_HOME, KEY_WAKEUP, Device, UiError
 
@@ -48,13 +50,18 @@ def _next_sunday(today: _dt.date) -> _dt.date:
 
 
 def _orange_switch(png: bytes) -> tuple[int, int] | None:
-    """在时钟 App 闹钟列表截图里找右侧橙色开启开关的中心点。"""
+    """在时钟 App 闹钟列表截图里找橙色开启开关的中心点。
+
+    左右两侧都扫：RTL 语言（阿拉伯语）下开关整体镜像到屏幕左侧，
+    只扫右侧会一个都找不到（实测踩过）。
+    """
     im = Image.open(io.BytesIO(png)).convert("RGB")
     w, h = im.size
     px = im.load()
     pts: list[tuple[int, int]] = []
     for y in range(int(h * 0.12), int(h * 0.55)):
-        for x in range(int(w * 0.72), int(w * 0.995)):
+        for x in list(range(int(w * 0.02), int(w * 0.28))) + \
+                 list(range(int(w * 0.72), int(w * 0.995))):
             r, g, b = px[x, y]
             if r >= 210 and 80 <= g <= 200 and b <= 110 and r >= g + 45:
                 pts.append((x, y))
@@ -71,6 +78,26 @@ def _has_alarm(raw: str) -> bool:
     仍会留下前一分钟的条目（其他场景/系统闹钟），按分钟匹配会误判成没关掉。
     """
     return re.search(r"Alarm clock:\s*\n\s*triggerTime=", raw) is not None
+
+
+def _clear_stale_alarms(dev: Device, r: Runner) -> None:
+    """动手前先清空时钟 App 的全部闹钟。
+
+    本场景的判据是「还有没有任意启用的闹钟」，而别的场景（wake_alarm_delay）
+    会留下 04:01 这种常驻闹钟，不清掉的话关掉 04:05 之后照样能匹配到，
+    被误判成「没关掉」直接抛错（实测踩过）。pm clear 是唯一能一次清干净的
+    办法：它同时清掉 ClockProvider 里的记录和 AlarmManager 里的条目。
+    """
+    r.step("清空时钟 App 里的历史闹钟")
+    before = re.findall(r"Alarm clock:", dev.shell("dumpsys alarm"))
+    dev.shell(f"pm clear {DESKCLOCK_PKG}")
+    time.sleep(2.0)
+    after = re.findall(r"Alarm clock:", dev.shell("dumpsys alarm"))
+    if after:
+        r.log(f"警告：pm clear 之后仍有 {len(after)} 个闹钟条目，继续执行")
+    else:
+        r.log(f"已清掉 {len(before)} 个历史闹钟条目，AlarmManager 里没有闹钟了")
+    r.ok("时钟 App 已重置")
 
 
 def _open_alarm_list(dev: Device, r: Runner) -> None:
@@ -97,29 +124,76 @@ def _open_alarm_list(dev: Device, r: Runner) -> None:
     raise UiError(f"打不开时钟 App 的闹钟列表，当前窗口是 {dev.focus()}")
 
 
+def _alarm_rows(nodes: list[Node]) -> list[tuple[str, Node]]:
+    """把闹钟列表解析成 [(时钟文本, 该行的开关节点)]。
+
+    时钟 App 的列表每行是 cl_alarm_home，行内有 digital_clock（文本形如
+    "04:05"）和 onoff（Switch，带 checked 属性）。不能靠截图找橙色像素：
+    RTL 语言（阿拉伯语）下开关跑到屏幕左侧 x=44~264，原来的右侧扫描一个都
+    找不到，于是兜底去点最后一个开关，永远关不掉目标闹钟。
+    """
+    rows = [n for n in nodes if n.short_id == "cl_alarm_home"]
+    out: list[tuple[str, Node]] = []
+    for row in rows:
+        y1, y2 = row.bounds[1], row.bounds[3]
+        clock = next((n for n in nodes
+                      if n.short_id == "digital_clock" and y1 <= n.center[1] <= y2), None)
+        sw = next((n for n in nodes
+                   if n.short_id == "onoff" and y1 <= n.center[1] <= y2), None)
+        if clock is not None and sw is not None:
+            out.append((locale_kit.to_ascii_digits(clock.text or "").strip(), sw))
+    return out
+
+
+def _find_alarm_switch(nodes: list[Node], hour: int, minute: int) -> Node | None:
+    """按时间文本找目标闹钟那一行的开关（支持 04:05 / ٠٤:٠٥ 两种数字写法）。"""
+    want = f"{hour:02d}:{minute:02d}"
+    for text, sw in _alarm_rows(nodes):
+        if want in text:
+            return sw
+    return None
+
+
 def _disable_daily_alarm(dev: Device, r: Runner) -> None:
     r.step(f"关闭每日闹钟 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d}")
     _open_alarm_list(dev, r)
-    for i in range(4):
-        center = _orange_switch(dev.screenshot_png())
-        if center is None:
-            break
-        r.log(f"点击闹钟开关 ({center[0]}, {center[1]})")
-        dev.tap(center[0], center[1])
-        time.sleep(1.0)
-    raw = dev.shell("dumpsys alarm")
-    if _has_alarm(raw):
-        # 截图找不到橙色开关时兜底：按控件树里的 Switch 再点一次。
+
+    # 主路径：控件树里按时间文本定位那一行的 onoff 开关，点掉。
+    for attempt in range(3):
         nodes = dev.dump()
-        sw = [n for n in nodes
-              if (n.cls.endswith("Switch") or (n.rid or "").lower().endswith("switch"))
-              and n.clickable]
-        for n in sw[:3]:
-            r.log(f"兜底点击开关 {n.rid or n.cls} @ {n.center}")
-            dev.tap(n.center[0], n.center[1])
+        sw = _find_alarm_switch(nodes, ALARM_HOUR, ALARM_MINUTE)
+        if sw is None:
+            r.log(f"闹钟列表里没找到 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 那一行"
+                  f"（第 {attempt + 1} 次），当前窗口 {dev.focus()}")
+            _open_alarm_list(dev, r)
+            continue
+        if sw.attrs.get("checked") != "true":
+            r.log(f"{ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 的开关已经是关闭状态")
+            break
+        r.log(f"点击 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 的开关 @ {sw.center}")
+        dev.tap(sw.center[0], sw.center[1])
+        time.sleep(1.2)
+        if not _has_alarm(dev.shell("dumpsys alarm")):
+            break
+
+    if _has_alarm(dev.shell("dumpsys alarm")):
+        # 兜底一：截图找橙色开关（LTR 下在右侧，RTL 下在左侧，两半都扫）。
+        for _ in range(3):
+            center = _orange_switch(dev.screenshot_png())
+            if center is None:
+                break
+            r.log(f"兜底：点击橙色开关 ({center[0]}, {center[1]})")
+            dev.tap(center[0], center[1])
             time.sleep(1.0)
-        raw = dev.shell("dumpsys alarm")
-    if _has_alarm(raw):
+    if _has_alarm(dev.shell("dumpsys alarm")):
+        # 兜底二：把列表里所有 checked 的开关都点一遍。
+        nodes = dev.dump()
+        on = [sw for _, sw in _alarm_rows(nodes) if sw.attrs.get("checked") == "true"]
+        for n in on:
+            r.log(f"兜底：关闭还开着的开关 @ {n.center}")
+            dev.tap(n.center[0], n.center[1])
+            time.sleep(0.8)
+    if _has_alarm(dev.shell("dumpsys alarm")):
         raise UiError(f"{ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 每日闹钟没有成功关闭"
                       f"（当前窗口 {dev.focus()}）")
     r.ok("每日闹钟已关闭（保留在闹钟列表里）")
@@ -215,6 +289,7 @@ def _run_trigger(dev: Device, r: Runner, *, wait_sec: int, method: str) -> dict:
     r.log(f"目标：周日 {day} {TEST_HOUR:02d}:{TEST_MINUTE:02d}，"
           f"每日闹钟 {ALARM_HOUR:02d}:{ALARM_MINUTE:02d} 关闭")
 
+    _clear_stale_alarms(dev, r)
     _set_daily_alarm(dev, r, ALARM_HOUR, ALARM_MINUTE)
     _disable_daily_alarm(dev, r)
     shown = _wait_card(dev, r, day, wait_sec)

@@ -22,9 +22,11 @@ export async function refreshStatus(): Promise<void> {
 
     if (conn) {
       state.devTone = "on";
-      const label = `${s.model || "Android"} · ${s.serial}` + (s.keyguard ? " · 锁屏中" : "");
+      /* 顶栏胶囊只显示机型，串号放 tooltip（用户要求：别把手机编码摆在界面上） */
+      const model = (s.model || "").trim() || "Android";
+      const label = model + (s.keyguard ? " · 锁屏中" : "");
       state.devLabel = label;
-      state.devTitle = `${s.model || ""} · ${s.serial}\n点击立即重新检测设备`;
+      state.devTitle = `${model}${s.serial ? ` · ${s.serial}` : ""}\n点击立即重新检测设备`;
       state.devAria = `${label}，已连接。点击重新检测设备`;
       state.devMeta = `${s.width || "?"} × ${s.height || "?"} · ${s.keyguard ? "锁屏" : "亮屏"}`;
     } else {

@@ -96,7 +96,8 @@ def find_birthday(dev: Device) -> tuple[_dt.date, str, int] | None:
 
 def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int,
               wait_sec: int, unlock_retries: int, name: str | None,
-              offset_months: int, desktop_wait_sec: int, ev_value: str,
+              offset_months: int, desktop_wait_sec: int, second_off_sec: float,
+              ev_value: str,
               ev_display: str) -> dict:
     """极速祝福卡片：fixture 更新 + 直设时间，不打开日历 UI。"""
     target = today + _dt.timedelta(days=1)
@@ -123,7 +124,8 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
     def _seed_event() -> None:
         _select_calendar_day(dev, r, target, "今天+1", "1天后")
         _add_important_event(dev, r, name, ev_value=ev_value,
-                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"])
+                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"],
+                             type_labels=et.get("labels"))
 
     created = False
     if fast_mode:
@@ -170,7 +172,8 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
     r.ok(f"设备时间 {raw}，{ev_display}卡片目标日 {target}")
 
     result["device_time_after"] = screen_off_wait_unlock(
-        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec)
+        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec,
+        second_off_sec=second_off_sec)
     result.update(birthday=target.isoformat(), created=created, name=name,
                   steps=r._no, ok=True)
     result["summary"] = (
@@ -182,6 +185,7 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
 def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30,
         wait_sec: int = 60, unlock_retries: int = 3, name: str | None = None,
         offset_months: int = 0, desktop_wait_sec: int = 0,
+        second_off_sec: float = 0,
         ev_value: str = CAL_TYPE_BIRTHDAY, ev_display: str = "生日",
         no_lookup: bool = False, control: dict | None = None,
         confirm_fn=None, ask_fn=None) -> dict:
@@ -195,6 +199,7 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
             dev, r, today=device_date(dev), hour=hour, minute=minute,
             wait_sec=wait_sec, unlock_retries=unlock_retries, name=name,
             offset_months=offset_months, desktop_wait_sec=desktop_wait_sec,
+            second_off_sec=second_off_sec,
             ev_value=ev_value, ev_display=ev_display)
 
     today = device_date(dev)
@@ -213,7 +218,8 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
         _select_calendar_day(dev, r, bday, "今天+1", "1天后")
         et = _EV_TYPES.get(ev_value, _EV_TYPES[CAL_TYPE_BIRTHDAY])
         _add_important_event(dev, r, name, ev_value=ev_value,
-                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"])
+                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"],
+                             type_labels=et.get("labels"))
     else:
         found = find_important_day(dev, ev_value)
         if found:
@@ -230,7 +236,8 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
             _select_calendar_day(dev, r, bday, "今天+1", "1天后")
             et = _EV_TYPES.get(ev_value, _EV_TYPES[CAL_TYPE_BIRTHDAY])
             _add_important_event(dev, r, name, ev_value=ev_value,
-                                 type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"])
+                                 type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"],
+                             type_labels=et.get("labels"))
 
     # 重新触发：卡片本月已触发过，把目标日期整体平移 n 个月再试
     if offset_months:
@@ -254,7 +261,8 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
     r.ok(f"设备时间 {raw}")
 
     result["device_time_after"] = screen_off_wait_unlock(
-        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec)
+        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec,
+        second_off_sec=second_off_sec)
     result.update(birthday=bday.isoformat(), created=created, name=name,
                   steps=r._no, ok=True)
     result["summary"] = (

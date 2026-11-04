@@ -1,4 +1,4 @@
-"""跨国 / 跨城智能建议卡片触发场景。
+﻿"""跨国 / 跨城智能建议卡片触发场景。
 
 两种触发方式，前端下拉框自选（method 参数）：
 
@@ -40,6 +40,10 @@ from scenario_app_suggest import _service_component
 
 DISPATCH_ACTION = "core.intent.action.DISPATCH_EVENT"
 DATA_TYPE = "LocationEvent"
+
+# DISPATCH_EVENT 的备用通道：TransAtomicBrain 的 DebugService
+BRAIN_ACTION = "brain.intent.action.DISPATCH_EVENT"
+BRAIN_COMPONENT = "com.transsion.atomicbrain/.debug.DebugService"
 
 # 上海人民广场 / 新德里市区
 SHANGHAI = (31.230416, 121.473701)
@@ -183,20 +187,59 @@ def location_event_json(city_code: str) -> str:
 
 
 def dispatch_location_event(dev: Device, data: str) -> str:
-    """发 LocationEvent。隐式 service 在部分系统上找不到，先查组件再 -n 显式启动。"""
-    comp = _service_component(dev)
-    target = f"-n {comp} " if comp else ""
-    cmd = (
-        "am start-foreground-service --user 0 "
-        f"{target}"
-        f'-a "{DISPATCH_ACTION}" '
+    """发 LocationEvent。
+
+    两条通道（和 Boomplay 卡片同一套，实测结论）：
+      通道 1：core.intent.action.DISPATCH_EVENT —— 用户给的原命令，需要
+              com.example.tpk.client/.RuleMockService，只在刷了 TPK 测试包的
+              机器上存在（本机 query-services 返回 "No services found"）。
+      通道 2：brain.intent.action.DISPATCH_EVENT + TransAtomicBrain 的
+              /.debug.DebugService —— 用 am start-service 显式启动。
+              不能用 am start-foreground-service：DebugService 不调
+              Service.startForeground()，5 秒后抛
+              ForegroundServiceDidNotStartInTimeException 并弹「Application
+              Error」对话框抢走桌面焦点（实测已复现）。
+    """
+    tail = (
         f'--es "data_type" "{DATA_TYPE}" '
         '--es "action_type" "listener" '
         f"--es \"json_data\" '{data}'"
     )
-    dev.log(f"LocationEvent 服务组件：{comp or '（隐式）'}")
-    dev.log(f"命令：{cmd}")
-    return dev.shell(cmd)
+
+    comp = _service_component(dev)
+    target = f"-n {comp} " if comp else ""
+    out = dev.shell(
+        "am start-foreground-service --user 0 "
+        f"{target}"
+        f'-a "{DISPATCH_ACTION}" {tail}'
+    )
+    if _dispatch_ok(out):
+        dev.log(f"LocationEvent 投递成功（通道 core.intent.action，"
+                f"组件 {comp or '（隐式）'}）")
+        return out
+
+    out2 = dev.shell(
+        "am start-service --user 0 "
+        f"-n {BRAIN_COMPONENT} "
+        f'-a "{BRAIN_ACTION}" {tail}'
+    )
+    dev.log(
+        f"LocationEvent 通道 core.intent.action 没人接收（{out.strip()[:90]}）\n"
+        f"  改走 TransAtomicBrain DebugService（brain.intent.action + "
+        f"am start-service）：{out2.strip()[:90]}")
+    return out2
+
+
+def _dispatch_ok(out: str) -> bool:
+    """这条 mock 投递有没有真的送达。
+
+    没装 com.example.tpk.client 的机器上 query-services 返回
+    "No services found"，隐式启动必然报 "Not found; no service started."，
+    这种情况要走通道 2。
+    """
+    bad = ("Not found" in out or "no service started" in out
+           or "Exception" in out)
+    return not bad
 
 
 # ---------------------------------------------------------------- 主流程
@@ -240,7 +283,12 @@ def _run_mock(dev: Device, r: Runner, method: str, wait_sec: int) -> bool:
 
     r.step(f"发送 LocationEvent：{label}")
     out = dispatch_location_event(dev, data)
-    if "Error" in out or "Exception" in out:
+    if "Not found; no service started" in out:
+        # 两条通道都没人接收：这台机器没装任何 mock service。卡片仍可能由
+        # 系统定位变化真实触发，所以降级成提示继续等，不要直接判失败。
+        r.log("提示：两条 DISPATCH_EVENT 通道都没有服务接收，"
+              "这台机器没装 mock service；改为依赖真实定位变化等待出卡")
+    elif "Error" in out or "Exception" in out:
         raise UiError(f"LocationEvent 发送失败：{out.strip()[:400]}")
     r.ok(out.strip()[:200] or "已下发")
 

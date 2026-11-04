@@ -24,6 +24,7 @@ from datetime import date, timedelta
 
 import fast_clock
 import fixtures
+import locale_kit as lk
 from phone_ctl import (
     KEY_BACK,
     KEY_ESC,
@@ -48,7 +49,8 @@ CALENDAR_VIEW_URI = "content://com.transsion.calendar/events"
 
 # 「AI 课程表」子页特征。这个页面是**只读的守门条件**：一旦命中就按返回键退出，
 # 任何情况下都不去点它（点进去会卡在课表页，随后日历控件全部找不到 → 报错）。
-TIMETABLE_HINTS = ("课表", "课程表", "timetable", "class schedule")
+TIMETABLE_HINTS = ("课表", "课程表", "timetable", "class schedule",
+                   "الجدول الدراسي", "جدول الحصص", "جدول الدراسة")
 
 
 def on_timetable(nodes: list[Node]) -> bool:
@@ -124,13 +126,19 @@ CAL_TYPE_ANNIVERSARY = "anniversary"
 CAL_TYPE_EXAM = "exam"
 CAL_TYPE_PERFORMANCE = "performance"   # 观演日（Show Day）
 CAL_TYPE_NONE = "none"                 # 不勾选任何类型（下拉 None）
-# 事件类型 → 类型下拉文案 / 姓名占位符（中英适配）
+# 事件类型 → 类型下拉文案 / 姓名占位符（中英阿三语）
+# `labels` 是下拉里该类型的候选文案全集，用来在控件树里找到那个选项。
 _EV_TYPES = {
-    CAL_TYPE_BIRTHDAY: dict(cn="生日", en="Birthday", ph="输入姓名"),
-    CAL_TYPE_ANNIVERSARY: dict(cn="纪念日", en="Anniversary", ph="输入纪念日名称"),
-    CAL_TYPE_EXAM: dict(cn="考试", en="Exam Day", ph="输入考试名称"),
-    CAL_TYPE_PERFORMANCE: dict(cn="观演日", en="Show Day", ph="Activity name"),
-    CAL_TYPE_NONE: dict(cn="None", en="None", ph="My important day"),
+    CAL_TYPE_BIRTHDAY: dict(cn="生日", en="Birthday", ph="输入姓名",
+                            labels=lk.labels("birthday")),
+    CAL_TYPE_ANNIVERSARY: dict(cn="纪念日", en="Anniversary", ph="输入纪念日名称",
+                               labels=lk.labels("anniversary")),
+    CAL_TYPE_EXAM: dict(cn="考试", en="Exam Day", ph="输入考试名称",
+                        labels=lk.labels("exam")),
+    CAL_TYPE_PERFORMANCE: dict(cn="观演日", en="Show Day", ph="Activity name",
+                               labels=lk.labels("performance")),
+    CAL_TYPE_NONE: dict(cn="None", en="None", ph="My important day",
+                        labels=("None", "无", "لا يوجد")),
 }
 
 _EN_MONTHS = ["january", "february", "march", "april", "may", "june",
@@ -142,60 +150,52 @@ _EN_MONTHS_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
 def month_title_parts(text: str) -> tuple[int | None, int | None]:
     """月份标题 → (年份, 1..12)。
 
-    各机型写法差得很远，实测见过这些：'十月'、'2026年12月'、'12月'、'Oct'、
-    'October 2026'。年份认不出就返回 None，调用方按「只看月份」处理。
-    中文要**从十二月往一月倒着匹配**，否则「十一月」会被「一月」抢先命中。
+    各机型/各语言写法差得很远，实测见过这些：'十月'、'2026年12月'、'12月'、
+    'Oct'、'October 2026'、阿拉伯语 'نوفمبر'。年份认不出就返回 None，
+    调用方按「只看月份」处理。
+
+    识别逻辑全部下沉到 locale_kit：中文要**从十二月往一月倒着匹配**（否则
+    「十一月」会被「一月」抢先命中），阿拉伯/英/数字写法也都在那边统一处理。
     """
     if not text:
         return None, None
-    year = None
-    m = re.search(r"(\d{4})\s*(?:年|[-/.]\s*\d)", text)
-    if m:
-        year = int(m.group(1))
-    for i in range(12, 0, -1):
-        if CN_MONTH[i - 1] in text:
-            return year, i
-    m = re.search(r"(\d{1,2})\s*月", text)
-    if m and 1 <= int(m.group(1)) <= 12:
-        return year, int(m.group(1))
-    low = text.strip().lower()
-    for i in range(12):
-        if low.startswith(_EN_MONTHS_ABBR[i].lower()) or low.startswith(_EN_MONTHS[i]):
-            return year, i + 1
-    return year, None
+    return lk.year_in(text), lk.month_index_in(text)
 
 
 def month_title_index(text: str) -> int | None:
-    """月份标题 → 1..12。中文「十月」/「2026年12月」、英文「Oct」都能认。"""
+    """月份标题 → 1..12。中文「十月」、英文「Oct」、阿拉伯语「نوفمبر」都能认。"""
     return month_title_parts(text)[1]
 
-# 设置/对话框文案要兼容中英文系统（实测这台手机是英文界面）。
-AUTO_TIME_LABELS = ("自动设置时间", "自动确定日期和时间", "自动日期和时间",
-                    "自动更新时间", "自动获取时间和日期",
-                    "Auto-Set Time", "Set automatically",
-                    "Automatic date & time", "Auto date & time")
-DATE_LABELS = ("日期", "Date", "Set date", "设置日期", "选择日期")
-TIME_LABELS = ("时间", "Time", "Set time", "设置时间")
-OK_LABELS = ("确定", "OK", "Done", "Set", "Save", "完成", "好")
-# 日历引导/导入弹窗的按钮文案（中英文都认）。btn_negative 优先更安全。
-DIALOG_BUTTONS = ("确定", "OK", "Done", "Save", "Set", "完成", "好",
-                  "关闭", "知道了", "取消", "Cancel", "Import", "导入",
-                  "暂不", "以后再说", "Not now", "Later", "Got it", "Dismiss",
-                  # Emoji Keyboard 首次弹的 Terms and Conditions
-                  "Agree And Continue", "Agree & Continue", "同意并继续",
-                  "Agree", "同意", "Continue")
+# 设置/对话框文案要兼容中/英/阿三语系统（实测这台手机三种语言都会切）。
+# 具体词表在 locale_kit.UI_LABELS，这里只做别名，避免各场景各写一套。
+AUTO_TIME_LABELS = lk.labels("auto_time")
+DATE_LABELS = lk.labels("date")
+TIME_LABELS = lk.labels("time")
+OK_LABELS = lk.labels("ok")
+# 日历引导/导入弹窗的按钮文案（三语都认）。btn_negative 优先更安全。
+DIALOG_BUTTONS = lk.labels("dialog_buttons")
 
 
 def _find_first_text(nodes: list[Node], labels: tuple[str, ...]) -> Node | None:
-    """精确匹配任一文案，找不到再退到「包含」，兼容长短文案差异。"""
+    """精确匹配任一文案，找不到再退到「包含」，兼容长短文案差异。
+
+    包含匹配要**选文本最短的那个**：阿拉伯语里「时间」行是 `الوقت`，而
+    「自动设置时间」行是 `تعيين الوقت تلقائيًا`，后者包含前者；按控件顺序
+    取第一个会把自动时间行当成时间行点掉（滚轮根本不弹）。中文同理
+    （'时间' ⊂ '自动设置时间'）。选最短文本能稳定命中真正的短标题。
+    """
     for n in nodes:
         if n.text in labels:
             return n
+    best: Node | None = None
     for n in nodes:
-        for lab in labels:
-            if lab and lab in n.text:
-                return n
-    return None
+        text = n.text or ""
+        if not text:
+            continue
+        if any(lab and lab in text for lab in labels):
+            if best is None or len(text) < len(best.text or ""):
+                best = n
+    return best
 
 
 def _title_matches_date(title: str, d: date) -> bool:
@@ -217,14 +217,34 @@ def _time_matches_title(title: str, hour: int, minute: int) -> bool:
     return bool(m) and int(m.group(1)) == hour and int(m.group(2)) == minute
 
 
-def date_cell_descs(dt: date) -> list[str]:
-    """日期格子的 content-desc 候选（中英文、月网格/周条/周视图通用）。
+def date_text_matches(text: str, target: date) -> bool:
+    """界面上的日期文本是否指向 target（中/英/阿三语、任意排版）。
 
-    实测到的格式：
-      中文月网格：  '10月23日星期五'
-      英文周视图/周条：'Friday 23 October'（周几 + 日 + 完整月名）
-      英文其他：    '23 Oct 2026' / 'Oct 23, 2026' / '23 October' 等
+    以前这里写死了 `'11月8日' / '8 Nov' / 'Nov 8'` 三种格式，换成阿拉伯语后
+    日历顶部变成 `الاثنين، ١٦ نوفمبر`，一个都对不上（而且日号还是阿拉伯-印度
+    数字）。这里改成「先归一化数字、再分别校验月份词与日号」，不依赖顺序。
     """
+    raw = (text or "").strip()
+    if not raw:
+        return False
+    norm = lk.to_ascii_digits(raw)
+    mon = lk.month_index_in(norm)
+    if mon is not None and mon != target.month:
+        return False
+    # 日号：按非数字边界精确匹配，避免 '16' 命中 '2016'
+    if not re.search(rf"(?<!\d){target.day}(?!\d)", norm):
+        return False
+    # 月份词认不出时（纯数字格式），至少要求日号对上且没有矛盾月份
+    return mon is not None or bool(re.search(r"\d", norm))
+
+
+def date_cell_descs(dt: date) -> list[str]:
+    """日期格子的 content-desc 候选（中/英/阿三语、月网格/周条/周视图通用）。
+
+    具体格式表见 locale_kit.date_cell_descs —— 阿拉伯语下日期格是
+    'الاثنين، ١٦ نوفمبر'，日号用阿拉伯-印度数字，中文/英文候选一个都匹配不上。
+    """
+    return lk.date_cell_descs(dt)
     cn = f"{dt.month}月{dt.day}日星期{CN_WEEK[dt.weekday()]}"
     ab = _EN_MONTHS_ABBR[dt.month - 1]
     en = _EN_MONTHS[dt.month - 1].capitalize()
@@ -395,16 +415,18 @@ def _dismiss_keyboard_terms(dev: Device, r: Runner) -> None:
     nodes = dev.dump()
     blob = " ".join((n.text or "") for n in nodes).lower()
     if not any(k in blob for k in ("terms and conditions", "terms of use",
-                                   "privacy policy", "emoji keyboard")):
+                                   "privacy policy", "emoji keyboard",
+                                   "الشروط والأحكام", "سياسة الخصوصية")):
         return
     btn = _find_first_text(nodes, ("Agree And Continue", "Agree & Continue",
-                                   "同意并继续", "Agree", "同意"))
+                                   "同意并继续", "Agree", "同意",
+                                   "أوافق", "الموافقة والمتابعة", "موافق"))
     if btn is not None:
         r.log(f"检测到输入法条款弹窗，点「{btn.text}」")
         dev.tap_node(btn, 0.6)
         time.sleep(0.4)
         return
-    close = _find_first_text(nodes, ("×", "✕", "Close", "关闭"))
+    close = _find_first_text(nodes, ("×", "✕", "Close", "关闭", "إغلاق"))
     if close is not None:
         r.log("输入法条款弹窗没有 Agree 按钮，点关闭")
         dev.tap_node(close, 0.6)
@@ -640,6 +662,37 @@ def _month_box(dev: Device, view: list[Node]) -> Node | None:
             or dev.find_opt(nodes=view, rid="vp_week"))
 
 
+def _rtl(dev: Device) -> bool:
+    """当前设备界面是不是从右往左（阿拉伯语等）。
+
+    直接读 `settings get system system_locales`，不猜 —— 界面方向跟系统
+    语言设置严格一致，而 RTL 下日历的换月滑动方向是**反的**（实测 ar-SA
+    下左滑得到上一个月）。读失败按 LTR 处理，宁可多滑几次也不炸。
+    """
+    try:
+        raw = dev.shell("settings get system system_locales").strip()
+    except Exception:
+        return False
+    return lk.is_rtl(raw)
+
+
+def _swipe_month(dev: Device, r: Runner, box: Node, forward: bool) -> None:
+    """在日期区横向滑一页换月，自动处理 RTL 方向翻转。
+
+    实测（X6766 / ar-SA）：
+      LTR 左滑 → 下一月；RTL 左滑 → **上一月**。
+    所以先把「想往哪个月走」翻译成逻辑方向，再按 RTL 决定手指往哪边划。
+    """
+    w, _ = dev.screen_size()
+    y = box.center[1]
+    logical = "left" if forward else "right"       # LTR 下的手指方向
+    if _rtl(dev):
+        logical = "right" if logical == "left" else "left"
+    x1, yy1, x2, yy2 = lk.swipe_points(w, y, logical, half=280)
+    dev.swipe(x1, yy1, x2, yy2, 300)
+    time.sleep(0.7)
+
+
 def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
                shown: str = "") -> None:
     """周条视图（vp_week，无月网格）翻周，直到目标日出现在周条里。
@@ -651,7 +704,9 @@ def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
     wk = dev.find(nodes=view, rid="vp_week")
     nums = []
     for n in view:
-        m = re.search(r"\d{1,2}", n.desc or "")
+        # 阿拉伯语下周条日号是阿拉伯-印度数字（'٢٦ أكتوبر'），
+        # 直接用 \d 抓不到，先归一化成 ASCII 再解析。
+        m = re.search(r"\d{1,2}", lk.to_ascii_digits(n.desc or ""))
         if m and wk.bounds[0] <= n.center[0] <= wk.bounds[2] \
                 and wk.bounds[1] <= n.center[1] <= wk.bounds[3]:
             nums.append(int(m.group()))
@@ -672,9 +727,7 @@ def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
         nxt = 1
     r.log(f"周条范围 {lo}-{hi}（{shown or '?'}），目标 {target.month}月{target.day}日，"
           f"向{'后' if nxt > 0 else '前'}翻周")
-    w, _ = dev.screen_size()
-    dev.swipe(w // 2 + nxt * 300, wk.center[1], w // 2 - nxt * 300, wk.center[1], 300)
-    time.sleep(0.7)
+    _swipe_month(dev, r, wk, forward=nxt > 0)
 
 
 def _ensure_calendar_month(dev: Device, r: Runner, target: date,
@@ -752,8 +805,9 @@ def _ensure_calendar_month(dev: Device, r: Runner, target: date,
             yr = year if year else target.year
             cell = None
             for c in (f"{yr}年{target.month}月", f"{target.month}月",
-                      _EN_MONTHS_ABBR[target.month - 1],
-                      _EN_MONTHS[target.month - 1]):
+                      lk.MONTHS_AR[target.month - 1],
+                      lk.MONTHS_EN_ABBR[target.month - 1],
+                      lk.MONTHS_EN[target.month - 1]):
                 cell = dev.find_opt(nodes=view, desc=c)
                 if cell:
                     break
@@ -785,9 +839,7 @@ def _ensure_calendar_month(dev: Device, r: Runner, target: date,
             moved += 1
             continue
         r.log(f"当前显示 {shown}，目标 {target.month} 月，向{'后' if nxt > 0 else '前'}滑一页")
-        w, _ = dev.screen_size()
-        dev.swipe(w // 2 + nxt * 280, box.center[1], w // 2 - nxt * 280, box.center[1], 300)
-        time.sleep(0.7)
+        _swipe_month(dev, r, box, forward=nxt > 0)
         moved += 1
     raise UiError(f"滑了 {moved} 次仍未找到日期 {descs}")
 
@@ -796,29 +848,55 @@ def _edit_in_form(nodes: list[Node]) -> Node | None:
     return next((n for n in nodes if n.cls.endswith("EditText")), None)
 
 
+# 「重复」下拉里「每年」的三种语言写法
+_REPEAT_YEARLY_LABELS = ("每年", "Every year", "Every Year", "Yearly",
+                         "Repeat yearly", "Repeat every year",
+                         "كل عام", "سنويًا", "سنويا")
+# 普通日程表单独有的时间行文案（三语）。出现它说明还没切到「重要日」。
+_SCHEDULE_TIME_LABELS = ("Start Time", "开始时间", "End Time", "结束时间",
+                         "وقت البدء", "وقت الانتهاء", "بدء الوقت", "وقت النهاية")
+# 「重要日」表单里姓名框的占位文案（三语 + 小写形式）
+_IMPORTANT_PLACEHOLDERS = ("my important day", "我的重要日", "my important date",
+                           "يومي المهم", "يوم مهم", "حدثي مهم")
+
+
 def _type_icon_in_form(nodes: list[Node], edit: Node) -> Node | None:
-    """姓名输入框右侧的私有区字形（类型下拉按钮）。"""
-    for n in nodes:
-        if not n.cls.endswith("TextView") or not PUA_RE.fullmatch(n.text or ""):
-            continue
-        if abs(n.center[1] - edit.center[1]) < 90 and n.center[0] > edit.bounds[2] - 12:
-            return n
-    return None
+    """姓名输入框右侧的私有区字形（类型下拉按钮）。
+
+    阿拉伯语（RTL）界面下这个图标跑到输入框**左边**去了（实测
+    `center=(124, 790)`，输入框在 `(668, 791)`），所以不能只认右边：
+    先按垂直对齐挑出同一行的 PUA 字形，优先取右侧的，没有就取左侧的。
+    """
+    same_row = [n for n in nodes
+                if n.cls.endswith("TextView") and PUA_RE.fullmatch(n.text or "")
+                and abs(n.center[1] - edit.center[1]) < 90]
+    if not same_row:
+        return None
+    right = [n for n in same_row if n.center[0] > edit.bounds[2] - 12]
+    if right:
+        return right[0]
+    left = [n for n in same_row if n.center[0] < edit.bounds[0] + 12]
+    return left[0] if left else None
 
 
 def _important_day_form_ready(nodes: list[Node]) -> bool:
-    """判断当前是否已经切到「重要日」表单（而不是普通日程表单）。"""
-    if _find_first_text(nodes, ("Start Time", "开始时间", "End Time", "结束时间")) is not None:
+    """判断当前是否已经切到「重要日」表单（而不是普通日程表单）。
+
+    两处判据都要三语齐全：切到 ar-SA 时普通日程表单的「开始时间」变成
+    `وقت البدء`、「日期」变成 `التاريخ`，只认中英文会把已经切好的表单
+    判成「还没切过去」，连点三次后直接抛错（实际踩过）。
+    """
+    if _find_first_text(nodes, _SCHEDULE_TIME_LABELS) is not None:
         return False
     edit = _edit_in_form(nodes)
     if edit is None:
         return False
-    if _find_first_text(nodes, ("Date", "日期", "日期与时间")) is not None:
+    if _find_first_text(nodes, DATE_LABELS) is not None:
         return True
     if _type_icon_in_form(nodes, edit) is not None:
         return True
     ph = (edit.text or "").strip().lower()
-    return ph in ("my important day", "我的重要日", "my important date")
+    return ph in _IMPORTANT_PLACEHOLDERS
 
 
 def _switch_important_day(dev: Device, r: Runner) -> list[Node]:
@@ -833,7 +911,7 @@ def _switch_important_day(dev: Device, r: Runner) -> list[Node]:
         if tab is None:
             tab = dev.find_opt(nodes=nodes, rid="text_important_day")
         if tab is None:
-            tab = _find_first_text(nodes, ("重要日", "Important Day", "Important day"))
+            tab = _find_first_text(nodes, lk.labels("important_day"))
         if tab is not None:
             r.log(f"点「重要日」标签（第 {attempt} 次） {tab.center}")
             dev.tap_node(tab, 0.8)
@@ -937,8 +1015,9 @@ def _prepare(dev: Device, r: Runner) -> tuple[int, int]:
 def _date_cell_in_grid_by_desc(nodes: list[Node], target: date) -> Node | None:
     """按「月份词 + 精确日号」在月网格/周条范围内兜底匹配 desc。
 
-    针对日历 App 切成英文后的格式 "Monday, November 9"；不扫整页，
-    避免命中网格下方 "Mon, Nov 9, today" 这类日期头部。
+    针对日历 App 切成英文后的格式 "Monday, November 9"、以及阿拉伯语下的
+    "الاثنين، ١٦ نوفمبر"；不扫整页，避免命中网格下方 "Mon, Nov 9, today"
+    这类日期头部。
     """
     vp = next((n for n in nodes if n.rid in ("vp_month", "vp_week")), None)
     if vp is None:
@@ -946,9 +1025,11 @@ def _date_cell_in_grid_by_desc(nodes: list[Node], target: date) -> Node | None:
     x0, y0, x1, y1 = vp.bounds
     terms = [
         f"{target.month}月",
-        _EN_MONTHS[target.month - 1].lower(),
-        _EN_MONTHS_ABBR[target.month - 1].lower(),
+        lk.MONTHS_AR[target.month - 1],
+        lk.MONTHS_EN[target.month - 1].lower(),
+        lk.MONTHS_EN_ABBR[target.month - 1].lower(),
     ]
+    # 日号可能是阿拉伯-印度数字，统一用 ASCII 归一化后的文本比
     day_re = re.compile(rf"(?<!\d){target.day}(?!\d)")
     for n in nodes:
         if not n.desc:
@@ -956,7 +1037,7 @@ def _date_cell_in_grid_by_desc(nodes: list[Node], target: date) -> Node | None:
         cx, cy = n.center
         if not (x0 - 4 <= cx <= x1 + 4 and y0 - 4 <= cy <= y1 + 4):
             continue
-        d = n.desc.lower()
+        d = lk.to_ascii_digits(n.desc).lower()
         if day_re.search(d) and any(t.lower() in d for t in terms):
             return n
     return None
@@ -967,9 +1048,12 @@ def _day_cell_by_text(nodes: list[Node], target: date) -> Node | None:
 
     月视图里日号数字在语言无关，跨月灰格只含 1~7 附近的小数字；
     若仍有多个候选（如目标就是小数字），按目标日所在的期望行位置选。
+    阿拉伯语下日号文本可能是阿拉伯-印度数字，两种写法都比。
     """
+    wanted = {str(target.day),
+              "".join(lk._ARABIC_INDIC[int(c)] for c in str(target.day))}
     cands = [n for n in nodes
-             if n.cls.endswith("TextView") and n.text == str(target.day)]
+             if n.cls.endswith("TextView") and (n.text or "").strip() in wanted]
     if len(cands) == 1:
         return cands[0]
     if not cands:
@@ -1033,9 +1117,7 @@ def _select_calendar_day(dev: Device, r: Runner, target: date, note: str,
         raise UiError(f"月视图里找不到日期 {target}（content-desc、日号文本与周条格子都试过）")
     dev.tap_node(cell, 0.3)
     tv = dev.wait_node(timeout=8, settle=0.6, rid="tv_date")
-    ab = _EN_MONTHS_ABBR[target.month - 1]
-    pats = [f"{target.month}月{target.day}日", f"{target.day} {ab}", f"{ab} {target.day}"]
-    if not any(p in tv.text for p in pats):
+    if not date_text_matches(tv.text or "", target):
         want = expect if expect is not None else note
         r.log(f"警告：tv_date 未显示 {want!r}，实际 {tv.text!r}")
     r.ok(tv.text)
@@ -1044,7 +1126,8 @@ def _select_calendar_day(dev: Device, r: Runner, target: date, note: str,
 
 def _add_important_event(dev: Device, r: Runner, name: str, *,
                          ev_value: str, type_cn: str, type_en: str,
-                         placeholder: str) -> None:
+                         placeholder: str,
+                         type_labels: tuple[str, ...] | None = None) -> None:
     """在日历当前选中的日期上新建一个「重要日」事件（生日/纪念日）并保存。"""
     r.step("点击「添加」进入新建面板")
     dev.tap_by(rid="fab_new_layout", settle=0.4)
@@ -1063,14 +1146,16 @@ def _add_important_event(dev: Device, r: Runner, name: str, *,
     else:
         r.step(f"打开类型下拉并勾选「{type_cn}」")
         _open_type_dropdown(dev, r)
+        # 阿拉伯语界面下下拉项是「عيد الميلاد」，只认中英文会找不到（实测踩过）
+        wanted = tuple(type_labels) if type_labels else (type_cn, type_en)
         nodes = dev.wait_nodes(timeout=8, settle=0.6, rid="tv_choice_text")
-        opt = _find_first_text(nodes, (type_cn, type_en))
+        opt = _find_first_text(nodes, wanted)
         if opt is None:
-            raise UiError(f"类型下拉里找不到 {type_cn}/{type_en}")
+            raise UiError(f"类型下拉里找不到 {type_cn}/{type_en}（候选 {wanted}）")
         dev.tap_node(opt, 0.4)
         edit = dev.wait_node(timeout=8, settle=0.6, cls="EditText")
         if edit.text not in (placeholder, "输入姓名", "My important day", "My important date",
-                             "Enter name", "Name"):
+                             "Enter name", "Name", "يومي المهم", "حدثي", "حدثي مهم"):
             r.log(f"警告：勾选后输入框占位符为 {edit.text!r}，预期 {placeholder!r}")
         r.ok(f"已选{type_cn}")
 
@@ -1105,8 +1190,7 @@ def _add_important_event(dev: Device, r: Runner, name: str, *,
 
     r.step("校验提醒规则并保存")
     nodes = dev.dump()
-    rep = _find_first_text(nodes, ("每年", "Every year", "Every Year", "Yearly",
-                                   "Repeat yearly", "Repeat every year"))
+    rep = _find_first_text(nodes, _REPEAT_YEARLY_LABELS)
     if rep is None and ev_value not in (CAL_TYPE_EXAM, CAL_TYPE_PERFORMANCE, CAL_TYPE_NONE):
         raise UiError(f"「重复」未自动变为『每年』，{type_cn} 类型可能没选上")
     if rep is None:
@@ -1114,12 +1198,17 @@ def _add_important_event(dev: Device, r: Runner, name: str, *,
         r.log(f"{type_cn} 类型重复行为 {ev_value!r}（默认不每年），跳过『每年』校验")
     rem_txt = ""
     for n in nodes:
-        if n.short_id == "lil_subtitle" and ("天前" in n.text or "days before" in n.text.lower()):
+        if n.short_id == "lil_subtitle" and ("天前" in n.text
+                                             or "days before" in n.text.lower()
+                                             or "يوم" in n.text
+                                             or "قبل" in n.text):
             rem_txt = n.text
     rem_low = rem_txt.lower()
     if not (f"{REMIND_DAYS_BEFORE} 天前" in rem_txt
             or f"{REMIND_DAYS_BEFORE} days before" in rem_low
-            or f"{REMIND_DAYS_BEFORE} days prior" in rem_low):
+            or f"{REMIND_DAYS_BEFORE} days prior" in rem_low
+            or lk.to_ascii_digits(rem_txt).startswith(f"{REMIND_DAYS_BEFORE}")
+            or f"{REMIND_DAYS_BEFORE}" in lk.to_ascii_digits(rem_txt)):
         r.log(f"警告：提醒时间未包含『{REMIND_DAYS_BEFORE} 天前』，实际 {rem_txt!r}")
     r.log(f"重复=每年，提醒时间={rem_txt!r}")
     save = dev.find_opt(nodes=nodes, rid="img_right")
@@ -1248,14 +1337,56 @@ def set_system_datetime(dev: Device, r: Runner, target: date,
     return title.text
 
 
+def _second_off_on_unlock(dev: Device, r: Runner, off_sec: float,
+                          unlock_retries: int = 3) -> str:
+    """「马上息屏 -> 马上亮屏 -> 上滑解锁」这一步，追星日卡片专用。
+
+    追星日（Show Day）卡片第一次亮屏解锁后并不会立刻出现在桌面上，
+    要再走一次息屏/亮屏才会渲染出来。所以这里补一步：
+      息屏 off_sec 秒（默认 2 秒，就是「马上」）-> 亮屏 -> 上滑解锁 -> 回首页。
+    返回最后一次解锁后的设备时间。
+    """
+    r.step(f"再次息屏 {off_sec:g} 秒后马上亮屏，上滑解锁")
+    dev.stayon(False)
+    time.sleep(0.3)
+    dev.key(223)                         # KEYCODE_SLEEP
+    if not _wait_screen_on(dev, False, timeout=1.2):
+        r.log("警告：第二次息屏后屏幕仍为亮起状态")
+    # 「马上亮屏」：等够 off_sec 就立刻唤醒，不做多余的停留
+    remain = off_sec
+    while remain > 0:
+        r.check()
+        step = min(0.2, remain)
+        time.sleep(step)
+        remain -= step
+    dev.key(KEY_WAKEUP)
+    _wait_screen_on(dev, True, timeout=3.0)
+    dev.stayon(True)
+    time.sleep(1.5)                      # 给锁屏一次渲染机会（不设 3.5s，保持「马上」）
+    r.shot("第二次亮屏")
+    _unlock_with_retries(dev, r, unlock_retries)
+    dev.stayon(True)
+    time.sleep(0.8)
+    ensure_home_before_confirm(dev, r)
+    r.shot("第二次解锁后")
+    now_hms = dev.shell("date '+%H:%M:%S'").strip()
+    r.ok(f"设备时间 {now_hms}")
+    return now_hms
+
+
 def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
                            unlock_retries: int = 3,
-                           desktop_wait_sec: int = 0) -> str:
+                           desktop_wait_sec: int = 0,
+                           second_off_sec: float = 0.0) -> str:
     """息屏等待 wait_sec 秒，再亮屏上滑解锁。返回解锁后的设备时间字符串。
 
     desktop_wait_sec > 0 时走纪念日类卡片的二次触发流程：
       息屏等待 -> 亮屏第一次解锁 -> 回桌面等 desktop_wait_sec 秒
       -> 再息屏（停留数秒）-> 亮屏等几秒让锁屏卡片渲染出来 -> 解锁。
+
+    second_off_sec > 0 时（追星日卡片用）额外加一次「马上息屏 -> 马上亮屏」：
+      前面完全照旧（含 desktop_wait_sec 那套），最后再补一步
+      息屏 second_off_sec 秒 -> 亮屏 -> 上滑解锁。
     """
     r.step(f"息屏等待 {wait_sec} 秒后亮屏上滑解锁")
     dev.key(KEY_HOME)
@@ -1284,6 +1415,9 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
         time.sleep(0.8)
         ensure_home_before_confirm(dev, r)
         r.shot("解锁后")
+        # 追星日卡片多一步：亮屏解锁之后马上再息屏、马上再亮屏解锁
+        if second_off_sec > 0:
+            now_hms = _second_off_on_unlock(dev, r, second_off_sec, unlock_retries)
         r.step("确认卡片是否已触发（已自动解锁到桌面）")
         r.confirm()
         r.ok()
@@ -1327,6 +1461,9 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
     time.sleep(0.8)                     # 等桌面渲染完再截，避免截到锁屏残影
     ensure_home_before_confirm(dev, r)
     r.shot("解锁后")
+    # 追星日卡片多一步：亮屏解锁之后马上再息屏、马上再亮屏解锁
+    if second_off_sec > 0:
+        now_hms = _second_off_on_unlock(dev, r, second_off_sec, unlock_retries)
     r.step("确认卡片是否已触发（已自动解锁到桌面）")
     r.confirm()
     r.ok()
@@ -1345,6 +1482,7 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
         hour: int = 9, minute: int = 30, name: str | None = None,
         wait_sec: int = 60, unlock_retries: int = 3,
         offset_months: int = 0, desktop_wait_sec: int = 0,
+        second_off_sec: float = 0,
         ev_value: str = CAL_TYPE_BIRTHDAY, ev_display: str = "生日",
         control: dict | None = None, confirm_fn=None, ask_fn=None) -> dict:
     dev = dev or Device()
@@ -1380,7 +1518,8 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
         """首次运行：走一遍原日历 UI 建一个 fixture 事件。"""
         _select_calendar_day(dev, r, bday, f"今天+{offset_days}", f"{offset_days}天后")
         _add_important_event(dev, r, name, ev_value=ev_value,
-                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"])
+                             type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"],
+                             type_labels=et.get("labels"))
 
     if fast_mode:
         r.log(f"极速模式：fixture #{fx_row['_id']} 已登记，跳过解锁/日历准备")
@@ -1446,7 +1585,8 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
     r.ok(f"设备时间 {raw}，距{ev_display} {(bday - cur).days} 天")
 
     result["device_time_after"] = screen_off_wait_unlock(
-        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec)
+        dev, r, wait_sec, unlock_retries, desktop_wait_sec=desktop_wait_sec,
+        second_off_sec=second_off_sec)
     result["steps"] = r._no
     result["ok"] = True
     result["summary"] = (f"完成。{ev_display} {bday}，系统日期 {sysdate}，名称 {name}。"

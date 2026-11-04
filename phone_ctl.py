@@ -23,6 +23,8 @@ from dataclasses import dataclass
 
 import adbutils
 
+import locale_kit
+
 # 滚轮（NumberPicker）闭环参数。实测一次 700px 滑动约等于 +11 格 => ≈64px/格。
 WHEEL_PX_PER_UNIT = 64
 WHEEL_MAX_UNITS = 10   # 单次最多滑 10 格，再大就有惯性过冲
@@ -57,35 +59,26 @@ LAUNCHER_PKG = "com.transsion.launcher3"
 ATOMIC_PKG = "com.transsion.atomicbrain"
 ATOMIC_CORE_PKG = "com.transsion.atomiccore"
 HOME_PAGE_RIDS = ("tc_time", "tc_date", "tv_temperature")
-HOME_PAGE_TEXTS = ("智慧建议",)
-
-# 英文月份（缩写或全名，startswith 匹配：Oct / October 都命中）
-_EN_MONTH = ["january", "february", "march", "april", "may", "june",
-             "july", "august", "september", "october", "november", "december"]
-# 中文月份（「十月」等），数字式「10月」由正则兜底
-_CN_MONTH = ["一月", "二月", "三月", "四月", "五月", "六月",
-             "七月", "八月", "九月", "十月", "十一月", "十二月"]
+# 首页「智慧建议」标题在三种系统语言下文案完全不同：中文 `智慧建议`、
+# 英文 `Smart suggestions`、阿拉伯语 `AI اقتراحات`。这里全部收进来，
+# 作为 rid 之外的第二判据（rid 已足够，文本只是兜底）。
+HOME_PAGE_TEXTS = ("智慧建议", "Smart suggestions", "Smart Suggestions",
+                   "AI suggestions", "AI اقتراحات", "اقتراحات ذكية")
 
 
 def parse_wheel_value(rid: str, desc: str) -> int:
-    """把滚轮 content-desc 解析成数值，兼容数字 / 英文月份 / 中文月份。
+    """把滚轮 content-desc 解析成数值，兼容数字 / 英/中/阿月份。
 
-    部分设备的日期滚轮把月份显示成 "Oct" 而非 "10"，直接搜数字会
-    抛「content-desc 无数字」，这里把月份文案也映射成 1..12。
+    部分设备的日期滚轮把月份显示成 "Oct" 而非 "10"，阿拉伯语下是
+    `نوفمبر`、日号还可能是阿拉伯-印度数字 `١٦`，直接搜 \\d 会抛
+    「content-desc 无数字」。这里统一交给 locale_kit 归一化后再解析。
     """
+    norm = locale_kit.to_ascii_digits(desc)
+    m = re.search(r"-?\d+", norm)
     if "month" in rid or "月" in desc:
-        # 月份滚轮优先认月份文案（如 "Oct" / "October 2026"），再兜数字
-        t = desc.strip()
-        if t in _CN_MONTH:
-            return _CN_MONTH.index(t) + 1
-        low = t.lower().rstrip("月").strip()
-        for i, name in enumerate(_EN_MONTH):
-            if name.startswith(low):
-                return i + 1
-        for i, name in enumerate(_CN_MONTH):
-            if name in t:
-                return i + 1
-    m = re.search(r"-?\d+", desc)
+        idx = locale_kit.month_index_in(norm)
+        if idx is not None:
+            return idx
     if m:
         return int(m.group(0))
     raise UiError(f"滚轮 {rid} 的 content-desc 无数字：{desc!r}")
@@ -399,16 +392,28 @@ class Device:
         return False
 
     # ---------- 控件树 ----------
-    def dump(self) -> list[Node]:
-        raw = self.shell("uiautomator dump /dev/tty")
-        end = raw.find("</hierarchy>")
-        xml = raw[: end + len("</hierarchy>")] if end != -1 else raw
-        nodes = []
-        for m in _NODE_RE.finditer(xml):
-            nodes.append(Node(dict(_ATTR_RE.findall(m.group(0)))))
-        if not nodes:
-            raise UiError("控件树为空，dump 可能失败。原始输出前 200 字符：" + repr(raw[:200]))
-        return nodes
+    def dump(self, retries: int = 3) -> list[Node]:
+        """读控件树。
+
+        `uiautomator dump` 在界面持续刷新时会报 `could not get idle state.`
+        （实测：时钟 App 的闹钟列表，倒计时文字每秒都在变），旧实现直接
+        抛「控件树为空」。这里改成重试 + `--compressed` 兜底：压缩模式
+        不等窗口 idle，能拿到树（只是少了部分无用节点）。
+        """
+        last = ""
+        for attempt in range(1, retries + 1):
+            flag = "" if attempt == 1 else " --compressed"
+            raw = self.shell(f"uiautomator dump{flag} /dev/tty")
+            end = raw.find("</hierarchy>")
+            xml = raw[: end + len("</hierarchy>")] if end != -1 else raw
+            nodes = []
+            for m in _NODE_RE.finditer(xml):
+                nodes.append(Node(dict(_ATTR_RE.findall(m.group(0)))))
+            if nodes:
+                return nodes
+            last = raw[:200]
+            time.sleep(0.6)
+        raise UiError("控件树为空，dump 可能失败。原始输出前 200 字符：" + repr(last))
 
     def find_all(self, nodes=None, **kw) -> list[Node]:
         nodes = self.dump() if nodes is None else nodes

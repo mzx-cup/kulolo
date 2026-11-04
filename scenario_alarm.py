@@ -18,6 +18,7 @@ import datetime as _dt
 import re
 import time
 
+import locale_kit
 from phone_ctl import KEY_HOME, KEY_WAKEUP, Device, UiError
 
 from scenario_birthday import (
@@ -51,7 +52,16 @@ def _next_wednesday(today: _dt.date) -> _dt.date:
 
 def _set_daily_alarm(dev: Device, r: Runner,
                      hour: int = ALARM_HOUR, minute: int = ALARM_MINUTE) -> str:
-    """用 SET_ALARM intent 创建每天 hour:minute 的闹钟，并用 dumpsys alarm 校验。"""
+    """用 SET_ALARM intent 创建每天 hour:minute 的闹钟，并校验。
+
+    校验走时钟 App 自己的 logcat（`TAG_GeminiFuncHelper: addAlarm: status=1
+    ... hour=4, minutes=5` + `addAlarm Success`），**不用 dumpsys alarm**：
+    dumpsys 的 `Alarm clock:` 段落只列出「下一个即将触发」的那一条，设备上
+    还挂着别的闹钟（比如 wake_alarm_delay 留下的 04:01）时，新建的 04:05
+    根本不会出现在里面，会被误判成「没创建成功」。
+    另外阿拉伯语系统下 dumpsys 的 triggerTime 是阿拉伯-印度数字
+    （实测 `٢٠٢٦-٠١-٠٨ ٠٤:٠١:٠٠.٠٠٠`），也得先归一化——logcat 走同一条路径处理。
+    """
     r.step(f"设置并启用每日闹钟 {hour:02d}:{minute:02d}")
     cmd = (
         "am start -a android.intent.action.SET_ALARM"
@@ -61,27 +71,33 @@ def _set_daily_alarm(dev: Device, r: Runner,
         " --ez android.intent.extra.alarm.SKIP_UI true"
         f" -p {DESKCLOCK_PKG}"
     )
+    dev.shell("logcat -c")            # 清掉历史，只认这一次新增的闹钟
     out = dev.shell(cmd)
     if "Error" in out or "Exception" in out:
         raise UiError(f"创建每日闹钟失败：{out.strip()[:300]}")
-    time.sleep(0.8)
 
-    raw = dev.shell("dumpsys alarm")
     pat = re.compile(
-        r"Alarm clock:\s*\n\s*triggerTime=(\d{4}-\d{2}-\d{2}) "
-        r"(\d{2}):(\d{2}):(\d{2})")
+        r"addAlarm:\s*status=(\d+).*?enabled=(\w+).*?"
+        rf"hour=(\d+),\s*minutes=(\d+)", re.S)
+    ok_pat = re.compile(r"addAlarm Success")
+    deadline = time.time() + 12.0
     found = None
-    for m in pat.finditer(raw):
-        if (int(m.group(2)), int(m.group(3))) == (hour, minute):
-            found = m
+    while time.time() < deadline:
+        time.sleep(1.0)
+        log = locale_kit.to_ascii_digits(dev.shell("logcat -d -s TAG_GeminiFuncHelper"))
+        for m in pat.finditer(log):
+            if (int(m.group(3)), int(m.group(4))) == (hour, minute) \
+                    and m.group(2).lower() == "true":
+                found = m
+                break
+        if found is not None and ok_pat.search(log):
             break
     if found is None:
         raise UiError(
-            f"闹钟设置后没有在 AlarmManager 里找到 {hour:02d}:{minute:02d} "
-            f"的 Alarm clock，时钟 App 可能未响应 SET_ALARM")
-    r.ok(f"每日闹钟已启用，下次触发 {found.group(1)} "
-         f"{found.group(2)}:{found.group(3)}")
-    return f"{found.group(1)} {found.group(2)}:{found.group(3)}"
+            f"闹钟设置后时钟 App 没有确认创建 {hour:02d}:{minute:02d} "
+            f"的闹钟（logcat 里没有 addAlarm status=1），时钟 App 可能未响应 SET_ALARM")
+    r.ok(f"每日闹钟已启用，时钟 App 确认创建 {hour:02d}:{minute:02d}（每天）")
+    return f"{hour:02d}:{minute:02d}"
 
 
 def _warm_up(dev: Device, r: Runner, day: _dt.date, minutes: int) -> None:

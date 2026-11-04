@@ -24,6 +24,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import adbutils
+import locale_kit
+import locale_switch
 import scenario_alarm
 import scenario_alarm_close
 import scenario_alarm_prompt
@@ -55,6 +57,15 @@ METHOD_OPTIONS = [
     {"v": "real", "t": "真实触发（改时间 + 建闹钟）"},
     {"v": "mock", "t": "Mock 触发（TransAtomicBrain 一键出卡）"},
 ]
+
+# 触发前要求手机使用哪种系统语言。选中的值会在跑场景之前写进
+# `settings put system system_locales` 并重启一次（约 1~2 分钟），
+# 让整轮触发都在同一种界面语言下进行。和当前语言一致时自动跳过重启。
+LOCALE_OPTIONS = [{"v": code, "t": name} for code, name in locale_kit.TRIGGER_LOCALES]
+METHOD_PARAM = {"key": "method", "type": "select", "label": "触发方式",
+                "value": "real", "options": METHOD_OPTIONS}
+LOCALE_PARAM = {"key": "locale", "type": "select", "label": "触发语言",
+                "value": locale_kit.DEFAULT_LOCALE, "options": LOCALE_OPTIONS}
 
 SCENARIOS = [
     {
@@ -186,7 +197,8 @@ SCENARIOS = [
         "title": "追星提醒卡片",
         "tag": "show day · concert",
         "desc": "把手机时间调到日历里设置的观演日（Show Day）当天，息屏静候约 1 分钟，"
-                "再亮屏上滑解锁，查看锁屏上的追星提醒卡片。日历里没有观演日事件时"
+                "再亮屏上滑解锁；解锁完成后再补一次「马上息屏、马上亮屏、上滑解锁」，"
+                "查看锁屏上的追星提醒卡片。日历里没有观演日事件时"
                 "会自动在「今天+1」新建一个（重要日里勾选 Show Day）。",
         "module": scenario_greeting,
         "params": [
@@ -196,7 +208,8 @@ SCENARIOS = [
             {"key": "wait_sec", "type": "number", "label": "息屏",
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
-        "hidden": {"ev_value": "performance", "ev_display": "观演日"},
+        "hidden": {"ev_value": "performance", "ev_display": "观演日",
+                   "second_off_sec": 2},
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "v": "观演日当天"},
@@ -783,6 +796,11 @@ def _scenarios_json() -> list[dict]:
         item["group"] = s.get("group") or (
             "节日祝福卡片" if s["id"].startswith("festival_") else "重要日卡片")
         item["retryable"] = bool(s.get("retryable", not s["id"].startswith("festival_")))
+        # 所有场景统一追加「触发语言」——共 25 张卡片，逐个写进 params 会漏，
+        # 而且以后新增场景又要记得补。这里集中注入，参数校验那边也自动放行。
+        keys = [p["key"] for p in item["params"]]
+        if "locale" not in keys:
+            item["params"] = list(item["params"]) + [dict(LOCALE_PARAM)]
         for opt in ("icon", "accent"):
             if s.get(opt):
                 item[opt] = s[opt]
@@ -811,6 +829,7 @@ def _allowed_params(sce: dict, params: dict) -> dict:
     keys.add("offset_months")
     numeric["offset_months"] = "int"
     keys.add("retry")
+    keys.add("locale")     # 触发语言：跑之前把系统语言切过去
     keys.add("festival")   # 节日场景可指定单个节日（如 "duanwu"），留空遍历全部
     hidden = sce.get("hidden", {})
     keys.update(hidden)
@@ -898,10 +917,24 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         # 表单给过来的是字符串，bool("0") 是 True，必须按字面值判。
         is_retry = str(kwargs.pop("retry", "") or "").strip().lower() in (
             "1", "true", "yes", "on")
+        # 触发语言只在这里消费（切系统语言 + 可能重启），不下传给场景 run()。
+        # 空值表示「不切语言，用手机当前语言」，这是老调用方的行为，保持不变。
+        want_locale = str(kwargs.pop("locale", "") or "").strip()
         kwargs["control"] = _ctrl
         kwargs["confirm_fn"] = _confirm_fn
         kwargs["ask_fn"] = _ask_fn
         dev = get_device()
+        if want_locale:
+            _emit({"t": "log", "no": 0,
+                   "msg": f"触发语言：{locale_kit.label_for_locale(want_locale)}"
+                          f"（{locale_kit.normalize_locale(want_locale)}）"})
+            # 用真实 Runner 承载语言切换的日志/步骤事件，前端进度条能看见这一段；
+            # 重启后 adb transport 会换掉，所以下面重新取一次设备句柄。
+            locale_switch.ensure_locale(
+                dev, want_locale,
+                scenario_birthday.Runner(dev, emit=_emit, control=_ctrl),
+                timeout=240.0)
+            dev = get_device()
         # 上一次同一场景以「未触发 / 报错」收尾 → 这次也算重试，照样先清缓存
         with _lock:
             prev_failed = (_prev_run["id"] == scenario_id and not _prev_run["ok"])

@@ -376,6 +376,14 @@
   to   { opacity: 1; transform: none; }
 }
 .field .lbl { color: var(--ink-3); white-space: nowrap; }
+/* 「触发语言」这类会重启设备的参数，在旁边补一句代价说明，
+   不然用户点了以为界面卡死。窄屏时整行折到下一行。 */
+.field .hint {
+  font: 10.5px/1.35 var(--mono);
+  color: var(--ink-4);
+  max-width: 190px;
+  white-space: normal;
+}
 .field .unit,
 .field .sep {
   font: 10.5px/1 var(--mono);

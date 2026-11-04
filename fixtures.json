@@ -33,6 +33,30 @@
         "calendar_id": 1,
         "title": "Bday111055",
         "registered_at": "2026-11-04T11:20:20"
+      },
+      "performance": {
+        "event_id": 159,
+        "calendar_id": 1,
+        "title": "Bday111143",
+        "registered_at": "2026-11-04T11:24:56"
+      },
+      "none": {
+        "event_id": 236,
+        "calendar_id": 1,
+        "title": "Bday111548",
+        "registered_at": "2026-11-04T11:37:48"
+      },
+      "anniversary": {
+        "event_id": 313,
+        "calendar_id": 1,
+        "title": "Bday010762",
+        "registered_at": "2026-11-04T12:50:02"
+      },
+      "exam": {
+        "event_id": 314,
+        "calendar_id": 1,
+        "title": "Bday010996",
+        "registered_at": "2026-11-04T13:02:18"
       }
     }
   }
