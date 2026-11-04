@@ -1,5 +1,4 @@
 // 主布局 shell + workspace 骨架
-// 源：web/style.css 第 564~592 行（原样搬运，未改规则）
 
 /* ── 主布局 ─────────────────────────────────────────────────────── */
 .shell {
@@ -7,26 +6,32 @@
   z-index: 1;
   display: grid;
   grid-template-columns: var(--catalog-w) minmax(0, 1fr);
-  gap: 18px;
+  gap: 22px;
   align-items: start;
-  max-width: 1720px;
+  max-width: 1800px;
   margin: 0 auto;
-  padding: 18px 22px 34px;
+  padding: 22px 26px 42px;
 }
+.shell.page-loaded { animation: pageFade .8s var(--ease-out) both; }
 .workspace {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
-/* 入场错峰 */
+/* 面板入场错峰 */
 .reveal {
-  animation: rise .68s var(--ease-out) both;
-  animation-delay: calc(var(--i, 0) * 80ms);
+  animation: rise .7s var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 100ms);
 }
 @keyframes rise {
-  from { opacity: 0; transform: translate3d(0, 14px, 0); }
+  from { opacity: 0; transform: translate3d(0, 16px, 0); }
   to   { opacity: 1; transform: none; }
 }
 
+/* 顶栏以下的内容区容器，方便全局动效覆盖 */
+.content-wrap {
+  position: relative;
+  isolation: isolate;
+}

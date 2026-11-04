@@ -11,23 +11,33 @@
   box-shadow:
     var(--shadow-panel),
     0 1px 0 0 rgba(255, 255, 255, .02);
+  transition: border-color .28s var(--ease-out),
+              box-shadow .28s var(--ease-out);
 }
 .panel:hover {
   border-color: var(--line-strong);
+  box-shadow: var(--shadow-panel), 0 0 0 1px rgba(255, 214, 234, .08) inset;
+}
+
+/* ── 页面整体淡入 ───────────────────────────────────────────────── */
+.shell.page-loaded {
+  animation: pageFade .8s var(--ease-out) both;
+}
+@keyframes pageFade {
+  from { opacity: 0; transform: translate3d(0, 10px, 0); }
+  to   { opacity: 1; transform: none; }
 }
 
 /* ── 卡片交互：更顺滑的悬浮与选中 ───────────────────────────────── */
 .catalog .card {
   transition: background .2s var(--ease-out),
               border-color .2s var(--ease-out),
-              transform .18s var(--ease-out),
+              transform .2s var(--ease-out),
               box-shadow .24s var(--ease-out);
 }
-.catalog .card:hover {
-  transform: translateX(2px);
-}
+.catalog .card:hover { transform: translateX(4px); }
 .catalog .card.on {
-  box-shadow: 0 10px 26px -20px var(--accent-glow),
+  box-shadow: 0 16px 34px -24px var(--accent-glow),
               inset 0 0 0 1px var(--amber-line);
 }
 
@@ -42,17 +52,17 @@
 }
 .btn:active:not(:disabled),
 .icon-btn:active {
-  transform: translateY(1px) scale(.96);
+  transform: translateY(1px) scale(.95);
 }
 
-/* ── 主按钮：更饱满的呼吸感 ─────────────────────────────────────── */
+/* ── 主按钮：更饱满的呼吸感 + 光晕扫过 ──────────────────────────── */
 .commit {
   transition: transform .18s var(--ease-spring),
               box-shadow .26s var(--ease-out),
               filter .26s var(--ease-out);
 }
 .commit:hover:not(:disabled) {
-  transform: translateY(-2px) scale(1.012);
+  transform: translateY(-2px) scale(1.015);
 }
 
 /* ── 规格标签：悬浮轻抬 ─────────────────────────────────────────── */
@@ -61,24 +71,22 @@
               transform .16s var(--ease-spring),
               background .18s var(--ease-out);
 }
-.spec li:hover {
-  transform: translateY(-2px);
-}
+.spec li:hover { transform: translateY(-2px); }
 
 /* ── 面板标题的 tone 竖条：加一点呼吸光 ─────────────────────────── */
 .panel-title h3::before {
-  animation: toneGlow 3.2s var(--ease-in-out) infinite;
+  animation: toneGlow 3.5s var(--ease-in-out) infinite;
 }
 @keyframes toneGlow {
   0%, 100% { box-shadow: 0 0 9px -2px var(--panel-tone, var(--amber)); }
-  50%      { box-shadow: 0 0 14px -1px var(--panel-tone, var(--amber)); }
+  50%      { box-shadow: 0 0 16px -1px var(--panel-tone, var(--amber)); }
 }
 
 /* ── 场景切换时标题的换入：更顺滑 ───────────────────────────────── */
 .hero-main.swap h2,
 .hero-main.swap .lede,
 .hero-main.swap .spec {
-  animation-duration: .5s;
+  animation-duration: .55s;
 }
 
 /* ── 滚动条：更细、更隐形，悬停才显形 ───────────────────────────── */
@@ -102,10 +110,97 @@
   background-clip: padding-box;
 }
 
+/* ── 输入焦点光晕 ───────────────────────────────────────────────── */
+.field input:focus,
+.field select:focus {
+  position: relative;
+}
+.field input:focus::after,
+.field select:focus::after {
+  content: "";
+  position: absolute;
+  inset: -1px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--amber), var(--tone-violet));
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: destination-out;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity .2s var(--ease-out);
+}
+.field input:focus-visible::after,
+.field select:focus-visible::after { opacity: .5; }
+
+/* ── 加载/骨架闪烁 ──────────────────────────────────────────────── */
+.skel {
+  animation: shimmer 1.6s linear infinite;
+}
+@keyframes shimmer {
+  from { background-position: 140% 0; }
+  to   { background-position: -140% 0; }
+}
+
+/* ── 进度条光条扫过效果 ───────────────────────────────────────────── */
+.bar::after {
+  animation: barSweep 2.2s var(--ease-in-out) infinite;
+}
+@keyframes barSweep {
+  0%   { right: 100%; opacity: 0; }
+  40%  { right: 100%; opacity: .9; }
+  100% { right: -20%; opacity: 0; }
+}
+.bar.ok::after,
+.bar.fail::after { animation: none; }
+
+/* ── 运行中按钮呼吸 ──────────────────────────────────────────────── */
+.commit.busy {
+  animation: commitPulse 2.6s var(--ease-in-out) infinite;
+}
+@keyframes commitPulse {
+  0%, 100% { box-shadow: 0 1px 0 rgba(255, 255, 255, .45) inset, 0 0 0 1px rgba(255, 255, 255, .10), 0 18px 34px -18px var(--accent-glow); }
+  50%      { box-shadow: 0 1px 0 rgba(255, 255, 255, .45) inset, 0 0 0 1px rgba(255, 255, 255, .14), 0 24px 52px -16px var(--accent-glow); }
+}
+
+/* ── 步骤条目：完成时有轻微弹跳 ──────────────────────────────────── */
+.steps li.ok .no {
+  animation: stamp .5s var(--ease-spring) both;
+}
+@keyframes stamp {
+  0%   { transform: scale(1.3); }
+  62%  { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
+
+/* ── 日志行：滑入 + 左边缘色条逐条显示 ──────────────────────────── */
+.logline {
+  animation: login .35s var(--ease-out) both;
+}
+@keyframes login {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ── 主题切换时全局过渡收窄，避免闪一下 ────────────────────────── */
+html.theme-switching *,
+html.theme-switching *::before,
+html.theme-switching *::after {
+  transition-duration: .35s !important;
+  transition-timing-function: var(--ease-out) !important;
+}
+
 /* ── 减少动态 ───────────────────────────────────────────────────── */
 @media (prefers-reduced-motion: reduce) {
   .panel-title h3::before { animation: none; }
   .catalog .card { transition: background .2s, border-color .2s; }
   .commit { transition: filter .2s; }
   .spec li { transition: none; }
+  .reveal { animation: none; }
+  .field input.pop { animation: none; }
+  .steps li { animation: none; }
+  .card { animation: none; }
+  .shell.page-loaded { animation: none; }
+  .bar::after { animation: none; opacity: .35; }
+  .ambient .stars,
+  .ph-glyph,
+  .scan { animation: none !important; }
 }

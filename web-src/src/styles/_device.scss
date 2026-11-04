@@ -1,5 +1,4 @@
 // 手机预览：机身、截图、扫描线、live 徽标
-// 源：web/style.css 第 1875~2164 行（原样搬运，未改规则）
 
 /* ── 手机预览 ───────────────────────────────────────────────────── */
 .device-panel {
@@ -10,21 +9,21 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 18px 18px 16px;
+  padding: 20px 20px 18px;
 }
 .device {
   display: flex;
   justify-content: center;
   width: 100%;
-  padding: 3px 0 11px;
+  padding: 3px 0 12px;
 }
 .device-screen {
   position: relative;
   width: 100%;
-  max-width: 234px;
+  max-width: 240px;
   aspect-ratio: 9 / 19.4;
   border: 1px solid var(--line-strong);
-  border-radius: 33px;
+  border-radius: 36px;
   background: var(--device-frame);
   overflow: hidden;
   cursor: pointer;
@@ -40,9 +39,10 @@
   box-shadow:
     0 0 0 7px var(--device-frame),
     0 0 0 8px color-mix(in srgb, var(--amber) 40%, var(--line)),
-    0 36px 64px -24px rgba(0, 0, 0, .8),
-    0 0 56px -22px var(--phone-glow);
+    0 38px 72px -26px rgba(0, 0, 0, .82),
+    0 0 64px -24px var(--phone-glow);
 }
+.device-screen:active { transform: translateY(0) scale(.995); }
 /* 截图比例和手机框不一致时，用同图的模糊放大版填充上下留白 */
 .device-screen::after {
   content: "";
@@ -63,8 +63,8 @@
   z-index: 6;
   top: 9px;
   left: 50%;
-  width: 58px;
-  height: 17px;
+  width: 60px;
+  height: 18px;
   border-radius: 999px;
   background: #010204;
   border: 1px solid rgba(255, 255, 255, .07);
@@ -90,10 +90,10 @@
   height: 100%;
   object-fit: contain;
   opacity: 1;
-  transition: opacity .38s var(--ease-out);
+  transition: opacity .42s var(--ease-out), transform .42s var(--ease-out);
 }
 .shot.empty { opacity: 0; }
-.shot.swap { animation: shotin .5s var(--ease-out); }
+.shot.swap { animation: shotin .55s var(--ease-out); }
 @keyframes shotin {
   from { opacity: .15; transform: scale(1.025); }
   to   { opacity: 1; transform: scale(1); }
@@ -104,8 +104,8 @@
   z-index: 4;
   pointer-events: none;
   background: linear-gradient(118deg,
-    rgba(255, 255, 255, .075) 0%, transparent 33%,
-    transparent 68%, rgba(255, 255, 255, .03) 100%);
+    rgba(255, 255, 255, .085) 0%, transparent 33%,
+    transparent 68%, rgba(255, 255, 255, .035) 100%);
 }
 .scan {
   position: absolute;
@@ -115,12 +115,12 @@
   top: -25%;
   height: 26%;
   pointer-events: none;
-  background: linear-gradient(180deg, transparent, rgba(111, 214, 176, .12), transparent);
+  background: linear-gradient(180deg, transparent, rgba(111, 214, 176, .14), transparent);
   opacity: 0;
 }
 .device-screen.live .scan {
   opacity: 1;
-  animation: scanDown 3.6s linear infinite;
+  animation: scanDown 4s linear infinite;
 }
 @keyframes scanDown {
   from { transform: translateY(0); }
@@ -129,19 +129,19 @@
 .live-badge {
   position: absolute;
   z-index: 7;
-  left: 11px;
-  bottom: 13px;
+  left: 12px;
+  bottom: 14px;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  padding: 4px 7px;
-  border: 1px solid rgba(255, 255, 255, .14);
-  border-radius: 6px;
-  background: rgba(0, 0, 0, .52);
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
+  gap: 6px;
+  padding: 4px 8px;
+  border: 1px solid rgba(255, 255, 255, .16);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, .55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: #ffd9d2;
-  font: 7.5px/1 var(--mono);
+  font: 8px/1 var(--mono);
   letter-spacing: .16em;
   opacity: 0;
   transform: translateY(3px);
@@ -166,33 +166,33 @@
   justify-content: center;
   gap: 10px;
   color: var(--ink-4);
-  font: 9.5px/1 var(--mono);
+  font: 10px/1 var(--mono);
   letter-spacing: .14em;
   text-transform: uppercase;
-  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, .035), transparent 62%);
+  background: radial-gradient(circle at 50% 42%, rgba(255, 255, 255, .04), transparent 62%);
   transition: opacity .3s var(--ease-out), visibility .3s;
 }
-.screen-hint svg { width: 27px; height: 27px; opacity: .42; }
+.screen-hint svg { width: 28px; height: 28px; opacity: .42; }
 .device-screen.has-shot .screen-hint { opacity: 0; visibility: hidden; }
 .expand-btn {
   position: absolute;
   z-index: 7;
-  right: 10px;
-  bottom: 10px;
-  width: 29px;
-  height: 29px;
+  right: 11px;
+  bottom: 11px;
+  width: 30px;
+  height: 30px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, .16);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, .52);
-  -webkit-backdrop-filter: blur(5px);
-  backdrop-filter: blur(5px);
+  border: 1px solid rgba(255, 255, 255, .18);
+  border-radius: 9px;
+  background: rgba(0, 0, 0, .55);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
   color: #fff;
   cursor: pointer;
   opacity: 0;
   transform: translateY(3px);
-  transition: opacity .22s var(--ease-out), transform .22s var(--ease-out), background .22s;
+  transition: opacity .24s var(--ease-out), transform .24s var(--ease-out), background .24s;
 }
 .expand-btn svg { width: 14px; height: 14px; }
 .device-screen:hover .expand-btn,
@@ -200,28 +200,29 @@
 .expand-btn:hover {
   background: color-mix(in srgb, var(--amber) 85%, transparent);
   color: var(--on-accent);
+  transform: scale(1.08);
 }
 .home-bar {
   position: absolute;
   z-index: 7;
   left: 50%;
-  bottom: 6px;
-  width: 72px;
+  bottom: 7px;
+  width: 76px;
   height: 3px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, .30);
+  background: rgba(255, 255, 255, .32);
   transform: translateX(-50%);
   pointer-events: none;
 }
 .shottag {
-  margin: 3px 0 0;
+  margin: 4px 0 0;
   text-align: center;
   font: 10px/1.4 var(--mono);
   color: var(--ink-3);
   word-break: break-all;
 }
 .dev-meta {
-  margin: 5px 0 0;
+  margin: 6px 0 0;
   text-align: center;
   font: 9px/1.4 var(--mono);
   letter-spacing: .08em;
@@ -230,7 +231,7 @@
   opacity: .8;
 }
 .device-tip {
-  margin: 10px 0 0;
+  margin: 11px 0 0;
   text-align: center;
   font: 9px/1.4 var(--mono);
   letter-spacing: .04em;
@@ -243,8 +244,8 @@
   justify-content: center;
   gap: 8px;
   width: 100%;
-  margin-top: 15px;
-  padding-top: 13px;
+  margin-top: 16px;
+  padding-top: 14px;
   border-top: 1px solid var(--line);
   font: 9.5px/1 var(--mono);
   color: var(--ink-3);
@@ -256,11 +257,11 @@
   align-items: center;
   gap: 3px;
   height: 28px;
-  padding: 0 7px;
+  padding: 0 8px;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 8px;
   background: var(--field-bg);
-  transition: border-color .18s, box-shadow .18s;
+  transition: border-color .18s, box-shadow .18s, transform .14s var(--ease-spring);
 }
 .interval:focus-within {
   border-color: var(--amber-line);
@@ -293,4 +294,3 @@
   box-shadow: 0 0 7px var(--jade);
   vertical-align: 1px;
 }
-

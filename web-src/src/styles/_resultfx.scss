@@ -1,58 +1,65 @@
 // 右下角结算提示 + 其小屏适配
-// 源：web/style.css 第 2443~2497 行（原样搬运，未改规则）
 
 /* ── 右下角结算提示 ───────────────────────────────────────────── */
 .result-fx {
   position: fixed;
-  right: 20px;
-  bottom: 20px;
+  right: 24px;
+  bottom: 24px;
   z-index: 90;
   pointer-events: none;
   opacity: 1;
   transform: translateY(0);
-  transition: opacity .3s var(--ease-out), transform .3s var(--ease-out);
+  transition: opacity .35s var(--ease-out), transform .35s var(--ease-out);
 }
-.result-fx.out { opacity: 0; transform: translateY(8px); }
+.result-fx.out { opacity: 0; transform: translateY(10px); }
 .rt-card {
   display: flex;
   align-items: center;
-  gap: 11px;
-  min-width: 268px;
-  max-width: min(390px, calc(100vw - 28px));
-  padding: 12px 15px;
+  gap: 12px;
+  min-width: 280px;
+  max-width: min(400px, calc(100vw - 32px));
+  padding: 14px 17px;
   border: 1px solid var(--line-strong);
-  border-left: 3px solid var(--amber);
-  border-radius: 12px;
+  border-left: 3.5px solid var(--amber);
+  border-radius: 14px;
   background: var(--modal-bg);
   box-shadow: var(--shadow-pop);
-  animation: rtin .28s var(--ease-out) both;
+  animation: rtin .35s var(--ease-out) both;
 }
 .result-fx.ok .rt-card { border-left-color: var(--jade); }
 .result-fx.fail .rt-card { border-left-color: var(--rust); }
 .rt-icon {
   flex: none;
-  width: 34px;
-  height: 34px;
+  width: 38px;
+  height: 38px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--jade);
   background: color-mix(in srgb, var(--jade) 14%, transparent);
+  box-shadow: 0 10px 24px -14px var(--jade);
+}
+.result-fx.ok .rt-icon {
+  animation: iconPulse 2s var(--ease-in-out) infinite;
 }
 .result-fx.fail .rt-icon {
   color: var(--rust);
   background: color-mix(in srgb, var(--rust) 14%, transparent);
+  box-shadow: 0 10px 24px -14px var(--rust);
 }
-.rt-icon svg { width: 18px; height: 18px; }
+.rt-icon svg { width: 20px; height: 20px; }
+@keyframes iconPulse {
+  0%, 100% { box-shadow: 0 10px 24px -14px var(--jade); transform: scale(1); }
+  50%      { box-shadow: 0 14px 32px -12px var(--jade); transform: scale(1.05); }
+}
 .rt-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.rt-copy b { font-size: 13px; font-weight: 600; color: var(--ink); }
-.rt-copy small { font-size: 10.5px; line-height: 1.45; color: var(--ink-3); }
+.rt-copy b { font-size: 13.5px; font-weight: 600; color: var(--ink); }
+.rt-copy small { font-size: 11px; line-height: 1.5; color: var(--ink-3); }
 @keyframes rtin {
-  from { opacity: 0; transform: translateX(16px); }
+  from { opacity: 0; transform: translateX(18px); }
   to { opacity: 1; transform: none; }
 }
 @media (max-width: 640px) {
-  .result-fx { right: 12px; bottom: 12px; left: 12px; }
+  .result-fx { right: 14px; bottom: 14px; left: 14px; }
   .rt-card { min-width: 0; width: 100%; max-width: none; }
 }
-

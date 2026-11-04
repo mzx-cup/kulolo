@@ -109,5 +109,5 @@ export const state = reactive({
   shotStateOn: false,
 
   /* ── 外观 ─────────────────────────────────────────────────── */
-  theme: "dark" as "dark" | "light",
+  theme: "dark" as "dark" | "light" | "rose" | "mint" | "violet" | "midnight",
 });

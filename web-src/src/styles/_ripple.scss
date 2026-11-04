@@ -1,16 +1,15 @@
 // 点击涟漪 + 主题切换过渡
-// 源：web/style.css 第 2498~2521 行（原样搬运，未改规则）
 
 /* ── 涟漪 ───────────────────────────────────────────────────────── */
 .ripple {
   position: absolute;
   border-radius: 50%;
-  background: rgba(255, 255, 255, .34);
+  background: rgba(255, 255, 255, .38);
   transform: scale(0);
-  animation: rip .6s var(--ease-out) forwards;
+  animation: rip .7s var(--ease-out) forwards;
   pointer-events: none;
 }
-@keyframes rip { to { transform: scale(1); opacity: 0; } }
+@keyframes rip { to { transform: scale(2.2); opacity: 0; } }
 .btn .ripple,
 .vbtn .ripple,
 .filter .ripple,
@@ -21,7 +20,6 @@ html.theme-switching *,
 html.theme-switching *::before,
 html.theme-switching *::after {
   transition-property: background-color, border-color, color, fill, stroke, box-shadow, opacity !important;
-  transition-duration: .34s !important;
+  transition-duration: .4s !important;
   transition-timing-function: var(--ease-out) !important;
 }
-

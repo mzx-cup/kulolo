@@ -1,5 +1,4 @@
 // 工作区：步骤序列 + 运行日志
-// 源：web/style.css 第 1627~1874 行（原样搬运，未改规则）
 
 /* ── 工作区双栏 ─────────────────────────────────────────────────── */
 .work-grid {
@@ -9,7 +8,7 @@
     "hero device"
     "steps device"
     "log device";
-  gap: 18px;
+  gap: 22px;
   align-items: start;
 }
 .hero { grid-area: hero; }
@@ -21,29 +20,29 @@
 .steps {
   list-style: none;
   margin: 0;
-  padding: 10px 19px 15px;
-  max-height: 340px;
+  padding: 12px 20px 16px;
+  max-height: 360px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }
 .steps li {
   position: relative;
   display: grid;
-  grid-template-columns: 34px minmax(0, 1fr);
+  grid-template-columns: 36px minmax(0, 1fr);
   gap: 14px;
   align-items: start;
-  padding: 10px 0;
-  animation: stepin .42s var(--ease-out) both;
+  padding: 12px 0;
+  animation: stepin .5s var(--ease-out) both;
 }
 @keyframes stepin {
-  from { opacity: 0; transform: translate3d(-7px, 0, 0); }
+  from { opacity: 0; transform: translate3d(-8px, 0, 0); }
   to   { opacity: 1; transform: none; }
 }
 .steps li::before {
   content: "";
   position: absolute;
-  left: 16px;
-  top: 46px;
+  left: 17px;
+  top: 48px;
   bottom: -2px;
   width: 1px;
   background: var(--line-strong);
@@ -54,12 +53,12 @@
 
 .steps .no {
   position: relative;
-  width: 34px;
-  height: 34px;
+  width: 36px;
+  height: 36px;
   display: grid;
   place-items: center;
   border: 1px solid var(--line-strong);
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--panel-2);
   color: var(--ink-3);
   font: 10px/1 var(--mono);
@@ -81,7 +80,7 @@
   stroke-linecap: round;
   stroke-linejoin: round;
 }
-.steps .body { min-width: 0; padding-top: 7px; }
+.steps .body { min-width: 0; padding-top: 8px; }
 .steps b {
   font-weight: 500;
   font-size: 13px;
@@ -104,7 +103,7 @@
   border-color: var(--amber-line);
   background: var(--amber-soft);
   box-shadow: 0 0 0 0 var(--accent-glow);
-  animation: nodepulse 1.5s var(--ease-in-out) infinite;
+  animation: nodepulse 1.8s var(--ease-in-out) infinite;
 }
 .steps li.doing b { color: var(--ink); }
 .steps li.doing .body { position: relative; }
@@ -112,29 +111,29 @@
   content: "";
   position: absolute;
   left: -12px;
-  top: 5px;
+  top: 6px;
   width: 3px;
-  height: 15px;
+  height: 16px;
   border-radius: 2px;
   background: var(--amber);
   box-shadow: 0 0 10px var(--amber);
-  animation: blink 1.5s ease-in-out infinite;
+  animation: blink 1.8s ease-in-out infinite;
 }
 @keyframes nodepulse {
   0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 var(--accent-glow); }
-  50%      { transform: scale(1.05); box-shadow: 0 0 0 5px transparent; }
+  50%      { transform: scale(1.06); box-shadow: 0 0 0 6px transparent; }
 }
 .steps li.ok .no {
   color: var(--on-jade);
   border-color: transparent;
   background: var(--jade);
-  animation: stamp .4s var(--ease-spring) both;
+  animation: stamp .5s var(--ease-spring) both;
 }
 .steps li.ok .num { display: none; }
-.steps li.ok .tick { display: block; animation: drawline .4s .1s var(--ease-out) both; }
+.steps li.ok .tick { display: block; animation: drawline .45s .1s var(--ease-out) both; }
 @keyframes stamp {
-  0%   { transform: scale(1.26); }
-  62%  { transform: scale(.95); }
+  0%   { transform: scale(1.28); }
+  62%  { transform: scale(.94); }
   100% { transform: scale(1); }
 }
 @keyframes drawline {
@@ -157,59 +156,59 @@
   flex-direction: column;
   align-items: center;
   gap: 10px;
-  padding: 34px 10px 36px;
+  padding: 40px 12px 42px;
   text-align: center;
   color: var(--ink-3);
-  font-size: 11.5px;
-  line-height: 1.7;
+  font-size: 12px;
+  line-height: 1.8;
   border: 0;
   animation: none;
 }
 .steps li.placeholder::before { display: none; }
 .steps li.placeholder .ph-tip {
   font-style: normal;
-  font-size: 9.5px;
+  font-size: 10px;
   letter-spacing: .03em;
   color: var(--ink-4);
   max-width: 52ch;
   padding: 0 8px;
 }
 .ph-glyph {
-  width: 46px;
-  height: 46px;
+  width: 48px;
+  height: 48px;
   display: grid;
   place-items: center;
   border-radius: 50%;
   border: 1px dashed var(--line-strong);
   color: var(--ink-4);
-  animation: slowspin 24s linear infinite;
+  animation: slowspin 20s linear infinite;
 }
-.ph-glyph svg { width: 23px; height: 23px; }
+.ph-glyph svg { width: 24px; height: 24px; }
 @keyframes slowspin { to { transform: rotate(360deg); } }
 
 .countdown {
-  padding: 4px 8px;
+  padding: 4px 9px;
   border: 1px solid var(--amber-line);
-  border-radius: 6px;
+  border-radius: 7px;
   background: var(--amber-soft);
   color: var(--amber);
   font: 9px/1 var(--mono);
   letter-spacing: .02em;
   font-variant-numeric: tabular-nums;
+  animation: nodepulse 1.8s var(--ease-in-out) infinite;
 }
 .countdown:empty { display: none; }
-.countdown.live { animation: nodepulse 1.5s var(--ease-in-out) infinite; }
 
 /* 日志 */
 .log {
-  min-height: 118px;
-  max-height: 252px;
+  min-height: 128px;
+  max-height: 272px;
   overflow-y: auto;
-  padding: 9px 13px 13px;
+  padding: 10px 14px 14px;
   border-radius: 0 0 var(--radius-xl) var(--radius-xl);
   background: var(--input-bg);
   color: var(--ink-2);
-  font: 12px/1.72 var(--mono);
+  font: 12px/1.78 var(--mono);
   overscroll-behavior: contain;
 }
 .log:empty::after {
@@ -221,13 +220,13 @@
 .logline {
   display: flex;
   gap: 9px;
-  padding: 3px 7px;
+  padding: 3px 8px;
   border-left: 2px solid transparent;
-  border-radius: 0 6px 6px 0;
-  animation: login .28s var(--ease-out) both;
+  border-radius: 0 7px 7px 0;
+  animation: login .32s var(--ease-out) both;
 }
 @keyframes login {
-  from { opacity: 0; transform: translate3d(0, 4px, 0); }
+  from { opacity: 0; transform: translate3d(0, 5px, 0); }
   to   { opacity: 1; transform: none; }
 }
 .logline:hover { background: var(--panel-2); }
@@ -248,4 +247,3 @@
 .logline.ok     { color: var(--jade); border-left-color: color-mix(in srgb, var(--jade) 55%, transparent); }
 .logline.detail { color: var(--ink-3); }
 .logline.err    { color: var(--rust); border-left-color: var(--rust); background: var(--rust-soft); }
-

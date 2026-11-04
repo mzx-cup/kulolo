@@ -1,24 +1,33 @@
-// 主题令牌：尺寸 / 缓动 / 字体 / 色调 + 深浅两套配色
+// 主题令牌：尺寸 / 缓动 / 字体 / 色调 + 多套主题配色
 //
 // 视觉主题：库洛米（Kuromi）——「午夜粉」深色 + 「奶油草莓」浅色。
 //   深色是主场：近黑的紫调底色 + 樱粉主色，像她的黑头巾和白骷髅。
 //   浅色走奶油白 + 草莓粉，甜但不刺眼。
 //   双马尾 / 骷髅 / 缎带这些造型元素不做成图片，全部用 CSS 画，
 //   保证和界面缩放、主题切换一致。
+//
+// 主题切换方式：<html data-theme="dark|light|rose|mint|violet|midnight">
+//   dark   —— 库洛米午夜粉（默认深色，樱粉主色）
+//   light  —— 象牙纸感浅色（奶油白 + 草莓粉）
+//   rose   —— 夜幕草莓（深底 + 草莓红主色，更甜更可爱）
+//   mint   —— 雾隐薄荷（深底 + 薄荷绿主色，清新治愈）
+//   violet —— 星空薰衣草（深底 + 薰衣草紫主色，梦幻高级）
+//   midnight —— 深海午夜（深底 + 青蓝色主色，冷静专业）
 
-/* ── 主题令牌 ───────────────────────────────────────────────────── */
+/* ── 共用尺寸 / 缓动 / 字体 ───────────────────────────────────── */
 :root {
   --topbar-h: 68px;
   --catalog-w: clamp(300px, 20vw, 356px);
   --dock-w: clamp(258px, 18vw, 318px);
-  --radius-xl: 22px;
-  --radius-lg: 18px;
-  --radius-md: 13px;
-  --radius-sm: 9px;
+  --radius-xl: 24px;
+  --radius-lg: 20px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
 
   --ease-out: cubic-bezier(.22, 1, .36, 1);
   --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   --ease-in-out: cubic-bezier(.65, 0, .35, 1);
+  --ease-bounce: cubic-bezier(.68, -.55, .265, 1.55);
 
   --sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
           "Hiragino Sans GB", system-ui, -apple-system, "Segoe UI", sans-serif;
@@ -35,94 +44,422 @@
   --tone-orange: #ffb48a;
 }
 
+/* ── 午夜粉（默认深色主题，更接近库洛米可爱配色）───────────────── */
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  /* 底色：带紫的近黑，比纯黑更「库洛米」 */
-  --bg: #0d0812;
-  --bg-elev: #120b18;
-  --panel: rgba(26, 16, 32, .72);
-  --panel-solid: #1a1020;
-  --panel-2: rgba(255, 214, 234, .05);
-  --panel-3: rgba(255, 214, 234, .085);
-  --field-bg: #150d1b;
-  --field-focus: #0f0914;
-  --input-bg: rgba(8, 4, 11, .55);
-  --card-hover: rgba(255, 214, 234, .04);
-  --card-active: rgba(255, 166, 201, .09);
+  /* 底色：库洛米黑紫调，带一点点粉紫感，比纯黑更可爱 */
+  --bg: #0e0814;
+  --bg-elev: #170f1e;
+  --panel: rgba(26, 18, 32, .75);
+  --panel-solid: #1a1220;
+  --panel-2: rgba(255, 214, 234, .08);
+  --panel-3: rgba(255, 214, 234, .12);
+  --field-bg: #1a1020;
+  --field-focus: #120818;
+  --input-bg: rgba(10, 6, 14, .55);
+  --card-hover: rgba(255, 214, 234, .06);
+  --card-active: rgba(255, 166, 201, .12);
 
-  --line: rgba(255, 214, 234, .10);
-  --line-strong: rgba(255, 214, 234, .21);
+  --line: rgba(255, 214, 234, .12);
+  --line-strong: rgba(255, 214, 234, .26);
 
-  --ink: #fdf3f8;
-  --ink-2: #dcc8d6;
-  --ink-3: #b3a0b0;
-  --ink-4: #8d7c8c;
+  --ink: #ffeef5;
+  --ink-2: #e8d4e0;
+  --ink-3: #c4a8b8;
+  --ink-4: #a08494;
 
-  /* 主色：樱粉 */
-  --amber: #ffa6c9;
-  --amber-bright: #ffd0e2;
-  --amber-deep: #c96a94;
-  --amber-soft: rgba(255, 166, 201, .14);
-  --amber-line: rgba(255, 166, 201, .44);
-  --accent-grad: linear-gradient(180deg, #ffd6e6, #ffa6c9 52%, #d97ba6);
-  --on-accent: #2a0d1a;
+  /* 主色：更粉嫩的樱粉，接近库洛米的粉色 */
+  --amber: #ffb3d9;
+  --amber-bright: #ffd6ea;
+  --amber-deep: #d97ba6;
+  --amber-soft: rgba(255, 179, 217, .16);
+  --amber-line: rgba(255, 179, 217, .5);
+  --accent-grad: linear-gradient(135deg, #ffd6ea 0%, #ffb3d9 52%, #e89bb8 100%);
+  --on-accent: #3a0e20;
 
-  --jade: #7fdcc0;
-  --jade-deep: #2a7d68;
-  --jade-soft: rgba(127, 220, 192, .13);
-  --jade-grad: linear-gradient(180deg, #a8f0dc, #5fc5a6 52%, #2a7d68);
-  --on-jade: #041712;
+  --jade: #a8f0dc;
+  --jade-deep: #5fc5a6;
+  --jade-soft: rgba(168, 240, 220, .14);
+  --jade-grad: linear-gradient(135deg, #d6f5e4 0%, #a8f0dc 52%, #5fc5a6 100%);
+  --on-jade: #061c14;
 
-  --rust: #ff8a8a;
-  --rust-deep: #8e2f3f;
-  --rust-soft: rgba(255, 138, 138, .13);
-  --blue: #9bc4ff;
-  --blue-soft: rgba(155, 196, 255, .13);
+  --rust: #ffb0b0;
+  --rust-deep: #e88a8a;
+  --rust-soft: rgba(255, 176, 176, .14);
+  --blue: #b3d9ff;
+  --blue-soft: rgba(179, 217, 255, .14);
 
-  /* 光晕：粉 / 紫 / 青，铺在她双马尾的那种层次感上 */
-  --hero-glow: rgba(255, 166, 201, .14);
-  --glow-amber: rgba(255, 166, 201, .13);
-  --glow-jade: rgba(196, 140, 255, .07);
-  --glow-blue: rgba(139, 214, 255, .06);
-  --grid: rgba(255, 214, 234, .035);
-  --star: rgba(255, 214, 234, .6);
-  --star-opacity: .18;
-  --grain-opacity: .04;
+  /* 高级感光晕与层级，更粉嫩 */
+  --hero-glow: rgba(255, 179, 217, .18);
+  --glow-amber: rgba(255, 179, 217, .17);
+  --glow-jade: rgba(196, 140, 255, .09);
+  --glow-blue: rgba(139, 214, 255, .08);
+  --grid: rgba(255, 214, 234, .05);
+  --star: rgba(255, 214, 234, .8);
+  --star-opacity: .25;
+  --grain-opacity: .06;
   --grain-blend: screen;
 
-  --topbar-bg: rgba(13, 8, 18, .78);
-  --scrim: rgba(6, 3, 9, .68);
-  --modal-bg: #1a1020;
-  --toast-bg: rgba(26, 16, 32, .95);
+  --topbar-bg: rgba(14, 8, 20, .85);
+  --scrim: rgba(6, 4, 10, .75);
+  --modal-bg: #1a1220;
+  --toast-bg: rgba(26, 18, 32, .97);
   --device-frame: #08040c;
-  --phone-glow: rgba(255, 166, 201, .24);
-  --scroll-thumb: rgba(255, 214, 234, .19);
-  --kbd-bg: rgba(255, 214, 234, .07);
-  --ripple: rgba(255, 214, 234, .18);
-  --mark-bg: rgba(255, 166, 201, .26);
+  --phone-glow: rgba(255, 179, 217, .3);
+  --scroll-thumb: rgba(255, 214, 234, .22);
+  --kbd-bg: rgba(255, 214, 234, .1);
+  --ripple: rgba(255, 214, 234, .22);
+  --mark-bg: rgba(255, 179, 217, .32);
   --mark-ink: #ffd9e7;
 
-  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .04) inset,
-                  0 26px 64px -38px #000;
-  --shadow-pop: 0 50px 120px -30px rgba(0, 0, 0, .85),
+  /* 阴影层级：由浅入深，营造纸张叠放感 */
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset,
+                  0 24px 48px -24px rgba(0, 0, 0, .72);
+  --shadow-pop: 0 40px 80px -20px rgba(0, 0, 0, .8),
                 0 0 0 1px rgba(255, 214, 234, .07) inset;
-  --shadow-lift: 0 18px 36px -24px rgba(0, 0, 0, .9);
-  --accent-glow: rgba(255, 166, 201, .45);
-  --fx-veil-a: rgba(13, 8, 18, .96);
-  --fx-veil-b: rgba(24, 14, 30, .90);
+  --shadow-lift: 0 28px 56px -20px rgba(0, 0, 0, .82);
+  --shadow-card: 0 12px 28px -12px rgba(0, 0, 0, .6);
+  --accent-glow: rgba(255, 179, 217, .52);
+  --fx-veil-a: rgba(14, 8, 20, .97);
+  --fx-veil-b: rgba(26, 18, 32, .94);
   --fx-ok-ink: #a8f0dc;
   --fx-fail-ink: #ffb0b0;
-  --glass: blur(18px) saturate(1.18);
+  --glass: blur(22px) saturate(1.3);
 }
 
+/* ── 夜幕草莓（深色，草莓红主色，更甜更可爱）────────────────── */
+:root[data-theme="rose"] {
+  color-scheme: dark;
+
+  --bg: #120814;
+  --bg-elev: #1c0e18;
+  --panel: rgba(30, 18, 30, .75);
+  --panel-solid: #201224;
+  --panel-2: rgba(255, 190, 210, .09);
+  --panel-3: rgba(255, 190, 210, .13);
+  --field-bg: #1c121c;
+  --field-focus: #140a14;
+  --input-bg: rgba(8, 4, 8, .55);
+  --card-hover: rgba(255, 190, 210, .08);
+  --card-active: rgba(255, 150, 180, .13);
+
+  --line: rgba(255, 190, 210, .13);
+  --line-strong: rgba(255, 190, 210, .28);
+
+  --ink: #ffeef2;
+  --ink-2: #eccedc;
+  --ink-3: #c8a8b8;
+  --ink-4: #a48494;
+
+  /* 主色：草莓红 */
+  --amber: #ff8fa8;
+  --amber-bright: #ffc1d0;
+  --amber-deep: #e86a88;
+  --amber-soft: rgba(255, 143, 168, .16);
+  --amber-line: rgba(255, 143, 168, .5);
+  --accent-grad: linear-gradient(135deg, #ffc1d0 0%, #ff8fa8 52%, #d95b7e 100%);
+  --on-accent: #4a0c16;
+
+  --jade: #ff8fa8;
+  --jade-deep: #c94a6e;
+  --jade-soft: rgba(255, 143, 168, .14);
+  --jade-grad: linear-gradient(135deg, #ffc1d0 0%, #ff8fa8 52%, #d95b7e 100%);
+  --on-jade: #ffffff;
+
+  --rust: #ffb0b0;
+  --rust-deep: #e88a8a;
+  --rust-soft: rgba(255, 176, 176, .14);
+  --blue: #b3d9ff;
+  --blue-soft: rgba(179, 217, 255, .14);
+
+  --hero-glow: rgba(255, 143, 168, .18);
+  --glow-amber: rgba(255, 143, 168, .17);
+  --glow-jade: rgba(196, 140, 255, .09);
+  --glow-blue: rgba(139, 214, 255, .08);
+  --grid: rgba(255, 190, 210, .05);
+  --star: rgba(255, 214, 234, .8);
+  --star-opacity: .25;
+  --grain-opacity: .06;
+  --grain-blend: screen;
+
+  --topbar-bg: rgba(18, 8, 20, .85);
+  --scrim: rgba(8, 4, 8, .75);
+  --modal-bg: #201224;
+  --toast-bg: rgba(30, 18, 30, .97);
+  --device-frame: #0a040a;
+  --phone-glow: rgba(255, 143, 168, .3);
+  --scroll-thumb: rgba(255, 214, 234, .22);
+  --kbd-bg: rgba(255, 214, 234, .1);
+  --ripple: rgba(255, 214, 234, .22);
+  --mark-bg: rgba(255, 143, 168, .32);
+  --mark-ink: #ffc1d0;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset,
+                  0 24px 48px -24px rgba(0, 0, 0, .72);
+  --shadow-pop: 0 40px 80px -20px rgba(0, 0, 0, .8),
+                0 0 0 1px rgba(255, 190, 210, .07) inset;
+  --shadow-lift: 0 28px 56px -20px rgba(0, 0, 0, .82);
+  --shadow-card: 0 12px 28px -12px rgba(0, 0, 0, .6);
+  --accent-glow: rgba(255, 143, 168, .52);
+  --fx-veil-a: rgba(18, 8, 20, .97);
+  --fx-veil-b: rgba(30, 18, 30, .94);
+  --fx-ok-ink: #ffc1d0;
+  --fx-fail-ink: #ffb0b0;
+  --glass: blur(22px) saturate(1.3);
+}
+
+/* ── 雾隐薄荷（深色，薄荷绿主色，清新治愈）──────────────────── */
+:root[data-theme="mint"] {
+  color-scheme: dark;
+
+  --bg: #0a1414;
+  --bg-elev: #121c1c;
+  --panel: rgba(18, 34, 34, .75);
+  --panel-solid: #141c1c;
+  --panel-2: rgba(180, 255, 220, .09);
+  --panel-3: rgba(180, 255, 220, .13);
+  --field-bg: #121c1c;
+  --field-focus: #0c1414;
+  --input-bg: rgba(4, 10, 10, .55);
+  --card-hover: rgba(180, 255, 220, .08);
+  --card-active: rgba(140, 230, 200, .13);
+
+  --line: rgba(180, 255, 220, .13);
+  --line-strong: rgba(180, 255, 220, .28);
+
+  --ink: #eefcf4;
+  --ink-2: #c8e8d8;
+  --ink-3: #a8c8b8;
+  --ink-4: #88a898;
+
+  /* 主色：薄荷绿 */
+  --amber: #90f0d0;
+  --amber-bright: #b8f8e4;
+  --amber-deep: #4aad88;
+  --amber-soft: rgba(144, 240, 208, .16);
+  --amber-line: rgba(144, 240, 208, .5);
+  --accent-grad: linear-gradient(135deg, #b8f8e4 0%, #90f0d0 52%, #4aad88 100%);
+  --on-accent: #061c14;
+
+  --jade: #90f0d0;
+  --jade-deep: #2a7d68;
+  --jade-soft: rgba(144, 240, 208, .14);
+  --jade-grad: linear-gradient(135deg, #b8f8e4 0%, #90f0d0 52%, #2a7d68 100%);
+  --on-jade: #00100c;
+
+  --rust: #ffb0b0;
+  --rust-deep: #e88a8a;
+  --rust-soft: rgba(255, 176, 176, .14);
+  --blue: #b3d9ff;
+  --blue-soft: rgba(179, 217, 255, .14);
+
+  --hero-glow: rgba(144, 240, 208, .18);
+  --glow-amber: rgba(144, 240, 208, .17);
+  --glow-jade: rgba(196, 140, 255, .09);
+  --glow-blue: rgba(139, 214, 255, .08);
+  --grid: rgba(180, 255, 220, .05);
+  --star: rgba(214, 255, 234, .8);
+  --star-opacity: .25;
+  --grain-opacity: .06;
+  --grain-blend: screen;
+
+  --topbar-bg: rgba(10, 20, 20, .85);
+  --scrim: rgba(4, 10, 10, .75);
+  --modal-bg: #141c1c;
+  --toast-bg: rgba(18, 34, 34, .97);
+  --device-frame: #040808;
+  --phone-glow: rgba(144, 240, 208, .3);
+  --scroll-thumb: rgba(214, 255, 234, .22);
+  --kbd-bg: rgba(214, 255, 234, .1);
+  --ripple: rgba(214, 255, 234, .22);
+  --mark-bg: rgba(144, 240, 208, .32);
+  --mark-ink: #b8f8e4;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset,
+                  0 24px 48px -24px rgba(0, 0, 0, .72);
+  --shadow-pop: 0 40px 80px -20px rgba(0, 0, 0, .8),
+                0 0 0 1px rgba(180, 255, 220, .07) inset;
+  --shadow-lift: 0 28px 56px -20px rgba(0, 0, 0, .82);
+  --shadow-card: 0 12px 28px -12px rgba(0, 0, 0, .6);
+  --accent-glow: rgba(144, 240, 208, .52);
+  --fx-veil-a: rgba(10, 20, 20, .97);
+  --fx-veil-b: rgba(18, 34, 34, .94);
+  --fx-ok-ink: #90f0d0;
+  --fx-fail-ink: #ffb0b0;
+  --glass: blur(22px) saturate(1.3);
+}
+
+/* ── 星空薰衣草（深色，薰衣草紫主色，梦幻高级）───────────────── */
+:root[data-theme="violet"] {
+  color-scheme: dark;
+
+  --bg: #120a1c;
+  --bg-elev: #1c1428;
+  --panel: rgba(30, 22, 48, .75);
+  --panel-solid: #1e162c;
+  --panel-2: rgba(220, 190, 255, .09);
+  --panel-3: rgba(220, 190, 255, .13);
+  --field-bg: #1c1628;
+  --field-focus: #120a1c;
+  --input-bg: rgba(8, 4, 12, .55);
+  --card-hover: rgba(220, 190, 255, .08);
+  --card-active: rgba(190, 150, 255, .13);
+
+  --line: rgba(220, 190, 255, .13);
+  --line-strong: rgba(220, 190, 255, .28);
+
+  --ink: #f4eaff;
+  --ink-2: #e0d0f0;
+  --ink-3: #c0b0d0;
+  --ink-4: #a090b0;
+
+  /* 主色：薰衣草紫 */
+  --amber: #d0b8ff;
+  --amber-bright: #e8d8ff;
+  --amber-deep: #a070e0;
+  --amber-soft: rgba(208, 184, 255, .16);
+  --amber-line: rgba(208, 184, 255, .5);
+  --accent-grad: linear-gradient(135deg, #e8d8ff 0%, #d0b8ff 52%, #a070e0 100%);
+  --on-accent: #1c0a2c;
+
+  --jade: #d0b8ff;
+  --jade-deep: #7050c0;
+  --jade-soft: rgba(208, 184, 255, .14);
+  --jade-grad: linear-gradient(135deg, #e8d8ff 0%, #d0b8ff 52%, #a070e0 100%);
+  --on-jade: #14081a;
+
+  --rust: #ffb0b0;
+  --rust-deep: #e88a8a;
+  --rust-soft: rgba(255, 176, 176, .14);
+  --blue: #b3c8ff;
+  --blue-soft: rgba(155, 196, 255, .13);
+
+  --hero-glow: rgba(208, 184, 255, .18);
+  --glow-amber: rgba(208, 184, 255, .17);
+  --glow-jade: rgba(196, 140, 255, .09);
+  --glow-blue: rgba(139, 214, 255, .08);
+  --grid: rgba(220, 190, 255, .05);
+  --star: rgba(234, 234, 255, .8);
+  --star-opacity: .25;
+  --grain-opacity: .06;
+  --grain-blend: screen;
+
+  --topbar-bg: rgba(18, 10, 28, .85);
+  --scrim: rgba(6, 4, 12, .75);
+  --modal-bg: #1e162c;
+  --toast-bg: rgba(30, 22, 48, .97);
+  --device-frame: #0a0610;
+  --phone-glow: rgba(208, 184, 255, .3);
+  --scroll-thumb: rgba(234, 234, 255, .22);
+  --kbd-bg: rgba(234, 234, 255, .1);
+  --ripple: rgba(234, 234, 255, .22);
+  --mark-bg: rgba(208, 184, 255, .32);
+  --mark-ink: #e8d8ff;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset,
+                  0 24px 48px -24px rgba(0, 0, 0, .72);
+  --shadow-pop: 0 40px 80px -20px rgba(0, 0, 0, .8),
+                0 0 0 1px rgba(220, 190, 255, .07) inset;
+  --shadow-lift: 0 28px 56px -20px rgba(0, 0, 0, .82);
+  --shadow-card: 0 12px 28px -12px rgba(0, 0, 0, .6);
+  --accent-glow: rgba(208, 184, 255, .52);
+  --fx-veil-a: rgba(18, 10, 28, .97);
+  --fx-veil-b: rgba(30, 22, 48, .94);
+  --fx-ok-ink: #d0b8ff;
+  --fx-fail-ink: #ffb0b0;
+  --glass: blur(22px) saturate(1.3);
+}
+
+/* ── 深海午夜（深色，青蓝主色，冷静专业）─────────────────────── */
+:root[data-theme="midnight"] {
+  color-scheme: dark;
+
+  --bg: #080a14;
+  --bg-elev: #101620;
+  --panel: rgba(16, 28, 40, .75);
+  --panel-solid: #101824;
+  --panel-2: rgba(160, 220, 255, .09);
+  --panel-3: rgba(160, 220, 255, .13);
+  --field-bg: #121c24;
+  --field-focus: #080a14;
+  --input-bg: rgba(2, 4, 8, .55);
+  --card-hover: rgba(160, 220, 255, .08);
+  --card-active: rgba(120, 190, 240, .13);
+
+  --line: rgba(160, 220, 255, .13);
+  --line-strong: rgba(160, 220, 255, .28);
+
+  --ink: #eaf0ff;
+  --ink-2: #c8d8f0;
+  --ink-3: #a8b8d0;
+  --ink-4: #8898b0;
+
+  /* 主色：青蓝 */
+  --amber: #a0f0ff;
+  --amber-bright: #c8f8ff;
+  --amber-deep: #4aaab0;
+  --amber-soft: rgba(160, 240, 255, .16);
+  --amber-line: rgba(160, 240, 255, .5);
+  --accent-grad: linear-gradient(135deg, #c8f8ff 0%, #a0f0ff 52%, #4aaab0 100%);
+  --on-accent: #04101a;
+
+  --jade: #a0f0ff;
+  --jade-deep: #2a7d94;
+  --jade-soft: rgba(160, 240, 255, .14);
+  --jade-grad: linear-gradient(135deg, #c8f8ff 0%, #a0f0ff 52%, #4aaab0 100%);
+  --on-jade: #041014;
+
+  --rust: #ffb0b0;
+  --rust-deep: #e88a8a;
+  --rust-soft: rgba(255, 176, 176, .14);
+  --blue: #a0f0ff;
+  --blue-soft: rgba(160, 240, 255, .14);
+
+  --hero-glow: rgba(160, 240, 255, .18);
+  --glow-amber: rgba(160, 240, 255, .17);
+  --glow-jade: rgba(196, 140, 255, .09);
+  --glow-blue: rgba(160, 240, 255, .08);
+  --grid: rgba(160, 220, 255, .05);
+  --star: rgba(214, 240, 255, .8);
+  --star-opacity: .25;
+  --grain-opacity: .06;
+  --grain-blend: screen;
+
+  --topbar-bg: rgba(8, 12, 20, .85);
+  --scrim: rgba(2, 4, 8, .75);
+  --modal-bg: #101824;
+  --toast-bg: rgba(16, 28, 40, .97);
+  --device-frame: #020408;
+  --phone-glow: rgba(160, 240, 255, .3);
+  --scroll-thumb: rgba(214, 240, 255, .22);
+  --kbd-bg: rgba(214, 240, 255, .1);
+  --ripple: rgba(214, 240, 255, .22);
+  --mark-bg: rgba(160, 240, 255, .32);
+  --mark-ink: #c8f8ff;
+
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .05) inset,
+                  0 24px 48px -24px rgba(0, 0, 0, .72);
+  --shadow-pop: 0 40px 80px -20px rgba(0, 0, 0, .8),
+                0 0 0 1px rgba(160, 220, 255, .07) inset;
+  --shadow-lift: 0 28px 56px -20px rgba(0, 0, 0, .82);
+  --shadow-card: 0 12px 28px -12px rgba(0, 0, 0, .6);
+  --accent-glow: rgba(160, 240, 255, .52);
+  --fx-veil-a: rgba(8, 12, 20, .97);
+  --fx-veil-b: rgba(16, 28, 40, .94);
+  --fx-ok-ink: #a0f0ff;
+  --fx-fail-ink: #ffb0b0;
+  --glass: blur(22px) saturate(1.3);
+}
+
+/* ── 象牙纸感（浅色主题，奶油白 + 草莓粉）───────────────────── */
 :root[data-theme="light"] {
   color-scheme: light;
 
   /* 奶油草莓：暖白底 + 草莓粉主色 */
   --bg: #fdf4f8;
-  --bg-elev: #f9ecf2;
+  --bg-elev: #f8ecef;
   --panel: rgba(255, 251, 253, .80);
   --panel-solid: #fffbfd;
   --panel-2: rgba(74, 38, 56, .045);
@@ -134,25 +471,25 @@
   --card-active: rgba(214, 78, 128, .10);
 
   --line: rgba(74, 38, 56, .11);
-  --line-strong: rgba(74, 38, 56, .20);
+  --line-strong: rgba(74, 38, 56, .22);
 
   --ink: #2b1a24;
-  --ink-2: #5c4451;
-  --ink-3: #78606c;
-  --ink-4: #947c88;
+  --ink-2: #624a53;
+  --ink-3: #806a72;
+  --ink-4: #9c848f;
 
   --amber: #d64e80;
   --amber-bright: #f06a99;
   --amber-deep: #9e2f58;
   --amber-soft: rgba(214, 78, 128, .10);
-  --amber-line: rgba(214, 78, 128, .38);
-  --accent-grad: linear-gradient(180deg, #f07fa6, #d64e80 52%, #9e2f58);
+  --amber-line: rgba(214, 78, 128, .4);
+  --accent-grad: linear-gradient(135deg, #f07fa6 0%, #d64e80 52%, #9e2f58 100%);
   --on-accent: #fff5f8;
 
   --jade: #218a6b;
   --jade-deep: #16624b;
   --jade-soft: rgba(33, 138, 107, .10);
-  --jade-grad: linear-gradient(180deg, #6fbfa4, #2f9a79 52%, #218a6b);
+  --jade-grad: linear-gradient(135deg, #6fbfa4 0%, #2f9a79 52%, #218a6b 100%);
   --on-jade: #ffffff;
 
   --rust: #c23c50;
@@ -161,33 +498,35 @@
   --blue: #3f6fb5;
   --blue-soft: rgba(63, 111, 181, .09);
 
-  --hero-glow: rgba(230, 120, 160, .16);
-  --glow-amber: rgba(240, 130, 170, .15);
-  --glow-jade: rgba(160, 130, 230, .07);
-  --glow-blue: rgba(120, 180, 230, .06);
-  --grid: rgba(74, 38, 56, .035);
-  --star: rgba(74, 38, 56, .4);
-  --star-opacity: .10;
-  --grain-opacity: .05;
+  --hero-glow: rgba(230, 120, 160, .18);
+  --glow-amber: rgba(240, 130, 170, .17);
+  --glow-jade: rgba(160, 130, 230, .08);
+  --glow-blue: rgba(120, 180, 230, .07);
+  --grid: rgba(74, 38, 56, .04);
+  --star: rgba(74, 38, 56, .5);
+  --star-opacity: .12;
+  --grain-opacity: .06;
   --grain-blend: multiply;
 
-  --topbar-bg: rgba(255, 251, 253, .85);
-  --scrim: rgba(58, 30, 44, .32);
+  --topbar-bg: rgba(255, 251, 253, .88);
+  --scrim: rgba(58, 30, 44, .35);
   --modal-bg: #fffbfd;
-  --toast-bg: rgba(255, 251, 253, .97);
-  --device-frame: #2b1520;
-  --phone-glow: rgba(158, 47, 88, .18);
-  --scroll-thumb: rgba(74, 38, 56, .18);
-  --kbd-bg: rgba(74, 38, 56, .05);
-  --ripple: rgba(74, 38, 56, .12);
-  --mark-bg: rgba(240, 130, 170, .38);
+  --toast-bg: rgba(255, 251, 253, .98);
+  --device-frame: #2e1823;
+  --phone-glow: rgba(158, 47, 88, .2);
+  --scroll-thumb: rgba(74, 38, 56, .2);
+  --kbd-bg: rgba(74, 38, 56, .06);
+  --ripple: rgba(74, 38, 56, .14);
+  --mark-bg: rgba(240, 130, 170, .42);
   --mark-ink: #7a2040;
 
-  --shadow-panel: 0 1px 2px rgba(74, 30, 48, .05),
-                  0 24px 54px -42px rgba(74, 30, 48, .38);
-  --shadow-pop: 0 40px 100px -32px rgba(74, 30, 48, .45);
-  --shadow-lift: 0 18px 36px -26px rgba(74, 30, 48, .35);
-  --accent-glow: rgba(214, 78, 128, .40);
+  --shadow-panel: 0 1px 2px rgba(74, 30, 48, .06),
+                  0 24px 48px -24px rgba(74, 30, 48, .32);
+  --shadow-pop: 0 40px 80px -20px rgba(74, 30, 48, .4),
+                0 0 0 1px rgba(74, 38, 56, .08) inset;
+  --shadow-lift: 0 28px 56px -20px rgba(74, 30, 48, .38);
+  --shadow-card: 0 12px 28px -12px rgba(74, 30, 48, .28);
+  --accent-glow: rgba(214, 78, 128, .42);
   --fx-veil-a: rgba(255, 250, 252, .96);
   --fx-veil-b: rgba(250, 238, 244, .92);
   --fx-ok-ink: #16624b;

@@ -161,6 +161,11 @@ export default defineComponent({
       document.addEventListener("keydown", onKeydown);
       document.addEventListener("visibilitychange", onVisibility);
       document.addEventListener("pointerdown", onPointerDown);
+
+      /* 首屏渲染完成后给 shell 加 page-loaded 类，触发整页淡入 */
+      window.requestAnimationFrame(() => {
+        document.documentElement.classList.add("page-loaded");
+      });
     });
 
     onUnmounted(() => {

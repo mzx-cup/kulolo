@@ -10,8 +10,9 @@ import { toast } from "./toast";
 
 export function initTheme(): void {
   loadPrefs();
-  const saved = readText(STORAGE_KEYS.theme);
-  const t = saved === "light" ? "light" : "dark";
+  const saved = readText(STORAGE_KEYS.theme) ?? "dark";
+  const valid = ["dark", "light", "rose", "mint", "violet", "midnight"];
+  const t = (valid.includes(saved) ? saved : "dark") as "dark" | "light" | "rose" | "mint" | "violet" | "midnight";
   state.theme = t;
   document.documentElement.dataset.theme = t;
   /* 颜色只认 applyTheme 里那一份 META_COLOR，别再抄一遍 */

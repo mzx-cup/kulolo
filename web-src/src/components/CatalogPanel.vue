@@ -214,7 +214,11 @@ export default defineComponent({
     </div>
 
     <div class="catalog-scroll" id="catalog-scroll" ref="scroll">
-      <div id="cards" class="cards">
+      <div
+        id="cards"
+        class="cards"
+        :class="{ grid: state.scenarios.length > 12 && !state.query && state.activeFilter === 'all' }"
+      >
         <div v-if="state.loading" class="skel-list" aria-hidden="true">
           <span class="skel" /><span class="skel" /><span class="skel" />
           <span class="skel" /><span class="skel" />

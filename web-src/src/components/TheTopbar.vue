@@ -1,15 +1,43 @@
 <script lang="ts">
-import { defineComponent } from "vue";
+import { defineComponent, computed, ref, onMounted, onBeforeUnmount } from "vue";
 import { state } from "@/stores/core";
 import { recheckDevice, launchScrcpy, deviceLabel } from "@/actions/device";
-import { toggleTheme } from "@/actions/theme";
+import { toggleTheme, THEMES } from "@/actions/theme";
 import { manualShot } from "@/actions/shot";
 import { pickDevice } from "@/actions/device";
 
 export default defineComponent({
   name: "TheTopbar",
   setup() {
-    return { state, recheckDevice, launchScrcpy, toggleTheme, manualShot, pickDevice, deviceLabel };
+    const themeMenuOpen = ref(false);
+    const themeLabel = computed(() => {
+      const t = THEMES.find((x) => x.id === state.theme);
+      return t ? t.label : state.theme;
+    });
+
+    /** 点击外部区域关闭主题菜单 */
+    function onDocClick(e: MouseEvent): void {
+      if (!themeMenuOpen.value) return;
+      const t = e.target as Node | null;
+      const el = e.currentTarget as HTMLElement;
+      if (!el.contains(t)) themeMenuOpen.value = false;
+    }
+
+    onMounted(() => document.addEventListener("click", onDocClick));
+    onBeforeUnmount(() => document.removeEventListener("click", onDocClick));
+
+    return {
+      state,
+      recheckDevice,
+      launchScrcpy,
+      toggleTheme,
+      manualShot,
+      pickDevice,
+      deviceLabel,
+      THEMES,
+      themeLabel,
+      themeMenuOpen,
+    };
   },
 });
 </script>
@@ -18,16 +46,28 @@ export default defineComponent({
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
-        <!-- 库洛米额头上那枚骷髅 -->
+        <!-- 库洛米造型：黑色头巾 + 白骷髅 + 粉色缎带 -->
         <svg viewBox="0 0 32 32" fill="none">
+          <defs>
+            <radialGradient id="kuroBow" cx="50%" cy="50%" r="50%">
+              <stop offset="0%" stop-color="#ffd6ea" />
+              <stop offset="100%" stop-color="#ffb3d9" />
+            </radialGradient>
+          </defs>
+          <!-- 头巾轮廓 -->
           <path
-            d="M16 3.6c-5.5 0-9.6 3.8-9.6 8.6 0 2.9 1.5 5 3.4 6.2v4.1c0 1 .8 1.8 1.8 1.8h1.4v2.1c0 .6.5 1.1 1.1 1.1h3.8c.6 0 1.1-.5 1.1-1.1v-2.1h1.4c1 0 1.8-.8 1.8-1.8v-4.1c1.9-1.2 3.4-3.3 3.4-6.2 0-4.8-4.1-8.6-9.6-8.6z"
-            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+            d="M16 3c-5 0-9 3.5-9 8.5 0 2 1 3.5 2.5 4.5v3.5c0 1 .8 1.8 1.8 1.8h1.2v2c0 .6.5 1.1 1.1 1.1h3.6c.6 0 1.1-.5 1.1-1.1v-2h1.2c1 0 1.8-.8 1.8-1.8v-3.5c1.5-1 2.5-2.5 2.5-4.5 0-5-4-8.5-9-8.5z"
+            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
           />
-          <ellipse cx="12.2" cy="12.6" rx="2.5" ry="3" fill="currentColor" />
-          <ellipse cx="19.8" cy="12.6" rx="2.5" ry="3" fill="currentColor" />
-          <path d="M16 17.4v2.6M13.4 22.4v1.6M16 22.4v1.6M18.6 22.4v1.6"
+          <!-- 左眼 -->
+          <ellipse cx="12" cy="12.5" rx="2.6" ry="3.2" fill="currentColor" />
+          <!-- 右眼 -->
+          <ellipse cx="20" cy="12.5" rx="2.6" ry="3.2" fill="currentColor" />
+          <!-- 嘴巴 -->
+          <path d="M16 17.8v2.8M13.5 22.6v1.6M16 22.6v1.6M18.5 22.6v1.6"
                 stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+          <!-- 粉色缎带（头巾右侧） -->
+          <path d="M22 6q2 2 3 5t-1 6" stroke="url(#kuroBow)" stroke-width="3" stroke-linecap="round" />
         </svg>
       </span>
       <span class="brand-txt">
@@ -99,21 +139,61 @@ export default defineComponent({
       </button>
       <button
         id="theme-toggle"
-        class="btn ghost icon-btn"
+        class="btn ghost icon-btn theme-picker"
         type="button"
-        :title="state.theme === 'light' ? '切换到深色主题' : '切换到浅色主题'"
-        aria-label="切换明暗主题"
-        :aria-pressed="state.theme === 'light'"
-        @click="toggleTheme"
+        :title="`当前主题：${themeLabel}`"
+        aria-label="选择主题色"
+        @click="themeMenuOpen = !themeMenuOpen"
       >
-        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true">
-          <circle cx="12" cy="12" r="4.2" />
-          <path d="M12 2.6v2M12 19.4v2M4.4 4.4l1.4 1.4M18.2 18.2l1.4 1.4M2.6 12h2M19.4 12h2M4.4 19.6l1.4-1.4M18.2 5.8l1.4-1.4" />
-        </svg>
-        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.2 14.6A8.6 8.6 0 0 1 9.4 3.8a8.6 8.6 0 1 0 10.8 10.8z" />
-        </svg>
+        <span class="theme-chip" :style="{ backgroundColor: 'var(--amber)' }" aria-hidden="true" />
+        <span class="theme-caret">
+          <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M3 4.5l3 3 3-3" />
+          </svg>
+        </span>
       </button>
+
+      <!-- 主题选择下拉菜单 -->
+      <div
+        class="theme-menu"
+        :class="{ open: themeMenuOpen }"
+      >
+        <div class="theme-menu-head">
+          <span class="theme-menu-kicker">主题色</span>
+          <button
+            class="theme-menu-close"
+            type="button"
+            aria-label="关闭主题选择"
+            @click="themeMenuOpen = false"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6 6 18" />
+            </svg>
+          </button>
+        </div>
+        <div class="theme-menu-list">
+          <button
+            v-for="t in THEMES"
+            :key="t.id"
+            type="button"
+            class="theme-option"
+            :class="{ on: state.theme === t.id }"
+            :title="t.desc"
+            @click="toggleTheme(t.id); themeMenuOpen = false"
+          >
+            <span
+              class="theme-option-dot"
+              :style="{
+                backgroundColor: state.theme === t.id ? 'var(--amber)' : 'transparent',
+                borderColor: 'var(--amber)',
+              }"
+              aria-hidden="true"
+            />
+            <span class="theme-option-name">{{ t.label }}</span>
+            <span class="theme-option-desc">{{ t.desc }}</span>
+          </button>
+        </div>
+      </div>
     </div>
   </header>
 </template>

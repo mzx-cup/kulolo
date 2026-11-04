@@ -1,40 +1,39 @@
 // Toast 提示条
-// 源：web/style.css 第 2390~2442 行（原样搬运，未改规则）
 
 /* ── Toast ──────────────────────────────────────────────────────── */
 .toast {
   position: fixed;
   left: 50%;
-  bottom: 26px;
+  bottom: 30px;
   z-index: 100;
   display: flex;
   align-items: center;
-  gap: 9px;
-  max-width: min(88vw, 540px);
-  padding: 11px 16px;
+  gap: 10px;
+  max-width: min(88vw, 560px);
+  padding: 12px 18px;
   border: 1px solid var(--line-strong);
-  border-radius: 11px;
+  border-radius: 12px;
   background: var(--toast-bg);
-  -webkit-backdrop-filter: blur(14px);
-  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(16px);
+  backdrop-filter: blur(16px);
   color: var(--ink-2);
-  font-size: 11.5px;
-  line-height: 1.5;
+  font-size: 12px;
+  line-height: 1.55;
   box-shadow: var(--shadow-pop);
   opacity: 0;
-  transform: translate(-50%, 14px) scale(.98);
-  transition: opacity .26s var(--ease-out), transform .34s var(--ease-out);
+  transform: translate(-50%, 16px) scale(.97);
+  transition: opacity .28s var(--ease-out), transform .36s var(--ease-out);
   pointer-events: none;
   overflow: hidden;
 }
 .toast::before {
   content: "";
-  width: 6px;
-  height: 6px;
+  width: 7px;
+  height: 7px;
   flex: none;
   border-radius: 50%;
   background: var(--amber);
-  box-shadow: 0 0 9px var(--amber);
+  box-shadow: 0 0 10px var(--amber);
 }
 .toast::after {
   content: "";
@@ -48,9 +47,8 @@
   transform-origin: left;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0) scale(1); }
-.toast.show::after { animation: toastbar 3.2s linear forwards; }
+.toast.show::after { animation: toastbar 3.4s linear forwards; }
 .toast.err { color: var(--rust); border-color: color-mix(in srgb, var(--rust) 34%, transparent); }
-.toast.err::before { background: var(--rust); box-shadow: 0 0 9px var(--rust); }
+.toast.err::before { background: var(--rust); box-shadow: 0 0 10px var(--rust); }
 .toast.err::after { background: linear-gradient(90deg, var(--rust), transparent); }
 @keyframes toastbar { from { transform: scaleX(1); } to { transform: scaleX(0); } }
-
