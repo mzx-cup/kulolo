@@ -245,10 +245,6 @@ export default defineComponent({
               :model-value="state.params[p.key] ?? String(p.value ?? '')"
               @update:model-value="(v: string) => onSelect(p, v)"
             />
-            <!-- 切系统语言要重启手机，用户点之前就得知道，别以为卡住了 -->
-            <span v-if="p.key === 'locale'" class="hint">
-              与手机当前语言不同时会重启一次（约 1~2 分钟）
-            </span>
           </template>
 
           <template v-else>

@@ -533,7 +533,8 @@ dump 慢是因为每次都要在设备侧起一个 JVM，换 `--compressed` 或�
 - **日历 extendedproperties 写保护**：重要日类型不能通过普通 content insert 新建，
   所以本工具采用「一次 UI seed + 后续更新 fixture」；如果某系统连 provider 更新
   也不刷新卡片，请把该类型用旧 UI 路径跑一次，或反馈场景日志
-- **姓名仅支持 ASCII**（`input text` 不支持中文；中文需装 ADBKeyboard）
+- **事件名由程序自动生成**（`gen_name()`），前端不再提供姓名输入框；
+  生成的都是 ASCII，因为 `input text` 不支持中文（中文需装 ADBKeyboard）
 - 日期以**手机时钟**为基准计算（场景本身会改手机时间，两个时钟会错位）
 - **日历视图会自动收敛**：停在「我的课表」子页会自动按返回键回到主界面；
   停在年视图（`dateTitle` 是 `2026` 这种年份）会自动点「{年}年{月}月」格子下钻到月视图。
