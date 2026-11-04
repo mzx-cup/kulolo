@@ -49,6 +49,7 @@ from datetime import timedelta
 from pathlib import Path
 
 import fast_clock
+import runtime_paths
 from phone_ctl import KEY_HOME, Device, UiError
 
 from scenario_birthday import (
@@ -66,7 +67,7 @@ BOOM_LABEL = "Boomplay"
 # ── 频率控制（设备侧出卡规则，自动化按它来配合） ─────────────────
 DAILY_LIMIT = 2                 # 每天最多出现 2 次卡片
 COOLDOWN_SEC = 2 * 3600         # 卡片触发后 2 小时才可再次触发
-_FREQ_FILE = Path(__file__).with_name("boomplay_music_state.json")
+_FREQ_FILE = runtime_paths.state_path("boomplay_music_state.json")
 
 # 连蓝牙耳机的 mock 载荷（没有耳机也照发，系统照样出卡）
 HEADSET_PLUG_JSON = '{"state":1,"type":1}'

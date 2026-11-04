@@ -16,9 +16,12 @@ import re
 import shlex
 from pathlib import Path
 
+import runtime_paths
 from phone_ctl import Device
 
-FIXTURE_FILE = Path(__file__).with_name("fixtures.json")
+# 设备 fixture 记录写在可写状态目录里（打包后 __file__ 在临时解压目录，
+# 写在那儿进程退出就没了）。源码直跑时也走同一处，行为一致。
+FIXTURE_FILE = runtime_paths.state_path("fixtures.json")
 EVENTS_URI = "content://com.android.calendar/events"
 EXTPROPS_URI = "content://com.android.calendar/extendedproperties"
 TYPE_NAMES = ("private:ts_cal_event_type", "ts_cal_event_type")

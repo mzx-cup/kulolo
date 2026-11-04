@@ -42,3 +42,9 @@ _t_*.json
 
 # Runtime state written by scenarios at run time (not source)
 boomplay_music_state.json
+
+# One-file exe build output (release artifacts go to GitHub Releases, not git)
+build/
+dist/
+*.spec
+fixtures.json

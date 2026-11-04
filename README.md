@@ -288,17 +288,34 @@ adb shell am start-service --user 0 \
 
 每个场景的参数末尾都有一个「触发语言」下拉：
 
-| 选项 | `system_locales` |
-| --- | --- |
-| 中文 | `zh-Hans-CN` |
-| 英语 | `en-US` |
-| 阿拉伯语 | `ar-SA` |
+| 选项 | 首选 tag | 实测落到 |
+| --- | --- | --- |
+| 中文 | `zh-Hans-CN` | `zh-Hans-CN` |
+| 英语 | `en-US` | `en-US` |
+| 阿拉伯语 | `ar-SA` | `ar-EG`（这台机器没编译 ar-SA） |
 
-选中的语言和手机当前语言不同时，**开跑前会先把系统语言切过去**：写
-`settings put system system_locales <locale>` 然后整机重启一次（实测约 50~70 秒），
-等 `sys.boot_completed=1`、唤屏上滑解锁，再开始触发。已经一致就直接跳过，
-不会白重启。切换失败（拔线、超时等）只记一条提示，仍按当前语言把流程跑完，
-不会因为语言这一步把整轮废掉。
+选中的语言和手机当前语言不同时，**开跑前会先把系统语言切过去，不需要重启手机**：
+
+```bash
+adb shell cmd locale set-device-locale ar-EG     # 2~3 秒后整机界面就换语言
+adb shell settings put system system_locales "ar-EG,zh-Hans-CN,en-GB,en-US"
+```
+
+`cmd locale set-device-locale` 是 Android 13+ 的 shell 命令，走 LocaleManager 的
+服务端接口，当场生效。它会把 `system_locales` 这个**语言列表**砸成单值，所以切完
+再把原列表补回去（首选语言排第一）——这步不影响已经生效的界面语言，只是把用户
+配的其它语言还原，下次开机也还是这个首选。
+
+两个实机坑：
+
+- **语言 tag 是枚举出来的**，不能凭空写。`cmd locale list-device-locales` 才能
+  知道这台机器支持什么：X6766 有 `ar-EG`、**没有 `ar-SA`**（写 `ar-SA` 会直接
+  `Error: Invalid locale tag`）。所以代码里有一张同语言候选表，按支持列表挑。
+- 极少数机器（Android 12 及更早）没有 `cmd locale`，此时自动退回
+  「写 `system_locales` + 整机重启」的老路，逻辑同样保留着。
+
+已经一致就直接跳过，不会白切。切换失败（拔线、超时等）只记一条提示，仍按当前
+语言把流程跑完，不会因为语言这一步把整轮废掉。
 
 三套语言下 26 个场景都做过真机全量回归（Infinix X6766 / Android 17）：
 阿拉伯语 26/26、英语 26/26 通过。
@@ -436,7 +453,7 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
 | `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
-| `locale_switch.py` | 触发语言切换：写 `system_locales` + 重启 + 等开机 + 解锁，失败降级不阻断 |
+| `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |
 | `main.py` | 入口：零依赖 Web 后端（**只绑 127.0.0.1**）+ 场景注册表 + 自动开浏览器 |
 | `web/` | 前端**构建产物**（`index.html` + `assets/`）：场景目录 + 工作台 + 实时画面，深浅双主题 |

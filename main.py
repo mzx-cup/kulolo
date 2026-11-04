@@ -26,6 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import adbutils
 import locale_kit
 import locale_switch
+import runtime_paths
 import scenario_alarm
 import scenario_alarm_close
 import scenario_alarm_prompt
@@ -41,7 +42,8 @@ from phone_ctl import Device, UiError
 
 HOST = "127.0.0.1"
 PORT = 8765
-WEB = Path(__file__).parent / "web"
+# 前端产物是只读资源：源码直跑时在工作目录，打包后在 exe 的解包目录里。
+WEB = runtime_paths.resource_path("web")
 
 # 场景注册表：前端左侧列表按此渲染，POST /api/scenario/<id> 按此分发。
 # params 用声明式描述，前端据此动态生成参数行（time 类型会拆出 hour/minute 两个输入）。
@@ -670,6 +672,9 @@ _dev: Device | None = None
 _selected: str | None = None   # 用户在多个设备里指定的首选串号；失效后自动回落
 _model_cache: dict[str, str] = {}   # serial -> ro.product.model，读过就记住
 _last_adb_chase = 0.0   # 最近一次 adb 自愈尝试的时间戳（节流用）
+# 启动时解析出的 adb 绝对路径。打包后 PATH 里没有 adb，只有资源目录里那份；
+# 源码直跑时通常解析到系统安装的 adb。解析不到就退回裸 "adb" 交给 PATH。
+_ADB: str | None = runtime_paths.bootstrap()
 _SCRCPY_UNSET = object()
 _scrcpy: object = _SCRCPY_UNSET   # 未解析哨兵；解析后缓存 str | None
 
@@ -691,6 +696,13 @@ def _find_scrcpy() -> str | None:
     if _scrcpy is not _SCRCPY_UNSET:
         return _scrcpy  # type: ignore[return-value]
     found = os.environ.get("SCRCPY_PATH") or shutil.which("scrcpy")
+    if not found:
+        # 打包后 scrcpy 若一起塞进了资源目录，优先用那份（不依赖用户装在哪）
+        for cand in (runtime_paths.resource_path("scrcpy", "scrcpy.exe"),
+                     runtime_paths.resource_path("scrcpy.exe")):
+            if cand.is_file():
+                found = str(cand)
+                break
     if not found:
         for cand in SCRPCY_CANDIDATES:
             if Path(cand).is_file():
@@ -753,7 +765,9 @@ def _adb_devs() -> list[tuple[str, str]]:
         if _state["running"]:
             return devs
     try:
-        subprocess.run(["adb", "start-server"], capture_output=True, timeout=15)
+        # 用解析出来的 adb 绝对路径：打包后 PATH 里没有 adb，
+        # 只有资源目录里那份，直接写 "adb" 会 FileNotFoundError。
+        subprocess.run([_ADB or "adb", "start-server"], capture_output=True, timeout=15)
         devs = _list()
     except Exception:
         pass
@@ -1250,6 +1264,8 @@ def main():
 
     print(f"手机遥控台已启动: {url}")
     print(f"scrcpy: {_find_scrcpy() or '未找到（网页上对应按钮会置灰）'}")
+    print(f"adb: {_ADB or '未找到（请确认已安装 adb 并在 PATH 里）'}")
+    print(f"状态目录: {runtime_paths.state_dir()}")
     print("只监听 127.0.0.1，局域网不可访问。Ctrl+C 退出。")
 
     if not args.no_open:
@@ -1264,4 +1280,15 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # 打包成 exe 双击运行时没有父终端，异常一抛窗口就关掉了，
+        # 用户只看到黑框一闪。停在这儿让报错留在屏幕上。
+        traceback.print_exc()
+        if runtime_paths.is_frozen():
+            try:
+                input("\n出错了，按回车关闭窗口…")
+            except Exception:
+                pass
+        raise
