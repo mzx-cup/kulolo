@@ -135,6 +135,41 @@ def stage_scrcpy() -> bool:
     return True
 
 
+def check_deps() -> None:
+    """打包用的 Python 里必须有这些模块，否则打出来的 exe 双击就崩。
+
+    PyInstaller 只会把**能 import 到**的包打进 exe：
+    缺 adbutils 时打包照样「成功」，但产物一启动就
+    `ModuleNotFoundError: No module named 'adbutils'`，
+    要等用户双击才发现。所以这里先验一遍，缺了立刻失败。
+
+    注意 `retry2` 这个包装下来的模块名是 `retry`（见 run_pyinstaller 里的注释），
+    所以要验的是 `retry` 而不是 `retry2`。
+    """
+    import importlib.util
+
+    required = {
+        "adbutils": "adbutils",
+        "PIL": "Pillow",
+        "retry": "retry2",
+        "deprecation": "deprecation",
+    }
+    missing = [pip for mod, pip in required.items()
+               if importlib.util.find_spec(mod) is None]
+    if missing:
+        fail("当前 Python 缺这些包：" + "、".join(missing) +
+             f"\n        用的是 {sys.executable}"
+             "\n        先装上再打包："
+             f"\n        {sys.executable} -m pip install " + " ".join(missing))
+
+    # PyInstaller 自己也要有
+    if importlib.util.find_spec("PyInstaller") is None:
+        fail("当前 Python 没装 PyInstaller：" +
+             f"\n        {sys.executable} -m pip install pyinstaller")
+
+    say(f"依赖 OK：{'、'.join(required.values())} + PyInstaller（{sys.executable}）")
+
+
 def find_icon() -> Path | None:
     for name in ("assets/app.ico", "app.ico"):
         p = ROOT / name
@@ -191,6 +226,7 @@ def run_pyinstaller(with_scrcpy: bool) -> Path:
 
 def main() -> None:
     say(f"项目根目录：{ROOT}")
+    check_deps()
     check_web()
     if STAGE.exists():
         shutil.rmtree(STAGE)
