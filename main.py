@@ -71,24 +71,6 @@ LOCALE_PARAM = {"key": "locale", "type": "select", "label": "触发语言",
 
 SCENARIOS = [
     {
-        "id": "greeting",
-        "title": "生日祝福卡片",
-        "tag": "greeting · card",
-        "desc": "把手机时间调到日历里设置的生日当天，息屏静候约 1 分钟，"
-                "再亮屏上滑解锁，查看锁屏上的祝福卡片。"
-                "日历里没有生日时会自动在「今天+1」新建一个。",
-        "module": scenario_greeting,
-        "params": [
-            {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
-            {"key": "wait_sec", "type": "number", "label": "息屏",
-             "value": 60, "min": 5, "max": 300, "unit": "秒"},
-        ],
-        "specs": [
-            {"k": "息屏", "from": "wait_sec", "suffix": "s"},
-            {"k": "目标", "v": "生日当天"},
-        ],
-    },
-    {
         "id": "birthday",
         "title": "生日策划案卡片",
         "tag": "birthday · card",
@@ -105,6 +87,24 @@ SCENARIOS = [
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "from": "offset_days", "prefix": "今天 + ", "suffix": " 天"},
+        ],
+    },
+    {
+        "id": "greeting",
+        "title": "生日祝福卡片",
+        "tag": "greeting · card",
+        "desc": "把手机时间调到日历里设置的生日当天，息屏静候约 1 分钟，"
+                "再亮屏上滑解锁，查看锁屏上的祝福卡片。"
+                "日历里没有生日时会自动在「今天+1」新建一个。",
+        "module": scenario_greeting,
+        "params": [
+            {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
+            {"key": "wait_sec", "type": "number", "label": "息屏",
+             "value": 60, "min": 5, "max": 300, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "息屏", "from": "wait_sec", "suffix": "s"},
+            {"k": "目标", "v": "生日当天"},
         ],
     },
     {

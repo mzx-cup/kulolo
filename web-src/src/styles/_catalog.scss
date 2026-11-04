@@ -257,9 +257,11 @@
   border-radius: 8px;
   background: transparent;
   color: var(--ink-3);
-  font: 10.5px/1 var(--mono);
-  letter-spacing: .13em;
-  text-transform: uppercase;
+  /* 分组名是中文，不能走等宽字体栈：Cascadia/Consolas 没有汉字，
+     回退到的字形在 line-height:1 下上下会被 overflow 裁掉，笔画就断了。
+     行高留到 1.5 给汉字留出上下伸部，字距也收到 0（中文不需要 tracking）。 */
+  font: 10.5px/1.5 var(--sans);
+  letter-spacing: 0;
   text-align: left;
   cursor: pointer;
   transition: color .18s, background .18s;
@@ -278,6 +280,8 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  /* 兜底：即使以后有人把 overflow 改回去，也不裁字形 */
+  padding-block: 1px;
 }
 .group-head .g-count {
   margin-left: auto;
