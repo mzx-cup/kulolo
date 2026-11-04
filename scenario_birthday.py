@@ -46,14 +46,43 @@ DATE_SETTINGS_CMP = "com.android.settings/com.android.settings.Settings$DateTime
 # 必须检查是否落到 resolver 上，落上了就关掉重来。
 CALENDAR_VIEW_URI = "content://com.transsion.calendar/events"
 
+# 「AI 课程表」子页特征。这个页面是**只读的守门条件**：一旦命中就按返回键退出，
+# 任何情况下都不去点它（点进去会卡在课表页，随后日历控件全部找不到 → 报错）。
+TIMETABLE_HINTS = ("课表", "课程表", "timetable", "class schedule")
+
+
+def on_timetable(nodes: list[Node]) -> bool:
+    """当前界面是不是「AI 课程表」子页。
+
+    只在顶部标题区找线索：整页正文里出现「课表」二字不算（日历设置里也有这个词），
+    否则会把正常的日历页误判成课表页、白白按一堆返回键。
+    """
+    if any(n.rid.endswith("school_schedule_fragment") for n in nodes):
+        return True
+    title = [n for n in nodes
+             if n.center[1] < 620
+             and n.rid.endswith(("toolbar_title", "title", "tv_title"))]
+    if not title:
+        # 没有标题栏 rid 可依时，退一步看顶部 620px 内的可读文本
+        title = [n for n in nodes if n.center[1] < 620 and (n.text or n.desc)]
+    for n in title:
+        blob = f"{n.text or ''} {n.desc or ''}".lower()
+        if any(h in blob for h in TIMETABLE_HINTS):
+            return True
+    return False
+
 
 def launch_calendar(dev: Device, timeout: float = 10.0) -> bool:
-    """显式组件启动日历月视图，绕开「Open With」选择框。返回是否真的进到日历。
+    """显式组件启动日历，绕开「Open With」选择框。返回是否真的进到日历。
 
     历史：早期用 `am start -a VIEW -d <content uri>` 直接打开月视图，但它只是
     「内容 URI」，任何声明了 VIEW + content scheme 的应用（Google App、
     Phone Master、Terabox）都能接，英文系统 + 这些应用后装时会弹选择框。
     现在优先用显式组件（不需要任何 intent filter 解析），失败才退回 VIEW。
+
+    两条启动命令都**不带任何 extra**：实测一旦带上日历自己的额外参数，它会直接
+    跳到「AI 课程表」子页，而那个页面里没有任何日期格子，后续必然失败。
+    万一真落到了课表页，由 _ensure_calendar_month 的 on_timetable 守卫按返回键退出。
     """
     # 只用显式组件、不按 HOME：调用方刚从日历页返回时 HOME 会被 launcher 的动画
     # 吃掉一部分（实测焦点仍是日历，于是退化成「什么都不做」），而日历在前台时
@@ -64,7 +93,6 @@ def launch_calendar(dev: Device, timeout: float = 10.0) -> bool:
         dev.shell(cmd)
         try:
             dev.wait_focus("calendar", timeout=timeout)
-            return True
         except UiError:
             focus = dev.focus() or ""
             if "resolver" not in focus:
@@ -72,6 +100,15 @@ def launch_calendar(dev: Device, timeout: float = 10.0) -> bool:
             dev.log(f"打开日历时弹出了「Open With」选择框（{focus}），按返回键关掉重试")
             dev.key(KEY_BACK)
             time.sleep(0.6)
+            continue
+        # 起来了但落在课表页 → 按返回键退回日历主页，返回 True 让上层继续
+        for _ in range(3):
+            if not on_timetable(dev.dump()):
+                return True
+            dev.log("启动后落在「AI 课程表」子页，按返回键退回日历主页")
+            dev.key(KEY_BACK)
+            time.sleep(0.8)
+        return True
     return False
 
 CN_WEEK = "一二三四五六日"
@@ -102,15 +139,35 @@ _EN_MONTHS_ABBR = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
                    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 
-def month_title_index(text: str) -> int | None:
-    """月份标题 → 1..12。中文「十月」、英文「Oct」/「October 2026」都能认。"""
-    if text in CN_MONTH:
-        return CN_MONTH.index(text) + 1
-    low = text.lower()
+def month_title_parts(text: str) -> tuple[int | None, int | None]:
+    """月份标题 → (年份, 1..12)。
+
+    各机型写法差得很远，实测见过这些：'十月'、'2026年12月'、'12月'、'Oct'、
+    'October 2026'。年份认不出就返回 None，调用方按「只看月份」处理。
+    中文要**从十二月往一月倒着匹配**，否则「十一月」会被「一月」抢先命中。
+    """
+    if not text:
+        return None, None
+    year = None
+    m = re.search(r"(\d{4})\s*(?:年|[-/.]\s*\d)", text)
+    if m:
+        year = int(m.group(1))
+    for i in range(12, 0, -1):
+        if CN_MONTH[i - 1] in text:
+            return year, i
+    m = re.search(r"(\d{1,2})\s*月", text)
+    if m and 1 <= int(m.group(1)) <= 12:
+        return year, int(m.group(1))
+    low = text.strip().lower()
     for i in range(12):
         if low.startswith(_EN_MONTHS_ABBR[i].lower()) or low.startswith(_EN_MONTHS[i]):
-            return i + 1
-    return None
+            return year, i + 1
+    return year, None
+
+
+def month_title_index(text: str) -> int | None:
+    """月份标题 → 1..12。中文「十月」/「2026年12月」、英文「Oct」都能认。"""
+    return month_title_parts(text)[1]
 
 # 设置/对话框文案要兼容中英文系统（实测这台手机是英文界面）。
 AUTO_TIME_LABELS = ("自动设置时间", "自动确定日期和时间", "自动日期和时间",
@@ -354,11 +411,40 @@ def _dismiss_keyboard_terms(dev: Device, r: Runner) -> None:
         time.sleep(0.4)
 
 
+def _in_dialog(node: Node, nodes: list[Node]) -> bool:
+    """判断这个节点是不是长在真正的弹窗里（而不是页面上的横幅/正文）。
+
+    病根记录：X6766 日历主页有一条「拍照一键导入，自动生成上课提醒。」横幅
+    （rid=tv_banner_desc），它就是 AI 课程表的入口。旧版 _dismiss_popups 的
+    文案兜底把它当成弹窗按钮点了进去，于是「明明没点课表却进了课表」。
+    这里加上位置约束：必须有 dialog/alert 类容器祖先，或者本身是 Button 且在
+    屏幕下半部、字号不大——页面横幅两者都不满足。
+    """
+    rid = (node.rid or "")
+    if any(k in rid for k in ("button", "btn_")):
+        if node.cls and node.cls.endswith("Button"):
+            return True
+    # 找包含它的 dialog 容器（按 bounds 包住来判断，dump 树没给父子指针）
+    x1, y1, x2, y2 = node.bounds
+    for other in nodes:
+        orid = (other.rid or "").lower()
+        ocls = (other.cls or "").lower()
+        if "dialog" not in orid and "dialog" not in ocls and \
+                "alert" not in orid and "alert" not in ocls:
+            continue
+        a1, b1, a2, b2 = other.bounds
+        if a1 <= x1 and b1 <= y1 and x2 <= a2 and y2 <= b2:
+            return True
+    return False
+
+
 def _dismiss_popups(dev: Device, r: Runner, nodes: list[Node] | None = None) -> list[Node]:
     """关掉日历的引导/导入类弹窗，复用当前 dump，避免白 dump。
 
-    优先点 btn_negative（Cancel/取消，最安全），其次 btn_positive（确定/Import），
-    最后按常见中英文案兜底（含课表导入弹窗的 Cancel / Import / 暂不）。
+    只认两种东西（顺序严格）：
+      1. 真正的对话框按钮资源 id：btn_negative（Cancel/取消，最安全）→ btn_positive；
+      2. 文案兜底，且必须 _in_dialog() 为真——**页面横幅绝不能点**，
+         否则会误入「AI 课程表」（见 _in_dialog 的注释）。
     循环最多 4 轮：有些日历弹窗点掉一个还会再弹一个。
     """
     nodes = nodes if nodes is not None else dev.dump()
@@ -367,7 +453,9 @@ def _dismiss_popups(dev: Device, r: Runner, nodes: list[Node] | None = None) -> 
         if btn is None:
             btn = dev.find_opt(nodes=nodes, rid="btn_positive")
         if btn is None:
-            btn = _find_first_text(nodes, DIALOG_BUTTONS)
+            cand = _find_first_text(nodes, DIALOG_BUTTONS)
+            if cand is not None and _in_dialog(cand, nodes):
+                btn = cand
         if btn is None:
             return nodes
         r.log(f"检测到弹窗，点「{btn.text or btn.desc or '按钮'}」关闭")
@@ -546,49 +634,19 @@ def _disable_auto_time(dev: Device, r: Runner) -> None:
         raise UiError("auto_time 未能置 0，无法手动改日期")
 
 
-def _tap_month_tab(dev: Device, r: Runner, view: list[Node]) -> bool:
-    """平板布局：顶部有 年/月/周/日程 tab（tabTablet），点 text='月' 的切到月视图。"""
-    tab = dev.find_opt(nodes=view, rid="tabTablet")
-    if tab is None:
-        return False
-    for n in view:
-        if n.text == "月" and n.cls.endswith("TextView"):
-            x, y = n.center
-            l, t, rt, b = tab.bounds
-            if l <= x <= rt and t <= y <= b:
-                r.log("点顶部「月」tab 切到月视图")
-                dev.tap(x, y)
-                time.sleep(0.6)
-                return True
-    return False
-
-
-def _switch_month_view(dev: Device, r: Runner, view: list[Node]) -> bool:
-    """手机布局：点「切换视图」按钮（Switch calendar view）→ 弹窗选 Month/月。"""
-    menu = dev.find_opt(nodes=view, rid="btn_tab_menu")
-    if menu is None:
-        return False
-    r.log("点「切换视图」按钮")
-    dev.tap_node(menu, 0.5)
-    view = dev.dump()
-    for lab in ("Month", "月"):
-        opt = _find_first_text(view, (lab,))
-        if opt is not None:
-            r.log(f"点「{lab}」切到月视图")
-            dev.tap_node(opt, 0.6)
-            return True
-    return False
+def _month_box(dev: Device, view: list[Node]) -> Node | None:
+    """当前可见的日期区控件：月网格优先，其次周条。"""
+    return (dev.find_opt(nodes=view, rid="vp_month")
+            or dev.find_opt(nodes=view, rid="vp_week"))
 
 
 def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
                shown: str = "") -> None:
-    """X6878 类无月网格设备的周条（vp_week）翻周，直到目标日出现在周条里。
+    """周条视图（vp_week，无月网格）翻周，直到目标日出现在周条里。
 
     周条格子 desc 是完整日期（'Wednesday 28 October'），横滑即换一周。
     方向优先按「目标月份 vs 当前显示月份」决定：目标月早 → 向前翻（右滑），
     晚 → 向后翻（左滑），跨过月边界即换月；同月才按周条内日号相对位置。
-    注意：翻月只能靠周条跨月，不能 swipe 中部——主页的「AI Class Timetable」
-    横幅会拦截 swipe(1089) 弹出引导弹窗，直接按返回键退出，无需点击。
     """
     wk = dev.find(nodes=view, rid="vp_week")
     nums = []
@@ -621,98 +679,117 @@ def _flip_week(dev: Device, r: Runner, view: list[Node], target: date,
 
 def _ensure_calendar_month(dev: Device, r: Runner, target: date,
                            nodes: list[Node] | None = None) -> list[Node]:
-    """确保日历停在「显示 target 所在月份」的月视图，并返回命中时的控件树。
+    """确保日历停在 target 所在月份，并返回命中时的控件树。
 
-    日历会记上次停留的位置，且不同设备布局不同，几种形态都要收敛：
-      网格月视图：dateTitle='十月'/'October'，有 vp_month 网格（desc 可识别）
-         → 月份不对就横向翻页
-      周条/周视图：无 vp_month，只有 vp_week 周条（X6878 类）
-         → 月份对不上翻页；月份对了就翻周直到目标日出现在周条
-      年视图：  dateTitle='2026' → 点对应月份格子下钻一层
-      弹窗遮挡：dateTitle 缺失 → 先关弹窗重试，不再直接报错
+    打开日历就已经是「能直接点日期」的视图，不需要先点什么「月视图」按钮，
+    也不需要进「AI 课程表」——换月直接在日期区左右滑动即可（实测：左滑下一月、
+    右滑上一月）。所以这里只做两件事：
+      1. 清掉挡路的弹窗 / 事件详情页；
+      2. 月份不对就在日期区横向滑，月份对了就返回（日号对不上的兜底交给上层）。
+    年视图（dateTitle 只有年份）才需要点一下月份格子下钻。
     """
     descs = date_cell_descs(target)
-    for _ in range(8):
+    title_rid = "dateTitle"
+    moved = 0
+    guard = 0
+    no_title = 0
+    # 网格月视图一次滑动 = 一个月；周条视图一次滑动 = 一周（约 4~5 周才跨一个月）。
+    # 先用当前控件树判断是不是网格，决定「最多滑几次」的预算。
+    first = nodes if nodes is not None else dev.dump()
+    nodes = first
+    max_moves = 24 if dev.find_opt(nodes=first, rid="vp_month") is not None else 140
+    while moved < max_moves and guard < max_moves + 20:
+        guard += 1
         view = nodes if nodes is not None else dev.dump()
         nodes = None
-        # AI 课程表页守卫：日历可能停在「AI Class Timetable」子页，直接按返回键退出
-        tt = dev.find_opt(nodes=view, rid="toolbar_title")
-        if (dev.find_opt(nodes=view, rid="school_schedule_fragment") is not None
-                or (tt and ("timetable" in (tt.text or "").lower()
-                            or "课表" in (tt.text or "")))):
-            r.log(f"检测到 AI 课程表页，按返回键直接退出，无需任何点击")
+        # 课程表子页：只按返回键退出，绝不点击任何东西
+        if on_timetable(view):
+            r.log("停在「AI 课程表」子页，按返回键退出（不会去点它）")
             dev.key(KEY_BACK)
-            time.sleep(0.7)
+            time.sleep(0.8)
             continue
         if any(dev.find_opt(nodes=view, desc=d) for d in descs):
             return view
-        # 事件详情页守卫：上一条事件（如重要日提醒）建完会弹出详情页，
-        # 它没有 dateTitle，一直按「关弹窗」是空转，必须按返回键退出详情页。
-        # 详情页有两种布局：普通事件带 btn_more，重要日详情只有 toolbar_title='Event Info'。
+        # 事件详情页没有 dateTitle，一直「关弹窗」是空转，按返回键退出。
+        # 两种布局：普通事件带 btn_more，重要日详情只有 toolbar_title='Event Info'。
         if dev.find_opt(nodes=view, rid="btn_more") is not None and \
                 dev.find_opt(nodes=view, rid="qv_title") is None:
-            r.log("停在事件详情页，按返回键回到月视图")
+            r.log("停在事件详情页，按返回键回到日历")
             dev.key(KEY_BACK)
             time.sleep(0.7)
             continue
         det = [n for n in view
                if n.rid.endswith("toolbar_title") and (n.text or "").lower() == "event info"]
         if det:
-            r.log("停在重要日详情页，按返回键回到月视图")
+            r.log("停在重要日详情页，按返回键回到日历")
             dev.key(KEY_BACK)
             time.sleep(0.7)
             continue
-        title = dev.find_opt(nodes=view, rid="dateTitle")
-        shown = title.text if title else ""
+
+        title = dev.find_opt(nodes=view, rid=title_rid)
+        shown = (title.text or "").strip() if title else ""
         if not shown:
-            r.log("没看到月份标题（可能被弹窗遮挡），尝试关闭弹窗")
+            # 独立计数：以前这个分支只 continue 不涨 moved，会把 guard 预算吃光
+            # 然后空转上百次（周条设备预算 140+20），失败信息还只说「滑了 0 次」。
+            no_title += 1
+            if no_title > 6:
+                raise UiError(
+                    f"日历里一直看不到月份标题（试了 {no_title} 次），当前窗口是 "
+                    f"{dev.focus() or '未知'}、控件 {len(view)} 个。"
+                    f" 请手动切到日历月视图后重试。")
+            r.log(f"没看到月份标题（第 {no_title} 次，可能被弹窗遮挡），尝试关闭弹窗")
             view = _dismiss_popups(dev, r, view)
+            if not view:
+                time.sleep(0.6)
+                view = dev.dump()
             continue
-        cur_idx = month_title_index(shown)
-        if cur_idx:
-            if target.month == cur_idx:
-                # 月份对了但没匹配到日期格子
-                has_grid = dev.find_opt(nodes=view, rid="vp_month") is not None
-                has_week = dev.find_opt(nodes=view, rid="vp_week") is not None
-                if has_grid:
-                    # 已是网格月视图却仍匹配不上 → 交回上层用日号文本兜底
-                    return view
-                if has_week:
-                    _flip_week(dev, r, view, target, shown)   # 无网格：周条翻周逼近
-                    continue
-                if _tap_month_tab(dev, r, view) or _switch_month_view(dev, r, view):
-                    continue
-                return view
-            has_grid = dev.find_opt(nodes=view, rid="vp_month") is not None
-            has_week = dev.find_opt(nodes=view, rid="vp_week") is not None
-            if has_week and not has_grid:
-                # X6878 周条形态：翻月只能靠周条跨月边界，避开 AI 课程表横幅拦截
-                _flip_week(dev, r, view, target, shown)
-                continue
-            nxt = 1 if target.month > cur_idx else -1
-            r.log(f"当前显示 {shown}，目标 {target.month}月，向{'后' if nxt > 0 else '前'}翻页")
-            w, _ = dev.screen_size()
-            vp = dev.find_opt(nodes=view, rid="vp_month")
-            y = vp.center[1] if vp else 640    # 默认取中部上方，避开横幅(1127+)拦截
-            dev.swipe(w // 2 + nxt * 300, y, w // 2 - nxt * 300, y, 300)
-            time.sleep(0.7)
-        else:
-            # 年视图：点当年的月份格子下钻到月视图（中英 desc 都试）
-            yr = shown if re.fullmatch(r"\d{4}", shown) else str(target.year)
-            cand = [f"{yr}年{target.month}月", f"{target.month}月",
-                    _EN_MONTHS_ABBR[target.month - 1], _EN_MONTHS[target.month - 1]]
+
+        year, month = month_title_parts(shown)
+        box = _month_box(dev, view)
+
+        # 年视图：标题只有年份，点目标月份格子下钻到月视图
+        if month is None and box is None:
+            yr = year if year else target.year
             cell = None
-            for c in cand:
+            for c in (f"{yr}年{target.month}月", f"{target.month}月",
+                      _EN_MONTHS_ABBR[target.month - 1],
+                      _EN_MONTHS[target.month - 1]):
                 cell = dev.find_opt(nodes=view, desc=c)
                 if cell:
                     break
             if cell is None:
-                raise UiError(
-                    f"日历视图无法识别（dateTitle={shown!r}），已尝试关闭弹窗和返回键，"
-                    f"请手动切到月视图后重试")
-            r.log(f"日历停在年视图（{yr}），点月份格子进入月视图")
+                raise UiError(f"日历视图无法识别（dateTitle={shown!r}），请手动切到月视图后重试")
+            r.log(f"日历停在年视图（{yr}），点 {target.month} 月格子进入月视图")
             dev.tap_node(cell, 1.0)
-    raise UiError(f"翻 8 次仍未找到日期 {descs}")
+            continue
+
+        if box is None:
+            raise UiError(f"日历里找不到日期区（dateTitle={shown!r}），请手动切到月视图后重试")
+
+        # 月份已经对了：网格视图直接返回（日号兜底交给上层），周条视图继续翻周
+        if month == target.month and (year is None or year == target.year):
+            if dev.find_opt(nodes=view, rid="vp_month") is not None:
+                return view
+            _flip_week(dev, r, view, target, shown)
+            moved += 1
+            continue
+
+        nxt = 1
+        if month is not None:
+            delta = (target.year - (year if year else target.year)) * 12 + (target.month - month)
+            nxt = 1 if delta > 0 else -1
+        has_grid = dev.find_opt(nodes=view, rid="vp_month") is not None
+        if not has_grid:
+            # 周条视图：滑一格只换一周，直接复用 _flip_week 的方向判断
+            _flip_week(dev, r, view, target, shown)
+            moved += 1
+            continue
+        r.log(f"当前显示 {shown}，目标 {target.month} 月，向{'后' if nxt > 0 else '前'}滑一页")
+        w, _ = dev.screen_size()
+        dev.swipe(w // 2 + nxt * 280, box.center[1], w // 2 - nxt * 280, box.center[1], 300)
+        time.sleep(0.7)
+        moved += 1
+    raise UiError(f"滑了 {moved} 次仍未找到日期 {descs}")
 
 
 def _edit_in_form(nodes: list[Node]) -> Node | None:
@@ -945,8 +1022,8 @@ def _select_calendar_day(dev: Device, r: Runner, target: date, note: str,
             nodes = dev.wait_nodes(timeout=8, settle=0.8, rid="dateTitle")
             break
         except UiError:
-            # 可能残留在课表页或上一条事件的详情页，按返回键回到月视图
-            r.log(f"没看到月视图（第 {attempt + 1} 次），当前窗口 {dev.focus()}，按返回键")
+            # 可能残留在事件详情页或别的子页，按返回键回到日历
+            r.log(f"没看到日历标题（第 {attempt + 1} 次），当前窗口 {dev.focus()}，按返回键")
             dev.key(KEY_BACK)
             time.sleep(0.7)
     nodes = _dismiss_popups(dev, r, nodes)

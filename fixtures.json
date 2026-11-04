@@ -2,10 +2,10 @@
   "devices": {
     "ASALE3741B000022": {
       "exam": {
-        "event_id": 59,
+        "event_id": 119,
         "calendar_id": 1,
-        "title": "FastExam",
-        "registered_at": "2026-10-27T17:29:34"
+        "title": "Bday101823",
+        "registered_at": "2026-11-04T11:11:11"
       },
       "none": {
         "event_id": 60,
@@ -13,57 +13,26 @@
         "title": "FastDay",
         "registered_at": "2026-10-27T17:55:08"
       },
-      "birthday": {
-        "event_id": 1,
-        "calendar_id": 1,
-        "title": "Bday091899",
-        "registered_at": "2026-11-03T16:45:04"
-      },
       "performance": {
         "event_id": 2,
         "calendar_id": 1,
         "title": "Bday101279",
         "registered_at": "2026-11-03T17:10:37"
-      }
-    },
-    "16667705BV000031": {
+      },
       "birthday": {
-        "event_id": 599,
-        "calendar_id": 3,
-        "title": "Bday112525",
-        "registered_at": "2026-10-28T15:00:28"
+        "event_id": 118,
+        "calendar_id": 1,
+        "title": "Bday101745",
+        "registered_at": "2026-11-04T11:06:24"
       }
     },
+    "16667705BV000031": {},
     "0826A15000003978": {
       "birthday": {
-        "event_id": 77,
+        "event_id": 158,
         "calendar_id": 1,
-        "title": "Bday110219",
-        "registered_at": "2026-11-02T11:23:51"
-      },
-      "anniversary": {
-        "event_id": 79,
-        "calendar_id": 1,
-        "title": "SeedAnniv",
-        "registered_at": "2026-10-28T16:57:28"
-      },
-      "exam": {
-        "event_id": 80,
-        "calendar_id": 1,
-        "title": "SeedExam",
-        "registered_at": "2026-10-28T16:58:22"
-      },
-      "performance": {
-        "event_id": 81,
-        "calendar_id": 1,
-        "title": "SeedShow",
-        "registered_at": "2026-10-28T16:59:17"
-      },
-      "none": {
-        "event_id": 82,
-        "calendar_id": 1,
-        "title": "SeedDay",
-        "registered_at": "2026-10-28T17:00:04"
+        "title": "Bday111055",
+        "registered_at": "2026-11-04T11:20:20"
       }
     }
   }
