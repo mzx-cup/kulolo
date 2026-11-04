@@ -411,6 +411,17 @@ python main.py
 `--scrcpy <路径>` 手动指定 scrcpy.exe。
 若端口已被占用（说明已有一个实例在跑），会提示并直接打开那个地址。
 
+## 打包成 exe
+
+```
+python build_exe.py
+```
+
+产物是 `dist/手机遥控台.exe`（单文件，双击即用，目标机不需要装 Python）。
+
+图标取自 `assets/app.ico`（库洛米，9 个尺寸 16~256）；想换图标就把新图存成
+`assets/icon-source.jpg` 后跑 `python tools/make_icon.py` 重新生成。
+
 ## 依赖
 
 - Python 3.12（仅此一项需要已安装）
@@ -458,6 +469,9 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `main.py` | 入口：零依赖 Web 后端（**只绑 127.0.0.1**）+ 场景注册表 + 自动开浏览器 |
 | `web/` | 前端**构建产物**（`index.html` + `assets/`）：场景目录 + 工作台 + 实时画面，深浅双主题 |
 | `web-src/` | 前端源码：Vue 3 + TypeScript + SCSS + Vite；改前端只改这里，再 `npm run build` |
+| `assets/app.ico` | 应用图标（9 个尺寸，16~256），`build_exe.py` 打包时自动带走 |
+| `assets/icon-source.jpg` | 图标源图：库洛米插画 |
+| `tools/make_icon.py` | 由源图重新生成 `app.ico` / `app.png`（`python tools/make_icon.py`） |
 | `fixtures.json` | 设备 fixture 登记（首次 seed 后自动生成；可删除重置） |
 
 ## 性能

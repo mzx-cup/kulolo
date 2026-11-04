@@ -18,7 +18,8 @@
 
 图标
 --------------------------------------------------
-有 `assets/app.ico` 就用它，没有就用 PyInstaller 默认图标。
+有 `assets/app.ico` 就用它（随仓库提供，由 `tools/make_icon.py` 生成），
+没有就用 PyInstaller 默认图标。
 """
 from __future__ import annotations
 
