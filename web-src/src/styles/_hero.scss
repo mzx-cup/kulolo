@@ -48,13 +48,18 @@
 
 .hero h2 {
   margin: 11px 0 9px;
-  font-family: var(--display);
-  font-size: clamp(28px, 3.05vw, 40px);
-  font-weight: 600;
-  line-height: 1.16;
+  /* 标题是中文，不能走 --display 衬线栈：Palatino/Georgia 没有汉字，
+     回退到 SimSun（宋体）后细横笔画在低 DPI 下会发虚断裂。
+     改用无衬线栈，笔画粗实、渲染稳定。 */
+  font-family: var(--sans);
+  font-size: clamp(26px, 2.9vw, 38px);
+  font-weight: 650;
+  line-height: 1.22;
   letter-spacing: .005em;
   color: var(--ink);
   text-wrap: balance;
+  /* 让字形有轻微向上呼吸的余地，避免个别字上下被行盒贴边裁掉 */
+  padding-block: 2px;
 }
 .lede {
   margin: 0;

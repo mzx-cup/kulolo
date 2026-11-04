@@ -47,12 +47,15 @@
 }
 .catalog-heading h2 {
   margin: 0;
-  font-family: var(--display);
+  /* 中文标题同 .hero h2：不用衬线栈，避免回退宋体后细笔画断裂 */
+  font-family: var(--sans);
   font-size: 24px;
-  font-weight: 600;
+  font-weight: 650;
   letter-spacing: .01em;
-  line-height: 1.1;
+  line-height: 1.35;
   color: var(--ink);
+  /* 字形上下留余量，防止被行盒贴边裁掉 */
+  padding-block: 2px;
 }
 .catalog-head-right {
   display: flex;

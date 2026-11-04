@@ -1,0 +1,111 @@
+// 排版与动效增强：在原有基础上提升「高级感」与「顺手」
+//
+// 原则：
+//   1. 不动结构（class 名与 DOM 严格对齐），只做视觉与节奏的打磨；
+//   2. 一切用现有 token，换主题自动跟着变；
+//   3. 动效克制：快进慢出，反馈清晰但不抢戏；
+//   4. 尊重 prefers-reduced-motion。
+
+/* ── 面板层次：更立体的投影与更柔和的边 ─────────────────────────── */
+.panel {
+  box-shadow:
+    var(--shadow-panel),
+    0 1px 0 0 rgba(255, 255, 255, .02);
+}
+.panel:hover {
+  border-color: var(--line-strong);
+}
+
+/* ── 卡片交互：更顺滑的悬浮与选中 ───────────────────────────────── */
+.catalog .card {
+  transition: background .2s var(--ease-out),
+              border-color .2s var(--ease-out),
+              transform .18s var(--ease-out),
+              box-shadow .24s var(--ease-out);
+}
+.catalog .card:hover {
+  transform: translateX(2px);
+}
+.catalog .card.on {
+  box-shadow: 0 10px 26px -20px var(--accent-glow),
+              inset 0 0 0 1px var(--amber-line);
+}
+
+/* ── 按钮：更明确的按压反馈 ─────────────────────────────────────── */
+.btn,
+.icon-btn {
+  transition: background .18s var(--ease-out),
+              border-color .18s var(--ease-out),
+              color .18s var(--ease-out),
+              transform .16s var(--ease-spring),
+              box-shadow .22s var(--ease-out);
+}
+.btn:active:not(:disabled),
+.icon-btn:active {
+  transform: translateY(1px) scale(.96);
+}
+
+/* ── 主按钮：更饱满的呼吸感 ─────────────────────────────────────── */
+.commit {
+  transition: transform .18s var(--ease-spring),
+              box-shadow .26s var(--ease-out),
+              filter .26s var(--ease-out);
+}
+.commit:hover:not(:disabled) {
+  transform: translateY(-2px) scale(1.012);
+}
+
+/* ── 规格标签：悬浮轻抬 ─────────────────────────────────────────── */
+.spec li {
+  transition: border-color .18s var(--ease-out),
+              transform .16s var(--ease-spring),
+              background .18s var(--ease-out);
+}
+.spec li:hover {
+  transform: translateY(-2px);
+}
+
+/* ── 面板标题的 tone 竖条：加一点呼吸光 ─────────────────────────── */
+.panel-title h3::before {
+  animation: toneGlow 3.2s var(--ease-in-out) infinite;
+}
+@keyframes toneGlow {
+  0%, 100% { box-shadow: 0 0 9px -2px var(--panel-tone, var(--amber)); }
+  50%      { box-shadow: 0 0 14px -1px var(--panel-tone, var(--amber)); }
+}
+
+/* ── 场景切换时标题的换入：更顺滑 ───────────────────────────────── */
+.hero-main.swap h2,
+.hero-main.swap .lede,
+.hero-main.swap .spec {
+  animation-duration: .5s;
+}
+
+/* ── 滚动条：更细、更隐形，悬停才显形 ───────────────────────────── */
+.steps::-webkit-scrollbar,
+.log::-webkit-scrollbar,
+.catalog-scroll::-webkit-scrollbar {
+  width: 8px;
+}
+.steps::-webkit-scrollbar-thumb,
+.log::-webkit-scrollbar-thumb,
+.catalog-scroll::-webkit-scrollbar-thumb {
+  background: var(--scroll-thumb);
+  border-radius: 4px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.steps::-webkit-scrollbar-thumb:hover,
+.log::-webkit-scrollbar-thumb:hover,
+.catalog-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--amber);
+  background-clip: padding-box;
+}
+
+/* ── 减少动态 ───────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .panel-title h3::before { animation: none; }
+  .catalog .card { transition: background .2s, border-color .2s; }
+  .commit { transition: filter .2s; }
+  .spec li { transition: none; }
+}
