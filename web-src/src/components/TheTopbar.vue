@@ -18,10 +18,16 @@ export default defineComponent({
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
+        <!-- 库洛米额头上那枚骷髅 -->
         <svg viewBox="0 0 32 32" fill="none">
-          <rect x="6.2" y="4.4" width="19.6" height="23.2" rx="6" stroke="currentColor" stroke-width="1.5" />
-          <path d="M13.2 11.3 21 15.8l-7.8 4.5z" fill="currentColor" />
-          <circle cx="24.6" cy="6.8" r="2.1" fill="var(--amber)" />
+          <path
+            d="M16 3.6c-5.5 0-9.6 3.8-9.6 8.6 0 2.9 1.5 5 3.4 6.2v4.1c0 1 .8 1.8 1.8 1.8h1.4v2.1c0 .6.5 1.1 1.1 1.1h3.8c.6 0 1.1-.5 1.1-1.1v-2.1h1.4c1 0 1.8-.8 1.8-1.8v-4.1c1.9-1.2 3.4-3.3 3.4-6.2 0-4.8-4.1-8.6-9.6-8.6z"
+            stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"
+          />
+          <ellipse cx="12.2" cy="12.6" rx="2.5" ry="3" fill="currentColor" />
+          <ellipse cx="19.8" cy="12.6" rx="2.5" ry="3" fill="currentColor" />
+          <path d="M16 17.4v2.6M13.4 22.4v1.6M16 22.4v1.6M18.6 22.4v1.6"
+                stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
         </svg>
       </span>
       <span class="brand-txt">

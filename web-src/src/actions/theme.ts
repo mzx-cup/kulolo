@@ -1,9 +1,17 @@
 import { state } from "@/stores/core";
 import { STORAGE_KEYS, writeText } from "@/lib/storage";
 
-const META_COLOR = { dark: "#080b10", light: "#f2ebdd" } as const;
+const META_COLOR = { dark: "#0d0812", light: "#fdf4f8" } as const;
 
 let switchTimer: number | null = null;
+
+/** 只同步 meta[theme-color]，不动 <html data-theme>。
+ *  boot.initTheme 首屏已经手写过 data-theme，就用它来补 meta。 */
+export function syncMetaColor(theme: string): void {
+  const t = theme === "light" ? "light" : "dark";
+  const meta = document.querySelector<HTMLMetaElement>("#theme-color");
+  if (meta) meta.content = META_COLOR[t];
+}
 
 /** 落主题：写 <html data-theme>、meta[theme-color]，可选存盘。
  *  不存盘的那次是首屏调用（index.html 的内联脚本已经把值放进来了）。 */
@@ -12,8 +20,7 @@ export function applyTheme(theme: string, persist = true): void {
   state.theme = t;
   document.documentElement.dataset.theme = t;
   if (persist) writeText(STORAGE_KEYS.theme, t);
-  const meta = document.querySelector<HTMLMetaElement>("#theme-color");
-  if (meta) meta.content = META_COLOR[t];
+  syncMetaColor(t);
 }
 
 /** 切主题时给 <html> 加一个短暂的 theme-switching class，

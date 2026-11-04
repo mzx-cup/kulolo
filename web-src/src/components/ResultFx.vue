@@ -12,8 +12,10 @@ interface Bit {
   style: Record<string, string>;
 }
 
-const CONFETTI_COLORS = ["#6fd6b0", "#9cebd0", "#e8b264", "#ffd28f", "#f4ecdc"];
-const ASH_COLORS = ["#6b5b45", "#8a7860", "#a8321f", "#b8ac98"];
+/* 成功彩纸：樱粉 / 薄荷 / 薰衣草 / 香槟白，跟库洛米主题同色系 */
+const CONFETTI_COLORS = ["#ffa6c9", "#ffd0e2", "#7fdcc0", "#c3a6ff", "#fdf3f8"];
+/* 失败灰烬：偏紫的炭黑，不再是旧主题的暖棕 */
+const ASH_COLORS = ["#5c4a5c", "#7a6478", "#a8324f", "#a89aae"];
 
 let seq = 0;
 

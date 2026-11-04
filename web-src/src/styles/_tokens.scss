@@ -1,5 +1,10 @@
 // 主题令牌：尺寸 / 缓动 / 字体 / 色调 + 深浅两套配色
-// 源：web/style.css 第 7~198 行（原样搬运，未改规则）
+//
+// 视觉主题：库洛米（Kuromi）——「午夜粉」深色 + 「奶油草莓」浅色。
+//   深色是主场：近黑的紫调底色 + 樱粉主色，像她的黑头巾和白骷髅。
+//   浅色走奶油白 + 草莓粉，甜但不刺眼。
+//   双马尾 / 骷髅 / 缎带这些造型元素不做成图片，全部用 CSS 画，
+//   保证和界面缩放、主题切换一致。
 
 /* ── 主题令牌 ───────────────────────────────────────────────────── */
 :root {
@@ -22,174 +27,179 @@
   --mono: "Cascadia Mono", "JetBrains Mono", "SF Mono", Consolas,
           ui-monospace, monospace;
 
-  --tone-amber: #e8b264;
-  --tone-rose: #ff9fb0;
-  --tone-jade: #6fd6b0;
-  --tone-blue: #7fb4ff;
-  --tone-violet: #b99bff;
-  --tone-cyan: #7fd9e8;
-  --tone-orange: #ffa46b;
+  /* 卡片色调：围着库洛米的配色轮转（樱粉 / 草莓红 / 薄荷 / 晴空 / 薰衣草 / 青提） */
+  --tone-amber: #ffa6c9;
+  --tone-rose: #ff8fab;
+  --tone-jade: #7fdcc0;
+  --tone-blue: #9bc4ff;
+  --tone-violet: #c3a6ff;
+  --tone-cyan: #8fe3f0;
+  --tone-orange: #ffb48a;
 }
 
 :root,
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --bg: #080b10;
-  --bg-elev: #0b0f15;
-  --panel: rgba(18, 24, 32, .72);
-  --panel-solid: #121821;
-  --panel-2: rgba(244, 236, 220, .045);
-  --panel-3: rgba(244, 236, 220, .075);
-  --field-bg: #0d131b;
-  --field-focus: #0b1017;
-  --input-bg: rgba(5, 8, 12, .55);
-  --card-hover: rgba(244, 236, 220, .035);
-  --card-active: rgba(232, 178, 100, .075);
+  /* 底色：带紫的近黑，比纯黑更「库洛米」 */
+  --bg: #0d0812;
+  --bg-elev: #120b18;
+  --panel: rgba(26, 16, 32, .72);
+  --panel-solid: #1a1020;
+  --panel-2: rgba(255, 214, 234, .05);
+  --panel-3: rgba(255, 214, 234, .085);
+  --field-bg: #150d1b;
+  --field-focus: #0f0914;
+  --input-bg: rgba(8, 4, 11, .55);
+  --card-hover: rgba(255, 214, 234, .04);
+  --card-active: rgba(255, 166, 201, .09);
 
-  --line: rgba(244, 236, 220, .09);
-  --line-strong: rgba(244, 236, 220, .18);
+  --line: rgba(255, 214, 234, .10);
+  --line-strong: rgba(255, 214, 234, .21);
 
-  --ink: #f4ecdc;
-  --ink-2: #d0c7b5;
-  --ink-3: #a79d8b;
-  --ink-4: #8a8172;
+  --ink: #fdf3f8;
+  --ink-2: #dcc8d6;
+  --ink-3: #b3a0b0;
+  --ink-4: #8d7c8c;
 
-  --amber: #e8b264;
-  --amber-bright: #ffd28f;
-  --amber-deep: #a97529;
-  --amber-soft: rgba(232, 178, 100, .13);
-  --amber-line: rgba(232, 178, 100, .42);
-  --accent-grad: linear-gradient(180deg, #ffd28f, #e8b264 52%, #b57c2f);
-  --on-accent: #1a1204;
+  /* 主色：樱粉 */
+  --amber: #ffa6c9;
+  --amber-bright: #ffd0e2;
+  --amber-deep: #c96a94;
+  --amber-soft: rgba(255, 166, 201, .14);
+  --amber-line: rgba(255, 166, 201, .44);
+  --accent-grad: linear-gradient(180deg, #ffd6e6, #ffa6c9 52%, #d97ba6);
+  --on-accent: #2a0d1a;
 
-  --jade: #6fd6b0;
-  --jade-deep: #2a7d63;
-  --jade-soft: rgba(111, 214, 176, .12);
-  --jade-grad: linear-gradient(180deg, #9cebd0, #4bb28e 52%, #2a7d63);
-  --on-jade: #041611;
+  --jade: #7fdcc0;
+  --jade-deep: #2a7d68;
+  --jade-soft: rgba(127, 220, 192, .13);
+  --jade-grad: linear-gradient(180deg, #a8f0dc, #5fc5a6 52%, #2a7d68);
+  --on-jade: #041712;
 
-  --rust: #ef7c6a;
-  --rust-deep: #8e2f25;
-  --rust-soft: rgba(239, 124, 106, .12);
-  --blue: #7fb4ff;
-  --blue-soft: rgba(127, 180, 255, .12);
+  --rust: #ff8a8a;
+  --rust-deep: #8e2f3f;
+  --rust-soft: rgba(255, 138, 138, .13);
+  --blue: #9bc4ff;
+  --blue-soft: rgba(155, 196, 255, .13);
 
-  --hero-glow: rgba(232, 178, 100, .12);
-  --glow-amber: rgba(232, 178, 100, .10);
-  --glow-jade: rgba(111, 214, 176, .055);
-  --glow-blue: rgba(127, 180, 255, .045);
-  --grid: rgba(244, 236, 220, .032);
-  --star: rgba(244, 236, 220, .55);
-  --star-opacity: .16;
+  /* 光晕：粉 / 紫 / 青，铺在她双马尾的那种层次感上 */
+  --hero-glow: rgba(255, 166, 201, .14);
+  --glow-amber: rgba(255, 166, 201, .13);
+  --glow-jade: rgba(196, 140, 255, .07);
+  --glow-blue: rgba(139, 214, 255, .06);
+  --grid: rgba(255, 214, 234, .035);
+  --star: rgba(255, 214, 234, .6);
+  --star-opacity: .18;
   --grain-opacity: .04;
   --grain-blend: screen;
 
-  --topbar-bg: rgba(8, 11, 16, .78);
-  --scrim: rgba(3, 5, 8, .66);
-  --modal-bg: #121821;
-  --toast-bg: rgba(18, 24, 32, .95);
-  --device-frame: #05070a;
-  --phone-glow: rgba(232, 178, 100, .22);
-  --scroll-thumb: rgba(244, 236, 220, .17);
-  --kbd-bg: rgba(244, 236, 220, .06);
-  --ripple: rgba(244, 236, 220, .16);
-  --mark-bg: rgba(232, 178, 100, .24);
-  --mark-ink: #ffe0a8;
+  --topbar-bg: rgba(13, 8, 18, .78);
+  --scrim: rgba(6, 3, 9, .68);
+  --modal-bg: #1a1020;
+  --toast-bg: rgba(26, 16, 32, .95);
+  --device-frame: #08040c;
+  --phone-glow: rgba(255, 166, 201, .24);
+  --scroll-thumb: rgba(255, 214, 234, .19);
+  --kbd-bg: rgba(255, 214, 234, .07);
+  --ripple: rgba(255, 214, 234, .18);
+  --mark-bg: rgba(255, 166, 201, .26);
+  --mark-ink: #ffd9e7;
 
-  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .035) inset,
+  --shadow-panel: 0 1px 0 rgba(255, 255, 255, .04) inset,
                   0 26px 64px -38px #000;
   --shadow-pop: 0 50px 120px -30px rgba(0, 0, 0, .85),
-                0 0 0 1px rgba(244, 236, 220, .06) inset;
+                0 0 0 1px rgba(255, 214, 234, .07) inset;
   --shadow-lift: 0 18px 36px -24px rgba(0, 0, 0, .9);
-  --accent-glow: rgba(232, 178, 100, .42);
-  --fx-veil-a: rgba(9, 13, 19, .96);
-  --fx-veil-b: rgba(14, 20, 28, .90);
-  --fx-ok-ink: #9cebd0;
-  --fx-fail-ink: #ff9d8c;
+  --accent-glow: rgba(255, 166, 201, .45);
+  --fx-veil-a: rgba(13, 8, 18, .96);
+  --fx-veil-b: rgba(24, 14, 30, .90);
+  --fx-ok-ink: #a8f0dc;
+  --fx-fail-ink: #ffb0b0;
   --glass: blur(18px) saturate(1.18);
 }
 
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --bg: #f2ebdd;
-  --bg-elev: #ece3d2;
-  --panel: rgba(253, 250, 244, .80);
-  --panel-solid: #fdfaf4;
-  --panel-2: rgba(42, 36, 25, .045);
-  --panel-3: rgba(42, 36, 25, .08);
-  --field-bg: #fffdf8;
+  /* 奶油草莓：暖白底 + 草莓粉主色 */
+  --bg: #fdf4f8;
+  --bg-elev: #f9ecf2;
+  --panel: rgba(255, 251, 253, .80);
+  --panel-solid: #fffbfd;
+  --panel-2: rgba(74, 38, 56, .045);
+  --panel-3: rgba(74, 38, 56, .08);
+  --field-bg: #fffdff;
   --field-focus: #ffffff;
-  --input-bg: rgba(42, 36, 25, .045);
-  --card-hover: rgba(42, 36, 25, .04);
-  --card-active: rgba(154, 107, 31, .095);
+  --input-bg: rgba(74, 38, 56, .045);
+  --card-hover: rgba(74, 38, 56, .04);
+  --card-active: rgba(214, 78, 128, .10);
 
-  --line: rgba(42, 36, 25, .105);
-  --line-strong: rgba(42, 36, 25, .19);
+  --line: rgba(74, 38, 56, .11);
+  --line-strong: rgba(74, 38, 56, .20);
 
-  --ink: #2a2419;
-  --ink-2: #5a5244;
-  --ink-3: #766d5d;
-  --ink-4: #8f8676;
+  --ink: #2b1a24;
+  --ink-2: #5c4451;
+  --ink-3: #78606c;
+  --ink-4: #947c88;
 
-  --amber: #9a6b1f;
-  --amber-bright: #c9962e;
-  --amber-deep: #6b4a10;
-  --amber-soft: rgba(154, 107, 31, .10);
-  --amber-line: rgba(154, 107, 31, .38);
-  --accent-grad: linear-gradient(180deg, #c9962e, #9a6b1f 52%, #6b4a10);
-  --on-accent: #fff8e9;
+  --amber: #d64e80;
+  --amber-bright: #f06a99;
+  --amber-deep: #9e2f58;
+  --amber-soft: rgba(214, 78, 128, .10);
+  --amber-line: rgba(214, 78, 128, .38);
+  --accent-grad: linear-gradient(180deg, #f07fa6, #d64e80 52%, #9e2f58);
+  --on-accent: #fff5f8;
 
-  --jade: #2f7d4f;
-  --jade-deep: #1e5c38;
-  --jade-soft: rgba(47, 125, 79, .10);
-  --jade-grad: linear-gradient(180deg, #6fae84, #3d8a5d 52%, #2f7d4f);
+  --jade: #218a6b;
+  --jade-deep: #16624b;
+  --jade-soft: rgba(33, 138, 107, .10);
+  --jade-grad: linear-gradient(180deg, #6fbfa4, #2f9a79 52%, #218a6b);
   --on-jade: #ffffff;
 
-  --rust: #b23c28;
-  --rust-deep: #7c2117;
-  --rust-soft: rgba(178, 60, 40, .09);
-  --blue: #3b6fb0;
-  --blue-soft: rgba(59, 111, 176, .09);
+  --rust: #c23c50;
+  --rust-deep: #8c2133;
+  --rust-soft: rgba(194, 60, 80, .09);
+  --blue: #3f6fb5;
+  --blue-soft: rgba(63, 111, 181, .09);
 
-  --hero-glow: rgba(217, 164, 65, .13);
-  --glow-amber: rgba(217, 164, 65, .12);
-  --glow-jade: rgba(47, 125, 79, .05);
-  --glow-blue: rgba(59, 111, 176, .04);
-  --grid: rgba(52, 44, 30, .035);
-  --star: rgba(52, 44, 30, .4);
+  --hero-glow: rgba(230, 120, 160, .16);
+  --glow-amber: rgba(240, 130, 170, .15);
+  --glow-jade: rgba(160, 130, 230, .07);
+  --glow-blue: rgba(120, 180, 230, .06);
+  --grid: rgba(74, 38, 56, .035);
+  --star: rgba(74, 38, 56, .4);
   --star-opacity: .10;
   --grain-opacity: .05;
   --grain-blend: multiply;
 
-  --topbar-bg: rgba(253, 250, 244, .84);
-  --scrim: rgba(30, 25, 18, .34);
-  --modal-bg: #fdfaf4;
-  --toast-bg: rgba(253, 250, 244, .97);
-  --device-frame: #17130d;
-  --phone-glow: rgba(95, 68, 16, .18);
-  --scroll-thumb: rgba(42, 36, 25, .18);
-  --kbd-bg: rgba(42, 36, 25, .05);
-  --ripple: rgba(42, 36, 25, .12);
-  --mark-bg: rgba(217, 164, 65, .38);
-  --mark-ink: #5b3c0a;
+  --topbar-bg: rgba(255, 251, 253, .85);
+  --scrim: rgba(58, 30, 44, .32);
+  --modal-bg: #fffbfd;
+  --toast-bg: rgba(255, 251, 253, .97);
+  --device-frame: #2b1520;
+  --phone-glow: rgba(158, 47, 88, .18);
+  --scroll-thumb: rgba(74, 38, 56, .18);
+  --kbd-bg: rgba(74, 38, 56, .05);
+  --ripple: rgba(74, 38, 56, .12);
+  --mark-bg: rgba(240, 130, 170, .38);
+  --mark-ink: #7a2040;
 
-  --shadow-panel: 0 1px 2px rgba(45, 36, 22, .05),
-                  0 24px 54px -42px rgba(45, 36, 22, .38);
-  --shadow-pop: 0 40px 100px -32px rgba(40, 30, 15, .45);
-  --shadow-lift: 0 18px 36px -26px rgba(45, 36, 22, .35);
-  --accent-glow: rgba(154, 107, 31, .40);
-  --fx-veil-a: rgba(255, 252, 246, .96);
-  --fx-veil-b: rgba(243, 238, 226, .92);
-  --fx-ok-ink: #1e6b48;
-  --fx-fail-ink: #b23c28;
-  --tone-amber: #9a6b1f;
-  --tone-rose: #b0465c;
-  --tone-jade: #2f7d4f;
-  --tone-blue: #3b6fb0;
-  --tone-violet: #6d54b8;
+  --shadow-panel: 0 1px 2px rgba(74, 30, 48, .05),
+                  0 24px 54px -42px rgba(74, 30, 48, .38);
+  --shadow-pop: 0 40px 100px -32px rgba(74, 30, 48, .45);
+  --shadow-lift: 0 18px 36px -26px rgba(74, 30, 48, .35);
+  --accent-glow: rgba(214, 78, 128, .40);
+  --fx-veil-a: rgba(255, 250, 252, .96);
+  --fx-veil-b: rgba(250, 238, 244, .92);
+  --fx-ok-ink: #16624b;
+  --fx-fail-ink: #c23c50;
+
+  --tone-amber: #d64e80;
+  --tone-rose: #c23c50;
+  --tone-jade: #218a6b;
+  --tone-blue: #3f6fb5;
+  --tone-violet: #7a5cc4;
   --tone-cyan: #1f7a8c;
-  --tone-orange: #b85a24;
+  --tone-orange: #c4632a;
 }
-

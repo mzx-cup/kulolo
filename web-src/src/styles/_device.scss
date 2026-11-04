@@ -197,7 +197,10 @@
 .expand-btn svg { width: 14px; height: 14px; }
 .device-screen:hover .expand-btn,
 .expand-btn:focus-visible { opacity: 1; transform: none; }
-.expand-btn:hover { background: rgba(232, 178, 100, .85); color: #1a1204; }
+.expand-btn:hover {
+  background: color-mix(in srgb, var(--amber) 85%, transparent);
+  color: var(--on-accent);
+}
 .home-bar {
   position: absolute;
   z-index: 7;

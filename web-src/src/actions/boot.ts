@@ -3,6 +3,7 @@ import type { ScenarioView } from "@/types/api";
 import { STORAGE_KEYS, readText } from "@/lib/storage";
 import { api } from "@/lib/api";
 import { buildGroups, currentVisible, loadPrefs, selectScenario } from "./catalog";
+import { syncMetaColor } from "./theme";
 import { toast } from "./toast";
 
 /** 首次加载：拉场景 → 建分组 → 恢复上次选中的那个。 */
@@ -13,8 +14,8 @@ export function initTheme(): void {
   const t = saved === "light" ? "light" : "dark";
   state.theme = t;
   document.documentElement.dataset.theme = t;
-  const meta = document.querySelector<HTMLMetaElement>("#theme-color");
-  if (meta) meta.content = t === "light" ? "#f2ebdd" : "#080b10";
+  /* 颜色只认 applyTheme 里那一份 META_COLOR，别再抄一遍 */
+  syncMetaColor(t);
 }
 
 export async function loadScenarios(): Promise<void> {

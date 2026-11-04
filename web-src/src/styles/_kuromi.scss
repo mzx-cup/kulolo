@@ -1,0 +1,136 @@
+// 库洛米主题的「造型层」：骷髅纹、缎带、双马尾波浪背景、标题装饰
+//
+// 这里只放纯装饰的东西，不参与布局。所有图形都用 CSS / 内联 SVG 画，
+// 不依赖图片文件：图标打包进 exe 后仍然一致，也不会因为缩放糊掉。
+
+/* ── 背景：双马尾的波浪 + 骷髅暗纹 ─────────────────────────────── */
+.ambient .stars {
+  /* 原来是整齐的星点网格，改成稀疏的骷髅纹，更像她的头巾 */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120' viewBox='0 0 120 120'%3E%3Cg fill='none' stroke='%23ffd6ea' stroke-width='1.1' opacity='.55'%3E%3Cpath d='M22 18h12a7 7 0 0 1 7 7v4a7 7 0 0 1-7 7h-1v4h-10v-4h-1a7 7 0 0 1-7-7v-4a7 7 0 0 1 7-7z'/%3E%3Ccircle cx='23' cy='27' r='1.9' fill='%23ffd6ea' stroke='none'/%3E%3Ccircle cx='33' cy='27' r='1.9' fill='%23ffd6ea' stroke='none'/%3E%3C/g%3E%3C/svg%3E");
+  background-size: 120px 120px;
+  animation-duration: 120s;
+}
+
+/* 双马尾：左下、右下各一道粉紫的弧形光带 */
+.ambient::before {
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px),
+    radial-gradient(60% 90% at -6% 108%, rgba(255, 166, 201, .10), transparent 62%),
+    radial-gradient(55% 85% at 106% 104%, rgba(196, 140, 255, .09), transparent 60%);
+  background-size: 46px 46px, 46px 46px, 100% 100%, 100% 100%;
+}
+
+/* ── 标题：品牌名旁边挂一条小缎带 ───────────────────────────────── */
+.brand-txt h1 {
+  position: relative;
+  display: inline-block;
+}
+.brand-txt h1::after {
+  content: "";
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: -3px;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(90deg,
+    transparent,
+    var(--amber) 18%,
+    var(--tone-violet) 82%,
+    transparent);
+  opacity: .75;
+}
+
+/* 品牌图标换成骷髅头轮廓（原来的播放键） */
+.brand-mark {
+  position: relative;
+}
+.brand-mark::after {
+  /* 缎带小尾巴 */
+  content: "";
+  position: absolute;
+  right: -4px;
+  bottom: -3px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #fff, var(--amber) 62%, transparent 66%);
+  opacity: .95;
+  box-shadow: 0 0 10px var(--accent-glow);
+}
+
+/* ── 卡片序号：做成小圆章 ───────────────────────────────────────── */
+.catalog .card .card-main {
+  position: relative;
+}
+
+/* ── 选中卡片：左边一条粉色的「缎带书签」 ───────────────────────── */
+.catalog .card {
+  position: relative;
+}
+.catalog .card::before {
+  content: "";
+  position: absolute;
+  left: -1px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--amber-bright), var(--amber));
+  box-shadow: 0 0 12px var(--accent-glow);
+  transition: height .28s var(--ease-spring), opacity .2s;
+  opacity: 0;
+}
+.catalog .card.on::before,
+.catalog .card[aria-current="true"]::before {
+  height: 62%;
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .catalog .card::before { transition: none; }
+}
+
+/* ── 主按钮：缎带双线 ─────────────────────────────────────────────
+   外圈一道更亮的边 + 上面一行高光，像打了缎带的礼物盒。 */
+.commit {
+  border-radius: 17px;
+  border-color: color-mix(in srgb, var(--amber-bright) 55%, transparent);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .45) inset,
+    0 -1px 0 rgba(0, 0, 0, .06) inset,
+    0 0 0 1px rgba(255, 255, 255, .10),
+    0 18px 34px -18px var(--accent-glow);
+}
+.commit:hover:not(:disabled) {
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, .5) inset,
+    0 -1px 0 rgba(0, 0, 0, .06) inset,
+    0 0 0 1px rgba(255, 255, 255, .16),
+    0 22px 42px -16px var(--accent-glow);
+}
+
+/* ── 选中分组标题：粉色小圆点带呼吸光 ───────────────────────────── */
+.group .g-dot,
+.filters .dot {
+  box-shadow: 0 0 8px -1px var(--g-tone, var(--amber)),
+              0 0 0 3px color-mix(in srgb, var(--g-tone, var(--amber)) 14%, transparent);
+}
+
+/* ── 手机预览：粉光更明显一点 ─────────────────────────────────── */
+.device-screen {
+  box-shadow:
+    0 0 0 7px var(--device-frame),
+    0 0 0 8px color-mix(in srgb, var(--amber) 26%, var(--line)),
+    0 30px 56px -24px rgba(0, 0, 0, .75),
+    0 0 52px -20px var(--phone-glow);
+}
+
+/* ── 进度/结果条：成功用薄荷，失败用草莓红，已经是令牌色 ───────── */
+
+/* ── 滚动条：粉色细条 ──────────────────────────────────────────── */
+* {
+  scrollbar-color: var(--scroll-thumb) transparent;
+}
