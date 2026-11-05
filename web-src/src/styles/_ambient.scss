@@ -1,6 +1,10 @@
-// 环境背景：光晕 + 网格 + 星尘 + 噪点
+// 环境背景：柔光晕 + 斜向缎带 + 细密网点 + 噪点
+//
+// 设计意图：不用方格网（太像工程图纸、跟「场景工坊」的手作感冲突），
+// 改成「三层柔光 + 两条斜向缎带 + 一层极细网点」，从左上到右下有方向感，
+// 同时保持足够低的对比度，不抢前景卡片。
 
-/* ── 环境背景：光晕 + 网格 + 星尘 + 噪点 ─────────────────────────── */
+/* ── 环境背景 ───────────────────────────────────────────────────── */
 .ambient {
   position: fixed;
   inset: 0;
@@ -13,25 +17,60 @@
     radial-gradient(1100px 740px at 108% 110%, var(--glow-blue), transparent 64%),
     var(--bg);
 }
+
+/* ── 斜向缎带：两道极淡的斜光，替代原来的方格网 ─────────────────── */
 .ambient::before {
   content: "";
   position: absolute;
-  inset: 0;
+  inset: -10%;
   background-image:
-    linear-gradient(var(--grid) 1px, transparent 1px),
-    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
-  background-size: 48px 48px;
-  -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, #000 22%, transparent 80%);
-  mask-image: radial-gradient(ellipse 90% 80% at 50% 0%, #000 22%, transparent 80%);
+    linear-gradient(112deg,
+      transparent 34%,
+      color-mix(in srgb, var(--amber) 7%, transparent) 41%,
+      color-mix(in srgb, var(--amber) 11%, transparent) 45%,
+      color-mix(in srgb, var(--amber) 7%, transparent) 49%,
+      transparent 56%),
+    linear-gradient(112deg,
+      transparent 62%,
+      color-mix(in srgb, var(--tone-violet) 9%, transparent) 69%,
+      color-mix(in srgb, var(--tone-violet) 6%, transparent) 73%,
+      transparent 79%);
+  -webkit-mask-image:
+    radial-gradient(ellipse 78% 62% at 50% 0%, #000 12%, transparent 78%),
+    linear-gradient(180deg, #000, #000 60%, transparent 96%);
+  mask-image:
+    radial-gradient(ellipse 78% 62% at 50% 0%, #000 12%, transparent 78%),
+    linear-gradient(180deg, #000, #000 60%, transparent 96%);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
 }
+
+/* ── 细密网点：两层错开的 1px 圆点，近看是纹理、远看是雾 ────────── */
 .ambient .stars {
   position: absolute;
-  inset: -80px;
-  background-image: radial-gradient(var(--star) 1px, transparent 1.4px);
-  background-size: 140px 140px;
-  opacity: var(--star-opacity);
-  animation: starDrift 100s linear infinite;
+  inset: -120px;
+  background-image:
+    radial-gradient(circle at 1px 1px, var(--star) 1px, transparent 1.5px),
+    radial-gradient(circle at 1px 1px, var(--star) 1px, transparent 1.5px);
+  background-size: 26px 26px, 26px 26px;
+  background-position: 0 0, 13px 13px;
+  opacity: calc(var(--star-opacity) * .52);
+  -webkit-mask-image:
+    radial-gradient(ellipse 96% 88% at 50% 26%, #000 10%, transparent 82%);
+  mask-image:
+    radial-gradient(ellipse 96% 88% at 50% 26%, #000 10%, transparent 82%);
 }
+
+/* 斜向漂移：让网点缓慢流动，不至于死板 */
+@keyframes dotDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-26px, 26px, 0); }
+}
+.ambient .stars {
+  animation: dotDrift 90s linear infinite;
+}
+
+/* ── 噪点：压一层极细颗粒，消除渐变的色带 ───────────────────────── */
 .ambient::after {
   content: "";
   position: absolute;
@@ -40,9 +79,4 @@
   mix-blend-mode: var(--grain-blend);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   pointer-events: none;
-}
-
-@keyframes starDrift {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-140px, 140px, 0); }
 }

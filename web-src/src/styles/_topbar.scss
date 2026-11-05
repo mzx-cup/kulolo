@@ -25,19 +25,31 @@
   min-width: 0;
 }
 .brand-mark {
+  position: relative;
   width: 34px;
   height: 34px;
   flex: none;
   display: grid;
   place-items: center;
   color: var(--ink-2);
-  border-radius: 10px;
-  border: 1px solid var(--line);
-  background: var(--panel-2);
-  box-shadow: 0 0 24px -10px var(--accent-glow);
-  transition: transform .26s var(--ease-spring), box-shadow .26s var(--ease-out);
+  border-radius: 11px;
+  border: 1px solid color-mix(in srgb, var(--amber) 34%, var(--line));
+  background:
+    radial-gradient(circle at 28% 22%, color-mix(in srgb, var(--amber) 22%, transparent), transparent 62%),
+    var(--panel-2);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--amber) 12%, transparent),
+    0 8px 22px -14px var(--accent-glow);
+  transition: transform .26s var(--ease-spring), box-shadow .26s var(--ease-out),
+              border-color .26s var(--ease-out);
 }
-.brand-mark:hover { transform: rotate(-4deg) scale(1.05); }
+.brand-mark:hover {
+  transform: rotate(-5deg) scale(1.06);
+  border-color: color-mix(in srgb, var(--amber) 58%, var(--line));
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--amber) 22%, transparent),
+    0 10px 26px -12px var(--accent-glow);
+}
 .brand-mark svg { width: 22px; height: 22px; display: block; }
 .brand-txt { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
 .brand h1 {
@@ -152,28 +164,39 @@
   flex: none;
 }
 
-/* ── 主题选择器下拉菜单 ─────────────────────────────────────────── */
-.theme-picker {
+/* ── 主题选择器：换装（连衣裙）图标 ─────────────────────────────── */
+/* 注意：.icon-btn 的 width / display 在 _buttons.scss 里，它比本文件后 @use，
+   单类同名会覆盖这里，所以统一用 .icon-btn.theme-picker 提高权重。 */
+.icon-btn.theme-picker {
   position: relative;
-  padding: 0 10px;
-  min-width: 44px;
+  /* .icon-btn 默认是 inline-grid（单图标居中），这里要并排放下衣服和箭头 */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: auto;
+  padding: 0 9px;
+  min-width: 52px;
+  gap: 0;
 }
 .theme-chip {
-  display: inline-block;
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(0, 0, 0, .3);
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, .9);
-  background: var(--amber);
-  transition: background .2s var(--ease-out), transform .2s var(--ease-spring), box-shadow .2s var(--ease-out);
+  display: inline-grid;
+  place-items: center;
+  width: 21px;
+  height: 21px;
+  color: var(--amber);
+  transition: transform .24s var(--ease-spring), color .2s var(--ease-out);
 }
-.theme-picker:hover .theme-chip { transform: scale(1.15); box-shadow: 0 0 0 2px var(--amber-bright), 0 0 8px var(--accent-glow); }
+.theme-chip svg { width: 21px; height: 21px; display: block; }
+.theme-picker:hover .theme-chip { transform: translateY(-1px) scale(1.08); }
 .theme-caret {
-  margin-left: 5px;
-  opacity: .85;
+  display: inline-grid;
+  place-items: center;
+  margin-left: 4px;
+  opacity: .8;
   transition: transform .2s var(--ease-out);
 }
+/* 箭头单独收窄，别跟着 .icon-btn svg 的 18px 走 */
+.icon-btn.theme-picker .theme-caret svg { width: 11px; height: 11px; }
 .theme-picker:hover .theme-caret { transform: rotate(180deg); }
 
 .theme-menu {

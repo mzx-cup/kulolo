@@ -46,28 +46,38 @@ export default defineComponent({
   <header class="topbar">
     <div class="brand">
       <span class="brand-mark" aria-hidden="true">
-        <!-- 库洛米造型：黑色头巾 + 白骷髅 + 粉色缎带 -->
+        <!-- 缎带蝴蝶结：两片外扩的尖角环 + 中间小方结，粉→紫渐变跟主题色联动。
+             用尖角而不是椭圆，是因为 22px 下椭圆会糊成三个圆点。 -->
         <svg viewBox="0 0 32 32" fill="none">
           <defs>
-            <radialGradient id="kuroBow" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stop-color="#ffd6ea" />
-              <stop offset="100%" stop-color="#ffb3d9" />
-            </radialGradient>
+            <linearGradient id="brandBow" x1="2" y1="6" x2="30" y2="26" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stop-color="var(--amber-bright, #ffd6ea)" />
+              <stop offset="46%" stop-color="var(--amber, #ffb3d9)" />
+              <stop offset="100%" stop-color="var(--tone-violet, #c3a6ff)" />
+            </linearGradient>
           </defs>
-          <!-- 头巾轮廓 -->
-          <path
-            d="M16 3c-5 0-9 3.5-9 8.5 0 2 1 3.5 2.5 4.5v3.5c0 1 .8 1.8 1.8 1.8h1.2v2c0 .6.5 1.1 1.1 1.1h3.6c.6 0 1.1-.5 1.1-1.1v-2h1.2c1 0 1.8-.8 1.8-1.8v-3.5c1.5-1 2.5-2.5 2.5-4.5 0-5-4-8.5-9-8.5z"
-            stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
-          />
-          <!-- 左眼 -->
-          <ellipse cx="12" cy="12.5" rx="2.6" ry="3.2" fill="currentColor" />
-          <!-- 右眼 -->
-          <ellipse cx="20" cy="12.5" rx="2.6" ry="3.2" fill="currentColor" />
-          <!-- 嘴巴 -->
-          <path d="M16 17.8v2.8M13.5 22.6v1.6M16 22.6v1.6M18.5 22.6v1.6"
-                stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-          <!-- 粉色缎带（头巾右侧） -->
-          <path d="M22 6q2 2 3 5t-1 6" stroke="url(#kuroBow)" stroke-width="3" stroke-linecap="round" />
+          <!-- 左环：中间收窄、外缘饱满，是一段真的缎带环而不是三角形 -->
+          <path d="M13.9 16
+                   C11.4 13.5 6.4 9.4 4.2 9.0
+                   C2.4 8.7 2.0 12.6 2.0 16
+                   C2.0 19.4 2.4 23.3 4.2 23.0
+                   C6.4 22.6 11.4 18.5 13.9 16 Z" fill="url(#brandBow)" />
+          <!-- 右环 -->
+          <path d="M18.1 16
+                   C20.6 13.5 25.6 9.4 27.8 9.0
+                   C29.6 8.7 30.0 12.6 30.0 16
+                   C30.0 19.4 29.6 23.3 27.8 23.0
+                   C25.6 22.6 20.6 18.5 18.1 16 Z" fill="url(#brandBow)" />
+          <!-- 环面高光：沿着上缘的一道缎带反光 -->
+          <path d="M11.6 13.6C9.2 11.9 6.2 10.2 4.6 10.0M20.4 13.6C22.8 11.9 25.8 10.2 27.4 10.0"
+                stroke="rgba(255, 255, 255, .55)" stroke-width="1.15" stroke-linecap="round" />
+          <!-- 中间结 -->
+          <rect x="12.9" y="11.5" width="6.2" height="9" rx="2.9" fill="url(#brandBow)" />
+          <rect x="12.9" y="11.5" width="6.2" height="9" rx="2.9"
+                stroke="rgba(255, 255, 255, .72)" stroke-width="1.05" />
+          <!-- 结上的竖向褶光 -->
+          <path d="M15.6 13.1v5.8" stroke="rgba(255, 255, 255, .5)"
+                stroke-width="1" stroke-linecap="round" />
         </svg>
       </span>
       <span class="brand-txt">
@@ -145,7 +155,34 @@ export default defineComponent({
         aria-label="选择主题色"
         @click="themeMenuOpen = !themeMenuOpen"
       >
-        <span class="theme-chip" :style="{ backgroundColor: 'var(--amber)' }" aria-hidden="true" />
+        <!-- 换装图标：一件连衣裙，裙身填充当前主题色 -->
+        <span class="theme-chip" aria-hidden="true">
+          <svg viewBox="0 0 32 32" fill="none">
+            <defs>
+              <linearGradient id="themeDress" x1="8" y1="6" x2="24" y2="28" gradientUnits="userSpaceOnUse">
+                <stop offset="0%" stop-color="var(--amber-bright, #ffd6ea)" />
+                <stop offset="100%" stop-color="var(--amber, #ffb3d9)" />
+              </linearGradient>
+            </defs>
+            <!-- 肩带 -->
+            <path d="M11.9 4.6v3.5M20.1 4.6v3.5"
+                  stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <!-- 裙身（上身收腰 + A 字裙摆）。描边用比填充更深的同色，
+                 否则 21px 下轮廓跟填充糊成一块，只剩一个色块。 -->
+            <path
+              d="M11.2 8.1h9.6l-.75 3.4c2.3 4.2 4.1 8.7 4.9 13.1.22 1.2-.7 2.2-1.95 2.2H8.95c-1.25 0-2.17-1-1.95-2.2.8-4.4 2.6-8.9 4.9-13.1l-.7-3.4z"
+              fill="url(#themeDress)"
+              stroke="color-mix(in srgb, var(--amber) 52%, #2a0f20)"
+              stroke-width="1.5" stroke-linejoin="round"
+            />
+            <!-- 腰线：低饱和深色，比白色更耐看 -->
+            <path d="M12.2 12.3c2.6.8 5 .8 7.6 0"
+                  stroke="rgba(58, 16, 40, .34)" stroke-width="1.05" stroke-linecap="round" />
+            <!-- 裙摆褶皱 -->
+            <path d="M13.6 17.4c.32 3.4.32 6.6 0 9.3M18.4 17.4c-.32 3.4-.32 6.6 0 9.3"
+                  stroke="rgba(58, 16, 40, .26)" stroke-width="1" stroke-linecap="round" />
+          </svg>
+        </span>
         <span class="theme-caret">
           <svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
             <path d="M3 4.5l3 3 3-3" />
