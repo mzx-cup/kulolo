@@ -25,6 +25,7 @@ const TONE_RULES: ReadonlyArray<readonly [RegExp, string]> = [
   [/玩机技巧/, "var(--tone-cyan)"],
   [/时间/, "var(--tone-cyan)"],
   [/位置|定位|跨国|跨城/, "var(--tone-blue)"],
+  [/停电|电力|outage/i, "var(--tone-orange)"],
 ];
 
 /** 把后端给的一维场景数组按 group 归并成目录用的结构，

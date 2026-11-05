@@ -153,6 +153,63 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
   先 0 再恢复原值）。顺序反了会让 gps provider 变成「不是 test provider」，之后 add/remove
   全部失效，mock 坐标就永久留在 `dumpsys location` 里（X6765 实测）
 
+**停电预警卡片**（power_outage_warning · 停电建议）
+
+> 这一组需要 **root 版设备**（`adb shell id` 要是 `uid=0(root)`）。要向
+> `com.transsion.tranradionet/.tce.TceService` 发 action，该服务受 `signature|privileged`
+> 的 `START_TCE_SERVICE` 保护，普通 `shell` 用户会被拒。
+
+流程（全程联网）：
+
+1. 检查 root（不是 `uid=0(root)` 直接报错，别浪费后面几分钟）
+2. 确认联网（ping `8.8.8.8`）
+3. 时区改内罗毕、国家改 KE：`setprop persist.sys.timezone Africa/Nairobi` +
+   `setprop persist.tr_oobe.country KE`
+4. 先解锁回桌面 —— **`pm clear` 会清掉「今天首次解锁」标记，所以第一次解锁必须留给真正的触发**
+5. 注入内罗毕常住区证据（等价于 `设置常住区-0727.bat`，纯 adb 实现）：
+   `pm grant` 定位权限 → `location_mode 3` → `SET_COUNTRY_OVERRIDE ke` →
+   `RESET_COUNTY all` → 连灌 5 个已完成夜晚（前 1~5 天 23:00 EAT）的
+   `INJECT_COUNTY_LOC --ef lat -1.286389 --ef lng 36.817223` → 等 8 秒 →
+   `DUMP_COUNTY` 读 `evidence dates=5` → `QUERY_COUNTY --es business_id power_outage_alert`
+6. `pm clear com.transsion.atomiccore` + `pm clear com.transsion.atomicbrain`
+7. 系统时间调到目标日 11:49（极速直设）
+8. 息屏 60 秒 → 亮屏 → 上滑解锁 → 等卡片
+
+**真正的卡点不是清包、也不是时间，而是常住区（County Resident）**：
+
+- 规则 `64379`（`AITIPS_Power_outage_warning`）的 5 条 ability 里 `29 = CONTAIN "KE"`
+  要求常住区在肯尼亚。设备默认解析成 `recommendType=CURRENT, recommend=CN-CQ/重庆`，
+  于是 `BlackoutIntent` 拿 `keywords=[重庆, CN-CQ]` 去查 KPLC，必然 `no matched outage`。
+- **GPS mock 没用**：test provider 只改 `dumpsys location` 的 `last location`，
+  `TceCountyResidentMgr` 用的是自己 ingest 的「夜间证据」，仍返回 CN-CQ。
+- 注入完 5 个夜晚后才变成 `recommendType=RESIDENT, recommend=KE-30/Nairobi`，
+  `BlackoutIntent` 改成 `keywords=[Nairobi, KE-30]`，才查得到公告。
+
+规则 64379（从 APK 的 `assets/rule/AITIPS_Power_outage.json` 解出）：
+
+| ability | 条件 | 含义 |
+|---|---|---|
+| 1 | `EQUAL true` | 解锁触发 |
+| 2 | `RANGE 08_00_00~23_59_59`（`time_type=DAY`） | 只在白天 8:00~23:59 |
+| 36 | `EQUAL 1`（`after_hour=08`） | 当天 8 点后**第一次**解锁 |
+| 29 | `CONTAIN "KE"` | 常住区必须在肯尼亚 |
+| 22 | `EQUAL 1` | 每天最多 1 次 |
+
+同族还有两张卡（同一 APK 目录、`conflict_group: kplc_power_outage_active`，尚未实现）：
+`AITIPS_Power_outage_restoration.json`（64381，abilities 33/29/21：时段 + KE + 60 分钟间隔）、
+`AITIPS_Power_outage_saving.json`（64380，abilities 33/29/51/31：时段 + KE + 未充电 + 电量 ≤49%）。
+
+**目标日期为什么是 2026-10-15**：KPLC 接口只返回近几天数据，且按 `area` 精确匹配几乎全空
+（`area=Nairobi` / `area=Kiambu` 都 `total:0`），卡片实际是按 `region` 里的 `Nairobi` 匹配。
+扫过 60 天历史后，`2026-10-15` 的次日恰有一条 `region="NAIROBI REGION"` /
+`area="PART OF PANGANI"` / `06:00~14:00 UTC` 的公告，正好显示成卡片上的「明天 / 09:00-17:00」。
+可用日期还有 10-01、10-10~10-15、10-23~10-31、11-02~11-04、11-06。
+
+**判定卡片出没出**：优先看桌面控件树里有没有「停电预警」；**如果第一屏被别的卡片
+（实测英语环境下是 Premier League）占了**，就退一步查 logcat ——
+`SuggestionServiceCard[...AITIPS_Power_outage...]` 出现即算已派发到轮播队列。
+英语 / 阿拉伯语下实测都是走这条兜底路径，第 12 秒就判定成功。
+
 ## 回到桌面首页
 
 卡片在锁屏、通知栏、桌面都能出，但**桌面首页**（有「智慧建议」卡片区的那一页）
@@ -318,7 +375,8 @@ adb shell settings put system system_locales "ar-EG,zh-Hans-CN,en-GB,en-US"
 语言把流程跑完，不会因为语言这一步把整轮废掉。
 
 三套语言下 26 个场景都做过真机全量回归（Infinix X6766 / Android 17）：
-阿拉伯语 26/26、英语 26/26 通过。
+阿拉伯语 26/26、英语 26/26 通过。**停电预警卡片是这台机器换成 root 版 X6765 之后
+新增的第 27 个场景，中文 / 英语 / 阿拉伯语下也都单独跑通过。**
 
 多语言下踩到并修掉的坑：
 
@@ -463,6 +521,7 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_satellite.py` | 玩机技巧：卫星通话卡片，支持检查 + 清原子化模拟器 + 断网重连 + 3 天/10:00 |
 | `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
 | `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |
+| `scenario_power_outage.py` | 停电建议：停电预警卡片（**需 root**；注入内罗毕常住区 → 清原子化 → 目标日 11:49 → 息屏 60s → 解锁出卡） |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
 | `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |

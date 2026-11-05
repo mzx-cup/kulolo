@@ -78,9 +78,18 @@ def locale_family(raw_locale: str) -> str:
 
 
 def label_for_locale(locale: str) -> str:
-    """给前端/日志用的人类可读名字。"""
+    """给前端/日志用的人类可读名字。
+
+    设备上真正生效的 tag 常常和选项里的不一样（X6766 没有 ar-SA，
+    会被解析成 ar-EG），所以这里按「语言族」兜一层，阿拉伯语 / 英语 /
+    中文都能拿到对应的中文名，而不是回落成裸 tag。
+    """
     for value, name in TRIGGER_LOCALES:
         if same_locale(value, locale):
+            return name
+    family = locale_family(locale)
+    for value, name in TRIGGER_LOCALES:
+        if locale_family(value) == family:
             return name
     return locale or "未知"
 

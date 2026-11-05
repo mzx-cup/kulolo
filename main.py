@@ -36,6 +36,7 @@ import scenario_boomplay_music
 import scenario_cross_region
 import scenario_festival
 import scenario_greeting
+import scenario_power_outage
 import scenario_satellite
 import scenario_summary_report
 from phone_ctl import Device, UiError
@@ -470,6 +471,40 @@ SCENARIOS = [
             {"k": "事件", "v": "LocationEvent"},
             {"k": "国家", "v": "IN"},
             {"k": "城市码", "v": "空 / 1148 / 1057"},
+        ],
+    },
+    {
+        "id": "power_outage_warning",
+        "title": "停电预警卡片",
+        "tag": "kplc · outage · warning",
+        "desc": "需要 root 版设备（向 TceService 注入常住区受 START_TCE_SERVICE 保护）。"
+                "全程联网，时区改内罗毕、国家改 KE，注入 5 个内罗毕夜间证据把常住区"
+                "变成 KE-30/Nairobi；再清 atomiccore + atomicbrain，时间调到目标日 11:49，"
+                "息屏 60 秒后亮屏上滑解锁，约 25 秒后桌面出现停电预警卡片。",
+        "module": scenario_power_outage,
+        "group": "停电建议",
+        "icon": "bolt",
+        "retryable": False,
+        "params": [
+            {"key": "year", "type": "number", "label": "触发年份",
+             "value": 2026, "min": 2024, "max": 2100},
+            {"key": "month", "type": "number", "label": "触发月份",
+             "value": 10, "min": 1, "max": 12},
+            {"key": "day", "type": "number", "label": "触发日",
+             "value": 15, "min": 1, "max": 31},
+            {"key": "hour", "type": "number", "label": "触发小时",
+             "value": 11, "min": 8, "max": 23},
+            {"key": "minute", "type": "number", "label": "触发分钟",
+             "value": 49, "min": 0, "max": 59},
+            {"key": "off_sec", "type": "number", "label": "息屏等待",
+             "value": 60, "min": 10, "max": 300, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "解锁后等卡片",
+             "value": 90, "min": 20, "max": 240, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "规则", "v": "64379 · KPLC"},
+            {"k": "常住区", "v": "KE-30 / Nairobi"},
+            {"k": "时间", "v": "11:49 · 息屏 60s"},
         ],
     },
     {
@@ -929,9 +964,11 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
         kwargs["ask_fn"] = _ask_fn
         dev = get_device()
         if want_locale:
-            _emit({"t": "log", "no": 0,
-                   "msg": f"触发语言：{locale_kit.label_for_locale(want_locale)}"
-                          f"（{locale_kit.normalize_locale(want_locale)}）"})
+            _label = locale_kit.label_for_locale(want_locale)
+            _norm = locale_kit.normalize_locale(want_locale)
+            _shown = _label if _label.replace("-", "").lower() == _norm.replace("-", "").lower() \
+                else f"{_label}（{_norm}）"
+            _emit({"t": "log", "no": 0, "msg": f"触发语言：{_shown}"})
             # 用真实 Runner 承载语言切换的日志/步骤事件，前端进度条能看见这一段；
             # 重启后 adb transport 会换掉，所以下面重新取一次设备句柄。
             locale_switch.ensure_locale(
