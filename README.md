@@ -166,23 +166,43 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
 3. 时区改内罗毕、国家改 KE：`setprop persist.sys.timezone Africa/Nairobi` +
    `setprop persist.tr_oobe.country KE`
 4. 先解锁回桌面 —— **`pm clear` 会清掉「今天首次解锁」标记，所以第一次解锁必须留给真正的触发**
-5. 注入内罗毕常住区证据（等价于 `设置常住区-0727.bat`，纯 adb 实现）：
+5. **系统时间先调到目标日 11:49**（极速直设）——顺序很关键，见下面的「两个隐蔽前提」
+6. 把 GPS mock 到内罗毕（`-1.286389, 36.817223`）—— 见下面的「两个隐蔽前提」
+7. 注入内罗毕常住区证据（等价于 `设置常住区-0727.bat`，纯 adb 实现）：
    `pm grant` 定位权限 → `location_mode 3` → `SET_COUNTRY_OVERRIDE ke` →
    `RESET_COUNTY all` → 连灌 5 个已完成夜晚（前 1~5 天 23:00 EAT）的
-   `INJECT_COUNTY_LOC --ef lat -1.286389 --ef lng 36.817223` → 等 8 秒 →
-   `DUMP_COUNTY` 读 `evidence dates=5` → `QUERY_COUNTY --es business_id power_outage_alert`
-6. `pm clear com.transsion.atomiccore` + `pm clear com.transsion.atomicbrain`
-7. 系统时间调到目标日 11:49（极速直设）
-8. 息屏 60 秒 → 亮屏 → 上滑解锁 → 等卡片
+   `INJECT_COUNTY_LOC --ef lat -1.286389 --ef lng 36.817223` → **补一个
+   `time_ms=now` 的当前点位** → 等 10 秒 → `DUMP_COUNTY` 读
+   `evidence dates=5` / `current points=N` → `QUERY_COUNTY --es business_id power_outage_alert`
+8. `pm clear com.transsion.atomiccore` + `pm clear com.transsion.atomicbrain`
+9. 息屏 60 秒 → 亮屏 → 上滑解锁 → 等卡片
+10. `finally` 里还原 mock 定位（先 `remove-test-provider gps` 再 toggle `location_mode`，
+    顺序反了 provider 会卡死）
+
+**两个隐蔽前提（踩过坑，务必按这个顺序）**：
+
+1. **证据日期是相对「设备当前日期」算的**。同样注入 `10-10~10-14` 这 5 夜，设备日期还在
+   `11-05` 时 `DUMP` 也报 `evidence dates=5`，但 `TceCountyResidentMgr` 会说
+   `resident=null/NONE`（夜里被 `cleanupExpiredGeoCache removed=2` 清掉了）。把设备时间拨到
+   `10-15` 之后，**同样是这 5 夜**立刻变成 `resident=KE-30/HIGH`。所以必须先设时间再注入证据，
+   反了就白跑。
+2. **`dumpsys location` 的 last location 必须在内罗毕**。设备默认停在重庆
+   （`last location=Location[network 29.677337,106.673920 ...]`），`resolveCounty` 会打
+   `country mismatch profile=KE geocodeCountry=CN admin=Chong Qing Shi` →
+   `status=COUNTY_RESOLVE_FAILED`，而且会写 **negative cache**
+   （之后几次 `resolveCounty: negative cache hit` 都返回同一条），把注进去的 resident 证据整个丢掉。
+   先 mock 到内罗毕（或至少补一个当前点位让 `current points>0`）才能让 GEO 反查落到 KE。
 
 **真正的卡点不是清包、也不是时间，而是常住区（County Resident）**：
 
 - 规则 `64379`（`AITIPS_Power_outage_warning`）的 5 条 ability 里 `29 = CONTAIN "KE"`
   要求常住区在肯尼亚。设备默认解析成 `recommendType=CURRENT, recommend=CN-CQ/重庆`，
   于是 `BlackoutIntent` 拿 `keywords=[重庆, CN-CQ]` 去查 KPLC，必然 `no matched outage`。
-- **GPS mock 没用**：test provider 只改 `dumpsys location` 的 `last location`，
-  `TceCountyResidentMgr` 用的是自己 ingest 的「夜间证据」，仍返回 CN-CQ。
-- 注入完 5 个夜晚后才变成 `recommendType=RESIDENT, recommend=KE-30/Nairobi`，
+- **GPS mock 单独用不够，但它是必要的**：test provider 只改 `dumpsys location` 的
+  `last location`，`TceCountyResidentMgr` 用的是自己 ingest 的「夜间证据」；可要是
+  `last location` 停在重庆，`resolveCounty` 会因 `country mismatch` 写负缓存并把证据全丢。
+  两个一起上才行：先 mock 到内罗毕，再灌 5 个夜晚。
+- 注入完 5 个夜晚 + 当前点位后才变成 `recommendType=RESIDENT, recommend=KE-30/Nairobi`，
   `BlackoutIntent` 改成 `keywords=[Nairobi, KE-30]`，才查得到公告。
 
 规则 64379（从 APK 的 `assets/rule/AITIPS_Power_outage.json` 解出）：
@@ -206,9 +226,17 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
 可用日期还有 10-01、10-10~10-15、10-23~10-31、11-02~11-04、11-06。
 
 **判定卡片出没出**：优先看桌面控件树里有没有「停电预警」；**如果第一屏被别的卡片
-（实测英语环境下是 Premier League）占了**，就退一步查 logcat ——
-`SuggestionServiceCard[...AITIPS_Power_outage...]` 出现即算已派发到轮播队列。
-英语 / 阿拉伯语下实测都是走这条兜底路径，第 12 秒就判定成功。
+（实测英语环境下是 Premier League）占了**，就退一步查 logcat —— 按下面顺序找第一个命中的行，
+**取最靠前的那个证据**（`handleGetTpkPackage, serviceId: 64379` 最干净；`remoteList:` 那种整行
+会同时含早安卡，看着像别人出卡）：
+
+1. `handleGetTpkPackage, serviceId: 64379` —— 原子化按这个 serviceId 去取 TPK
+2. `generateCardView loadView call: 0-...AITIPS_Power_outage` —— 已经在建视图
+3. `onShow ServiceInfo(...AITIPS_Power_outage)` —— 展示过
+4. `displayMap: [0-...AITIPS_Power_outage` / 兜底 `AITIPS_Power_outage`
+
+实测：中文在第 25 秒从控件树直接看到「停电预警」；英语第 4 秒就在桌面命中 `Outage Alert`；
+阿拉伯语第 12 秒走 logcat 兜底判定为「已派发到智慧建议轮播」。
 
 ## 回到桌面首页
 

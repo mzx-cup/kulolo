@@ -25,9 +25,23 @@
 
 这套动作等价于共享盘上的 `设置常住区-0727.bat`，这里用纯 adb 实现，不依赖 PowerShell。
 
+**两个隐蔽前提（都是真机踩出来的）**：
+
+1. **夜间证据的日期必须相对「设备当前日期」**。`TceCountyResidentMgr` 只把最近
+   几夜算进 resident 投票：同样是注入 `10-10~10-14` 这 5 夜，设备日期在
+   `11-05` 时得到 `resident=null/NONE`（太旧，被 `cleanupExpiredGeoCache` 清掉），
+   把设备时间拨到 `10-15` 后立刻变成 `resident=KE-30/HIGH`。所以**必须先设时间、
+   再注入证据**，顺序反了在设备真实日期离目标日较远时必然失败。
+2. **`dumpsys location` 里不能留着别的地方**。`resolveCounty` 会拿 last location
+   反查地理，查到 `geocodeCountry=CN admin=Chong Qing Shi` 时直接判
+   `COUNTY_RESOLVE_FAILED`（还会写 negative cache，后面几次查询都返回同一条），
+   把 resident 证据整个丢弃。所以要先用 test provider 把 mock 定位打到内罗毕，
+   再补一个 `time_ms=now` 的当前点位。
+
 流程（用户 m08205 指定）：
-  root 校验 → 保网络 → 时区内罗毕 → 注入常住区 → pm clear 两个包 →
-  时间设到目标日 11:49 → 息屏 60 秒 → 亮屏上滑解锁 → 等卡片出现
+  root 校验 → 保网络 → 时区内罗毕 → **先把时间设到目标日 11:49** →
+  mock 定位到内罗毕 → 注入常住区 → pm clear 两个包 →
+  息屏 60 秒 → 亮屏上滑解锁 → 等卡片出现
 
 注意执行顺序：`pm clear com.transsion.atomicbrain` 会清掉「当天已触发次数」和
 「今天是否已首次解锁」两个标记，所以 **pm clear 之后的那一次解锁必须留给 11:49**，
@@ -90,6 +104,8 @@ CARD_HINTS_EN = ("power outage", "power outage warning", "outage", "kplc",
 CARD_HINTS_AR = ("انقطاع التيار", "انقطاع الكهرباء", "الكهرباء", "الطاقة")
 
 WAIT_CARD_SEC = 90
+# 常住区查询重试次数：刚注入完往往只拿到 CURRENT，要等地理编码回填才会变 RESIDENT
+QUERY_RETRIES = 4
 
 
 def _naive_epoch_ms(y: int, m: int, d: int, hour: int) -> int:
@@ -135,10 +151,14 @@ def _card_dispatched(dev: Device) -> str | None:
     if not out.strip():
         return None
     hints = (
-        "AITIPS_Power_outage",
-        "onShow ServiceInfo(transsion.intent.aitips.AITIPS_Power_outage",
+        # 最直接的证据：原子化按 64379 这个 serviceId 去取 TPK 包。
+        # 这一行短、无歧义，优先用它，免得印出 remoteList 那种同时含
+        # 好几张卡、看起来像别人出卡的整行日志。
         "handleGetTpkPackage, serviceId: 64379",
+        "generateCardView loadView call: 0-transsion.intent.aitips.AITIPS_Power_outage",
+        "onShow ServiceInfo(transsion.intent.aitips.AITIPS_Power_outage",
         "displayMap: [0-transsion.intent.aitips.AITIPS_Power_outage",
+        "AITIPS_Power_outage",
     )
     for hint in hints:
         if hint in out:
@@ -201,8 +221,44 @@ def _tce(dev: Device, action: str, *extras: str) -> str:
     return out
 
 
+def _mock_locate_nairobi(dev: Device, r: Runner) -> None:
+    """把 test provider 的 mock 定位打到内罗毕，并确认 last location 已换过来。
+
+    `resolveCounty` 遇到 last location 反查出的国家与 profile 不一致时，会直接
+    判 COUNTY_RESOLVE_FAILED 并且丢弃 resident 证据，所以这一步不能省。
+    """
+    r.step("把 mock 定位打到内罗毕（避免 resolveCounty 反查到重庆）")
+    dev.shell("appops set 2000 android:mock_location allow")
+    dev.shell("cmd location providers remove-test-provider gps")
+    out = dev.shell("cmd location providers add-test-provider gps "
+                    "--supportsAltitude --supportsSpeed --supportsBearing")
+    dev.shell(f"cmd location providers set-test-provider-location gps "
+              f"--location {NAIROBI_LAT},{NAIROBI_LNG} --accuracy 5")
+    dev.shell("cmd location providers set-test-provider-enabled gps true")
+    time.sleep(1.5)
+
+    last = ""
+    for _ in range(6):
+        last = dev.shell("dumpsys location | grep -m1 'last location'").strip()
+        if "mock" in last and "gps" in last:
+            break
+        time.sleep(1.0)
+    r.log(f"last location: {last[:160] or '（读不到）'}")
+    if "mock" not in last:
+        r.log("提示：mock 定位好像没生效，继续尝试（若常住区查询失败就是这里的问题）")
+    else:
+        r.ok(f"mock 定位 = {NAIROBI_LAT}, {NAIROBI_LNG}")
+    if out and "Exception" in out:
+        r.log(f"add-test-provider 返回：{out.strip()[:200]}")
+
+
 def _inject_county(dev: Device, r: Runner, target: _dt.date) -> None:
-    """灌 5 个内罗毕夜间证据，让 TceService 把常住区判成 KE-30/Nairobi。"""
+    """灌 5 个内罗毕夜间证据，让 TceService 把常住区判成 KE-30/Nairobi。
+
+    **前提：设备时间已经设到 target 当天**。`TceCountyResidentMgr` 只把「相对设备
+    当前日期最近几夜」算进 resident 投票，设备日期离 target 太远时证据会被
+    `cleanupExpiredGeoCache` 清掉，永远拿不到 resident。
+    """
     r.step("注入内罗毕常住区证据（等价于 设置常住区-0727.bat）")
 
     dev.shell(f"pm grant {TCE_PKG} android.permission.ACCESS_FINE_LOCATION")
@@ -210,6 +266,7 @@ def _inject_county(dev: Device, r: Runner, target: _dt.date) -> None:
     dev.shell("settings put secure location_mode 3")
     dev.shell("cmd location set-location-enabled true")
     dev.shell("setprop log.tag.TceCountyResidentMgr DEBUG")
+    dev.shell("setprop log.tag.TceService DEBUG")
 
     _tce(dev, "SET_COUNTRY_OVERRIDE", "--es", "country", COUNTRY.lower())
     time.sleep(1.5)
@@ -231,8 +288,17 @@ def _inject_county(dev: Device, r: Runner, target: _dt.date) -> None:
               f"({NAIROBI_LAT}, {NAIROBI_LNG})")
         time.sleep(3)
 
-    r.log("等待地理编码回填（8 秒）…")
-    time.sleep(8)
+    # 再补一个「当前时刻」的点：DUMP 里 current points 为 0 时同样是
+    # COUNTY_RESOLVE_FAILED，补一个 now 就能让 current 也指向内罗毕。
+    now_ms = int(time.time() * 1000)
+    _tce(dev, "INJECT_COUNTY_LOC",
+         "--ef", "lat", str(NAIROBI_LAT),
+         "--ef", "lng", str(NAIROBI_LNG),
+         "--el", "time_ms", str(now_ms))
+    r.log(f"补当前点位 time_ms={now_ms}")
+
+    r.log("等待地理编码回填（10 秒）…")
+    time.sleep(10)
 
     # DUMP 确认证据条数
     dev.shell("logcat -c")
@@ -242,6 +308,9 @@ def _inject_county(dev: Device, r: Runner, target: _dt.date) -> None:
     m = re.search(r"DUMP: evidence dates=(\d+)", dump_log)
     nights = int(m.group(1)) if m else 0
     r.log(f"证据夜数 evidenceDates={nights}")
+    mc = re.search(r"DUMP: current points=(\d+)", dump_log)
+    if mc:
+        r.log(f"当前点位数 current points={mc.group(1)}")
     if nights < NIGHT_COUNT:
         r.log(f"提示：只存下 {nights} 夜（期望 {NIGHT_COUNT}），"
               "可能是地理编码限流；继续尝试查询常住区")
@@ -250,34 +319,83 @@ def _inject_county(dev: Device, r: Runner, target: _dt.date) -> None:
     # 注意日志格式随系统版本不同：有的打 "QUERY_COUNTY result: TceLocationSemanticResult{...}"，
     # 有的只打 "sendResult: TceLocationSemanticResult{...}"（原子化自己查询时也会打），
     # 所以两种都认，只要拿到一条 KE 的语义结果就算过。
-    dev.shell("logcat -c")
-    _tce(dev, "QUERY_COUNTY", "--es", "business_id", BUSINESS_ID)
-    time.sleep(3)
-    query_log = dev.shell("logcat -d -s TceCountyResidentMgr")
+    #
+    # 另外 resident 的判定要等地理编码回填完成，刚注入完经常只拿到 CURRENT；
+    # 所以这里重试若干次，每次多等一会儿，别一次没中就放弃。
     line = ""
-    for ln in query_log.splitlines():
-        if "TceLocationSemanticResult{" in ln and "countryCode=KE" in ln:
-            line = ln
-            break
-    if not line:
+    query_log = ""
+    for attempt in range(1, QUERY_RETRIES + 1):
+        dev.shell("logcat -c")
+        _tce(dev, "QUERY_COUNTY", "--es", "business_id", BUSINESS_ID)
+        time.sleep(3.5)
+        query_log = dev.shell("logcat -d -s TceCountyResidentMgr")
+        line = ""
         for ln in query_log.splitlines():
-            if "QUERY_COUNTY result" in ln or "TceLocationSemanticResult{" in ln:
+            if "TceLocationSemanticResult{" in ln and "countryCode=KE" in ln:
                 line = ln
                 break
+        if not line:
+            for ln in query_log.splitlines():
+                if "QUERY_COUNTY result" in ln or "TceLocationSemanticResult{" in ln:
+                    line = ln
+                    break
+        if not line:
+            r.log(f"[{attempt}/{QUERY_RETRIES}] 查询还没有任何结果，等 5 秒重试…")
+            time.sleep(5)
+            continue
+        r.log(f"[{attempt}/{QUERY_RETRIES}] {line.strip()[:300]}")
+        if "RESIDENT" in line and "KE-30" in line:
+            r.ok("常住区 = KE-30 / Nairobi（RESIDENT）")
+            return
+        if attempt < QUERY_RETRIES:
+            # 只拿到 CURRENT / UNKNOWN 时，补一个当前点位再等下一轮
+            now_ms = int(time.time() * 1000)
+            _tce(dev, "INJECT_COUNTY_LOC",
+                 "--ef", "lat", str(NAIROBI_LAT),
+                 "--ef", "lng", str(NAIROBI_LNG),
+                 "--el", "time_ms", str(now_ms))
+            r.log("还没到 RESIDENT，补一个当前点位，等 8 秒重试…")
+            time.sleep(8)
+
     if not line:
         raise UiError(
-            "查询常住区没有任何结果，TceService 可能没起来。"
+            f"查询常住区 {QUERY_RETRIES} 次都没有任何结果，TceService 可能没起来。"
             f"logcat 尾部：{query_log[-400:]!r}")
-    r.log(line.strip()[:300])
     if "countryCode=KE" not in line:
         raise UiError(
             "常住区没有变成肯尼亚，停电卡会拿重庆去查 KPLC 公告、永远匹配不到。"
-            f"查询结果：{line.strip()[:300]}")
-    if "RESIDENT" not in line and "KE-30" not in line:
-        raise UiError(
-            "常住区还不是 RESIDENT/KE-30，只有 CURRENT 结果不足以出卡。"
-            f"查询结果：{line.strip()[:300]}")
-    r.ok("常住区 = KE-30 / Nairobi")
+            "检查：①adb 是否有 root；②目标日是否已设到设备（证据日期必须相对设备当前日期）；"
+            f"③mock 定位是否已到内罗毕。查询结果：{line.strip()[:300]}")
+    raise UiError(
+        f"常住区查询 {QUERY_RETRIES} 次仍不是 RESIDENT/KE-30。常见原因："
+        "①设备时间没先设到目标日就注入证据（证据会被当成过期清掉）；"
+        "②`dumpsys location` 的 last location 还是别的地方，resolveCounty 反查国家不一致后"
+        "直接判 COUNTY_RESOLVE_FAILED 并写进 negative cache。"
+        f"查询结果：{line.strip()[:300]}")
+
+
+
+def _clear_mock_location(dev: Device, r: Runner | None = None) -> None:
+    """收尾：删掉测试 provider，并重开一次定位开关清掉缓存的 mock 坐标。
+
+    顺序必须是先 `remove-test-provider`、再关再开（同 `scenario_cross_region`）：
+    反了会让 gps provider 进入「不是 test provider」状态，最后一条 mock 坐标就
+    永久留在 `dumpsys location` 里。
+    """
+    try:
+        dev.shell("cmd location providers remove-test-provider gps")
+        dev.shell("cmd location providers set-test-provider-enabled gps false")
+        mode = dev.shell("settings get secure location_mode").strip()
+        if mode and mode != "null":
+            dev.shell("settings put secure location_mode 0")
+            time.sleep(0.8)
+            dev.shell(f"settings put secure location_mode {mode}")
+            time.sleep(1.5)
+        if r:
+            r.log("已还原 mock 定位")
+    except Exception as exc:                      # 收尾失败不影响结果
+        if r:
+            r.log(f"还原 mock 定位时出错（不影响卡片）：{exc}")
 
 
 def _clear_atomic(dev: Device, r: Runner) -> None:
@@ -413,21 +531,28 @@ def run(dev: Device | None = None, emit=None, *,
     time.sleep(1.0)
     r.ok("已在桌面")
 
-    _inject_county(dev, r, target)
-    _clear_atomic(dev, r)
-
+    # 顺序很关键：TceCountyResidentMgr 只把「相对设备当前日期最近几夜」算进
+    # resident 投票，所以必须先把时间拨到目标日，再注入那 5 个夜晚。
     r.step(f"把系统时间调到 {target.isoformat()} {int(hour):02d}:{int(minute):02d}")
     set_system_datetime(dev, r, target, int(hour), int(minute))
     now = dev.shell("date '+%Y-%m-%d %H:%M:%S %Z'").strip()
     r.ok(f"设备时间 {now}")
 
-    off_at, wake_at = _screen_off_wait(dev, r, int(off_sec))
-    result["screen_off_at"] = off_at
-    result["screen_on_at"] = wake_at
+    try:
+        _mock_locate_nairobi(dev, r)
+        _inject_county(dev, r, target)
+        _clear_atomic(dev, r)
 
-    _wake_and_unlock(dev, r, unlock_retries)
-    hit = _wait_card(dev, r, int(wait_sec))
-    result["card_text"] = hit
+        off_at, wake_at = _screen_off_wait(dev, r, int(off_sec))
+        result["screen_off_at"] = off_at
+        result["screen_on_at"] = wake_at
+
+        _wake_and_unlock(dev, r, unlock_retries)
+        hit = _wait_card(dev, r, int(wait_sec))
+        result["card_text"] = hit
+    finally:
+        # mock 定位不能留在设备上（会污染后续所有定位相关的卡片）
+        _clear_mock_location(dev, r)
 
     r.step("确认智慧建议卡片")
     ensure_home_before_confirm(dev, r)
