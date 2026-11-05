@@ -215,9 +215,10 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
 | 29 | `CONTAIN "KE"` | 常住区必须在肯尼亚 |
 | 22 | `EQUAL 1` | 每天最多 1 次 |
 
-同族还有两张卡（同一 APK 目录、`conflict_group: kplc_power_outage_active`，尚未实现）：
-`AITIPS_Power_outage_restoration.json`（64381，abilities 33/29/21：时段 + KE + 60 分钟间隔）、
-`AITIPS_Power_outage_saving.json`（64380，abilities 33/29/51/31：时段 + KE + 未充电 + 电量 ≤49%）。
+同族另外两张卡（同一 APK 目录、`conflict_group: kplc_power_outage_active`，都已实现，
+见下面的「停电省电提醒卡片 / 停电恢复卡片」）：
+`AITIPS_Power_outage_saving.json`（64380，abilities 33/29/51/31：时段 + KE + 未充电 + 电量 ≤49%）、
+`AITIPS_Power_outage_restoration.json`（64381，abilities 33/29/21：时段 + KE + 60 分钟间隔）。
 
 **目标日期为什么是 2026-10-15**：KPLC 接口只返回近几天数据，且按 `area` 精确匹配几乎全空
 （`area=Nairobi` / `area=Kiambu` 都 `total:0`），卡片实际是按 `region` 里的 `Nairobi` 匹配。
@@ -237,6 +238,76 @@ Mock 触发流程（`scenario_atomic_mock.py`）：
 
 实测：中文在第 25 秒从控件树直接看到「停电预警」；英语第 4 秒就在桌面命中 `Outage Alert`；
 阿拉伯语第 12 秒走 logcat 兜底判定为「已派发到智慧建议轮播」。
+
+**停电省电提醒卡片**（power_outage_saving · 停电建议）
+
+> 同样需要 **root 版设备**（要 `setprop persist.*`、`pm clear`、`dumpsys battery`）。
+
+规则 64380（`AITIPS_Power_outage_saving`，与预警卡共用 intent，靠
+`businessData.tvData.tvTitle` 区分）：
+
+| ability | 条件 | 含义 |
+|---|---|---|
+| 33 | `EQUAL 0` | 时段触发（到点就触发） |
+| 29 | `CONTAIN "KE"` | 常住区必须在肯尼亚 |
+| 51 | `EQUAL false` | **不在充电** |
+| 31 | `EQUAL 49` | **电量 ≤ 49%** |
+
+流程（全程联网，用户 m08836 指定）：
+
+1. 检查/安装 `TransAtomicBrain_full_signed.apk`（版本 17.11.00.104 起才有 KPLC debug 区）
+2. 时区改内罗毕、国家改 KE
+3. **系统时间先调到目标日 12:29**（见下面「日期框自动带当天」）
+4. 先解锁回桌面 → `pm clear atomiccore` + `pm clear atomicbrain`
+5. `am start -n com.transsion.atomicbrain/.debug.Test`，滑到底部的「KPLC 停电卡片 debug」区
+6. 确认 `et_kplc_area = MATASIA`、`et_kplc_date = 目标日`（都是自动带出来的，**不要手输**）
+7. `dumpsys battery set level 30` + `set status 1` + **`unplug`**（只 set status 1 不够，
+   `usb powered` 仍是 true 时规则 51 不成立）→ 点「Mock 电量=30」
+8. 点「查询 KPLC API」，等 `text_kplc_result` 出现公告（含「未查询到」直接报错）
+9. 时间拨到 **12:30**（落在停电区间内）→ 息屏 10 秒 → 亮屏上滑解锁 → 出卡
+10. `finally` 里 `dumpsys battery reset` —— **不还原会污染后面所有跟电量相关的判断**
+
+默认目标日 **2026-09-18**、区域 **MATASIA**：KPLC 该日有一条
+`area="MATASIA, OLOIKA, NKOROI"` / `05:30~14:00 UTC`（= 08:30~17:00 EAT）的公告，
+12:30 在停电中、16:30 在结束前 2 小时。
+
+**停电恢复卡片**（power_outage_restore · 停电建议）
+
+规则 64381（`AITIPS_Power_outage_restoration`）：
+
+| ability | 条件 | 含义 |
+|---|---|---|
+| 33 | `EQUAL 0` | 时段触发 |
+| 29 | `CONTAIN "KE"` | 常住区必须在肯尼亚 |
+| 21 | `SMALLER 60 MIN` | 两张恢复卡之间至少 60 分钟 |
+
+流程与省电卡相同，区别只有三点：
+
+1. **不 mock 电量**（规则 64381 根本不看电量/充电状态）；
+2. 时间拨到 **16:30**（公告结束前 2 小时），而不是 12:30；
+3. **进流程第一件事就 `dumpsys battery reset`**。三张停电卡同属
+   `conflict_group: kplc_power_outage_active`，先到的会把后来的 DROP 掉。
+   上一轮省电卡留下的电池 mock 是**持久的**（`dumpsys battery set` 会一直覆盖真实电量），
+   不清就会让省电卡一直先出，日志里能看到
+   `TAB.BlackoutIntent: sendIntent: blocked by conflict_group, scenario=RESTORATION`。
+
+**两条真机上踩出来的通用前提**：
+
+1. **先设系统时间，再 `am force-stop` + `am start` 重启调试 App**。KPLC 日期框的默认值取的是
+   「设备当天」，这样日期就自动是 `2026-09-18`，**完全不用手输** —— 键盘一弹出整个 KPLC 区块
+   会滚出屏幕（`dumpsys input_method` 里 `mServedView=null`），此后再按记住的坐标点第二个
+   输入框必然点错（实测把日期写进了 area）。
+2. **`dumpsys battery set` 是持久的**，只有 `dumpsys battery reset` 能还原。跑完必须 reset。
+
+判定出卡：先看桌面控件树里的卡片文案（中 `省电建议` / `电力恢复时间`、英 `Save Power` /
+`Power Restoration`、阿 `توفير الطاقة` / `استعادة الطاقة`）；第一屏被别的卡占位时退一步查
+`logcat -d -s TpkServiceCardProvider:D` 里带 `tvTitle` 且含对应语言关键词的行。
+**注意日志会截断长标题**（阿拉伯语 `توفير الطاقة` 打成 `توفير ال***`），所以 logcat 侧要用
+短词（`توفير` / `استعادة`）而不是完整标题。
+
+三种语言实测（X6765 root 版，每轮 17~18 步 `ok: true`）：
+中文 `省电建议` / `电力恢复时间`、英语 `Save Power` / `Power Restoration`、
+阿拉伯语 `توفير الطاقة` / `استعادة الطاقة`，全部在第 0 秒就从控件树命中。
 
 ## 回到桌面首页
 
@@ -403,8 +474,8 @@ adb shell settings put system system_locales "ar-EG,zh-Hans-CN,en-GB,en-US"
 语言把流程跑完，不会因为语言这一步把整轮废掉。
 
 三套语言下 26 个场景都做过真机全量回归（Infinix X6766 / Android 17）：
-阿拉伯语 26/26、英语 26/26 通过。**停电预警卡片是这台机器换成 root 版 X6765 之后
-新增的第 27 个场景，中文 / 英语 / 阿拉伯语下也都单独跑通过。**
+阿拉伯语 26/26、英语 26/26 通过。**停电建议的三张卡是这台机器换成 root 版 X6765 之后
+新增的第 27~29 个场景，中文 / 英语 / 阿拉伯语下也都逐张真机跑通过。**
 
 多语言下踩到并修掉的坑：
 
@@ -550,6 +621,8 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_summary_report.py` | 体验报告：月度总结（下月第二个周一 08:59）/ 年度总结（当年 12-25 08:59） |
 | `scenario_cross_region.py` | 位置感知：跨国 / 跨城卡片（LocationEvent 直发，或上海→新德里定位切换） |
 | `scenario_power_outage.py` | 停电建议：停电预警卡片（**需 root**；注入内罗毕常住区 → 清原子化 → 目标日 11:49 → 息屏 60s → 解锁出卡） |
+| `scenario_power_saving.py` | 停电建议：停电省电提醒卡片（**需 root**；mock 电量 30% + KPLC 查公告 → 时间 12:30 → 息屏 10s → 解锁出卡） |
+| `scenario_power_restore.py` | 停电建议：停电恢复卡片（**需 root**；先清电池 mock 避免 conflict_group 抢卡 → KPLC 查公告 → 时间 16:30 → 息屏 10s → 解锁出卡） |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
 | `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |

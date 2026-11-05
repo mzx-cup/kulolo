@@ -37,6 +37,8 @@ import scenario_cross_region
 import scenario_festival
 import scenario_greeting
 import scenario_power_outage
+import scenario_power_restore
+import scenario_power_saving
 import scenario_satellite
 import scenario_summary_report
 from phone_ctl import Device, UiError
@@ -505,6 +507,77 @@ SCENARIOS = [
             {"k": "规则", "v": "64379 · KPLC"},
             {"k": "常住区", "v": "KE-30 / Nairobi"},
             {"k": "时间", "v": "11:49 · 息屏 60s"},
+        ],
+    },
+    {
+        "id": "power_outage_saving",
+        "title": "停电省电提醒卡片",
+        "tag": "kplc · outage · saving",
+        "desc": "需要 root 版设备。全程联网，时区改内罗毕、国家改 KE，装好 TransAtomicBrain，"
+                "时间先调到 09-18 12:29（debug 页的 KPLC 日期框默认取当天，所以必须先设时间），"
+                "清 atomiccore + atomicbrain，滚到调试页底部的 KPLC 区，把电量 mock 成 30% 且放电中，"
+                "点「Mock 电量=30」再点「查询 KPLC API」确认 MATASIA 当天有停电公告，"
+                "最后把时间拨到 12:30、息屏 10 秒再亮屏解锁，桌面出现省电建议卡片。",
+        "module": scenario_power_saving,
+        "group": "停电建议",
+        "icon": "bolt",
+        "retryable": False,
+        "params": [
+            {"key": "year", "type": "number", "label": "触发年份",
+             "value": 2026, "min": 2024, "max": 2100},
+            {"key": "month", "type": "number", "label": "触发月份",
+             "value": 9, "min": 1, "max": 12},
+            {"key": "day", "type": "number", "label": "触发日",
+             "value": 18, "min": 1, "max": 31},
+            {"key": "hour", "type": "number", "label": "触发小时",
+             "value": 12, "min": 0, "max": 23},
+            {"key": "minute", "type": "number", "label": "触发分钟",
+             "value": 30, "min": 0, "max": 59},
+            {"key": "battery", "type": "number", "label": "mock 电量",
+             "value": 30, "min": 1, "max": 100, "unit": "%"},
+            {"key": "off_sec", "type": "number", "label": "息屏等待",
+             "value": 10, "min": 10, "max": 300, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "解锁后等卡片",
+             "value": 90, "min": 20, "max": 240, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "规则", "v": "64380 · KPLC"},
+            {"k": "区域", "v": "MATASIA · 12:30"},
+            {"k": "电量", "v": "30% · 放电中"},
+        ],
+    },
+    {
+        "id": "power_outage_restore",
+        "title": "停电恢复卡片",
+        "tag": "kplc · outage · restoration",
+        "desc": "需要 root 版设备。流程与省电卡相同，但不需要 mock 电量——反而要先 "
+                "「dumpsys battery reset」清掉上一轮残留的电池 mock，否则省电卡会抢走同一个 "
+                "conflict_group 把恢复卡 DROP 掉。查完 KPLC API 确认 MATASIA 当天有停电公告后，"
+                "把时间拨到结束前 2 小时的 16:30，息屏 10 秒再亮屏解锁，桌面出现电力恢复时间卡片。",
+        "module": scenario_power_restore,
+        "group": "停电建议",
+        "icon": "bolt",
+        "retryable": False,
+        "params": [
+            {"key": "year", "type": "number", "label": "触发年份",
+             "value": 2026, "min": 2024, "max": 2100},
+            {"key": "month", "type": "number", "label": "触发月份",
+             "value": 9, "min": 1, "max": 12},
+            {"key": "day", "type": "number", "label": "触发日",
+             "value": 18, "min": 1, "max": 31},
+            {"key": "hour", "type": "number", "label": "触发小时",
+             "value": 16, "min": 0, "max": 23},
+            {"key": "minute", "type": "number", "label": "触发分钟",
+             "value": 30, "min": 0, "max": 59},
+            {"key": "off_sec", "type": "number", "label": "息屏等待",
+             "value": 10, "min": 10, "max": 300, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "解锁后等卡片",
+             "value": 90, "min": 20, "max": 240, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "规则", "v": "64381 · KPLC"},
+            {"k": "区域", "v": "MATASIA · 16:30"},
+            {"k": "前置", "v": "清掉电池 mock"},
         ],
     },
     {
