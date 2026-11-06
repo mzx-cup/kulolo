@@ -433,8 +433,9 @@ adb shell am start-service --user 0 \
 | 44 | 路况 latch | `EQUAL Boolean "true"`（active ability，智能路况触发闩） |
 | 45 | 异常天气记忆 | `EQUAL Boolean "true"`（记忆里的今天要有白名单内的异常天气） |
 
-异常天气白名单是 **`[7, 10, 12, 15]`**（对应 `TYPE_HEAVY_RAIN` 暴雨 / `TYPE_HIGH_TEMPERATURE` 高温 /
-`TYPE_MODERATE_RAIN` 中雨 / `TYPE_STRONG_WIND` 大风），**硬编码在 App 里，改不了**。
+异常天气白名单是 **`[7, 10, 12, 15]`**，用户给的中文名是
+**7 = 暴雨 / 10 = 大雨 / 12 = 中雨 / 15 = 雷雨**，`abnormal_type` 下拉就用这套名字。
+这个白名单**硬编码在 App 里，改不了**，所以只能往里挑值，不能让 App 接受别的值。
 
 ### mock 路径（默认，稳定可用）
 
@@ -456,42 +457,107 @@ mock 按钮返回的文本会直接把四条 ability 的自检结论打出来，
 
 ### real 路径（不碰 test brain）
 
-按需求给的 6 步走，**全程不打开调试页**：
+按需求给的步骤走，**正常链路全程不打开调试页**：
 
 1. 检查/安装同一个 APK
 2. 打开天气 App 并下拉刷新一次（首次会依次弹 GDPR「同意」页和系统定位授权页，自动点掉）
 3. 系统时间调到当天 12 点前（默认 11:28）
 4. `logcat` 查 `WeatherMemorySimulator|isAbnormalFromMemory|ingest normalized.*weather|SmartTrafficWeatherJudge`
-5. 发 `am startservice -n com.transsion.atomicbrain/.debug.DebugService -a brain.intent.action.DISPATCH_EVENT --es action_type simulate_weather_memory --es target_date <设备当天> --ei abnormal_type 7`
+5. 发 `am startservice -n com.transsion.atomicbrain/.debug.DebugService -a brain.intent.action.DISPATCH_EVENT --es action_type simulate_weather_memory --es target_date <设备当天> --ei abnormal_type <7/10/12/15>`
 6. 设「当前时间 + 1 分钟」闹钟 → 息屏等响 → 关闹钟 → 解锁回桌面
 
 > 闹钟时间必须**现读设备时钟**再 +1 分钟。用流程开始时算好的时刻会落在过去
 > （开天气 App + 刷新的耗时会让它过期），时钟会把它排到第二天。
 
-**这条路径在本版本 App 上出不了卡，原因是三件独立的事实**（都已实测确认）：
+**第 5 步那条命令在本版本 App 上不生效** —— `simulate_weather_memory` 这个 action 在
+17.10.00.101 / 17.11.00.104 里都不存在，`DebugService` 收到会打
+`E TAB.RuleActionHandler: handleTestDataAction: unknown action_type=simulate_weather_memory`。
+全 dex 扫 `simulate` / `weather_memory` / `abnormal_type` / `target_date` 都是 0 命中；
+本地 6 个 atomicbrain APK（含共享路径两个）全扫也都是 0 命中。所以代码里仍然**照原样发一次**
+并把结果如实记进 `simulate_detail`，然后改走下面这条真正能生效的路子。
 
-- **`simulate_weather_memory` 这个 action 在 17.10.00.101 里根本不存在**。
-  `DebugService` 收到会打 `E TAB.RuleActionHandler: handleTestDataAction: unknown action_type=simulate_weather_memory`。
-  全 dex 扫 `simulate` / `weather_memory` / `abnormal_type` / `target_date` 都是 0 命中；
-  本地 6 个 atomicbrain APK（含共享路径两个）全扫也都是 0 命中。
-- **`action_type` 的合法值其实是 `handleTestDataAction` 的分支名**（`listener` / `memory` /
-  `mock_json` / `percept` / `query`），而且**参数名必须是驼峰 `dataType` / `jsonData`**
-  （写成 `data_type` / `json_data` 会得到 `dataType=null`）。四条分支都试过：
-  `memory` 能写进 MemGov（`saveLatestData:type=WEATHER`）但自检读的是 MMKV 的
-  `WEATHER_CHANGE_value`；`mock_json` 对 38 个候选 dataType 全部 `createTestEvent unkown type`；
-  `percept` 报 `unsupported type`；`query` 报 `failed to set test data`。
-- **真实天气接口不下发「今天」的 `abnormalWeatherType`**。`brain_SP` 里
-  `WEATHER_CHANGE_value` 的 `days[]` 只在**未来某一天**偶尔带
-  `abnormalWeather: {abnormalWeatherType: 17}`（17 = 毛毛雨，**不在白名单**），
-  今天那条永远是 null。把设备日期拨到那天再开天气 App，自检确实读到
-  `今天(2026-11-07) abnormalWeatherType=17 ∉ 白名单` —— 证明读的就是「今天」那条，
-  但 17 出不了卡。换城市也没用：这台机器的天气 App 位置固定在「两江新区」，
-  把 gps / fused / network 三个 provider 全 mock 成迪拜也不变。
+#### 真正生效的做法：直接改 MMKV 里的天气记忆
 
-所以 real 路径的代码是**按需求原样实现的**（流程 14 步全跑通、闹钟会响会被关掉），
-但卡片出不来，`summary` 里会如实写「该版本不认识这个 action / 桌面上没有等到卡片」。
-要让这条路径真的出卡，需要一个**含 `simulate_weather_memory` 分支的新版 APK**，
-或者改成「mock 路径写天气记忆 + real 路径的闹钟 dismiss」的组合。
+`activity` 的天气记忆存在
+`/data/user_de/0/com.transsion.atomicbrain/files/mmkv/memory_current_status`，
+键名 `memory.current.status.weather`，值的形状是
+
+```json
+{"fields":{"kind":"SUCCESS","hasDays":"1"},"eventTime":<ms>,"source":"debug",
+ "provider":"com.rlk.weathers",
+ "extra":"{\"kind\":\"SUCCESS\",\"weather\":{\"cityName\":\"Debug City\",\"days\":[{\"date\":\"YYYY-MM-DD\",\"weatherName\":\"大雨\",\"minTemperature\":24,\"maxTemperature\":29,\"currentAbnormalWeather\":{\"abnormalWeatherType\":10}}]}}"}
+```
+
+`extra` 里是**字符串化的 JSON**（所以文件里存的是 `\"abnormalWeatherType\"`，
+校验时要搜不带引号的 `b"abnormalWeatherType"`）。App 是 DEBUGGABLE，`run-as` 能读写这个目录。
+
+MMKV 文件格式：`[u32 actualSize][u32 seed]` + 逐条
+`[varint keyLen][key][varint recordLen][varint valLen][val]`，
+`recordLen = valLen + len(varint(valLen))`，**记录之间有 `0x00` 对齐填充要跳过**，
+剩余补 `0x00` 到文件大小。同名 `.crc` 文件（4096 B）首 u32 =
+`zlib.crc32(data[4:actualSize+4])`，其余 guard 区原样保留。
+写入只能用 `adb push` 到 `/data/local/tmp` 再 `run-as cp` ——
+`run-as cat >` 报 `Permission denied`，`run-as tee` 会被 adb 的 stdin 截断。
+
+**必须同时满足五个条件，少一个都会被 App 自己追加的记录盖掉**（都是实测出来的）：
+
+1. `pm disable-user --user 0 com.rlk.weathers` —— 冻住天气 App
+2. `svc wifi disable` + `svc data disable` —— 断网，防天气云回刷
+3. `am force-stop com.transsion.atomicbrain` + `pm disable-user --user 0 com.transsion.atomicbrain`
+4. `run-as ... rm -f` 掉 `databases/` 下的 `taps_data_service*` / `weather_sdk_cache.db*` /
+   `tds_data_service*`（`taps_data_service-wal` 是 geohash 记忆的回刷源头，`grep -rl geohash` 只命中它）
+5. 写入时 `eventTime` 用**设备时钟** + 1 小时（`device_now_ms(dev) + MEMORY_TIME_LEAD_MS`），
+   写完 `pm enable --user 0 com.transsion.atomicbrain` 再启动 App
+
+注入之后**天气 App 与网络要继续冻着**，直到规则评完 —— 否则 App 重启后 10~20 秒内
+就会追加一条 `source=com.rlk.weathers` 的记录把我们的盖掉（MMKV 同 key 后写赢，
+`eventTime` 领先也没用）。所以 `inject_weather_memory(..., keep_frozen=True)`，
+`run_real` 外层有 `restore_once()` 兜底还原（异常路径也不会把天气 App 留在禁用态）。
+
+#### 闹钟这一环：必须「上滑关闭」+ 必须重复闹钟
+
+响铃页 `com.transsion.deskclock/...AlarmActivity` **没有任何停止按钮**：
+整屏只有时间、日期、robot 图标、橙色「10 分钟后提醒」（snooze）和底部「**上滑关闭**」。
+`uiautomator dump` 在这个页面永远拿不到控件树（持续刷新）。
+
+- **只有上滑关闭才算 dismiss**：`swipe(w/2, 0.93h → w/2, 0.35h, 300)`。
+  按返回键只会得到 `onAlarmListData: dismissed alarm not in list`，
+  **`MorningDismissLatch` 永远不 arm**，ability 44 恒不满足。
+- **必须是重复闹钟**（`--eia ...DAYS 1,2,3,4,5,6,7`）。一次性闹钟响过就从列表消失，
+  dismiss 时同样打 `dismissed alarm not in list`；重复闹钟响完顺延到明天、仍在列表里，
+  才能得到 `isLastMorningAlarmDismissed=true` → `MorningDismissLatch: arm`。
+- **设闹钟之前必须清掉历史闹钟**（`pm clear com.transsion.deskclock`）。
+  设备上只要还堆着前几轮跑剩的闹钟，coordinator 判断「上午最后一个闹钟」时会选中别的条目，
+  于是 dismiss 完仍然 `isLastMorningAlarmDismissed=false`，卡片出不来。
+
+`MorningDismissLatch` 是**进程内**的闩，不落任何文件（全盘搜 `last_morning_alarm_dismiss`
+只在 dex 里作为常量存在），所以 dismiss 之后必须立刻让规则评一次 —— 这也意味着
+**`am force-stop com.transsion.atomicbrain` 就够了**：系统 1 秒内自动拉起，
+`SmartTrafficDismissCoordinator` 重新订阅 `alarm_list`，完全不需要打开调试页界面。
+
+#### 万一没出卡：自动清当日计数重试一次
+
+ability 22 每天只给 1 次额度。第一次跑满 `wait_sec` 还没看到卡片时，
+`retry_on_miss=True` 会进一次调试页点「清理智能路况当日计数」，
+再重新注入天气记忆 + 重设闹钟跑第二遍。**只有这条重试路径会打开调试页**，正常链路不碰它。
+另外 `clear_day_count()` 也能不开界面就把 `brain_SP` 里 `<YYYY-MM-DD>-10058`
+的计数从 1 改回 0（brain_SP 的值是定长 int32、没有 `recordLen` 那层，改完同样要重算 `.crc`）。
+
+#### 实测结果：三语言 × 两条路径全部通过
+
+| 语言 | mock | real |
+|---|---|---|
+| 中文 `zh-Hans-CN` | 9 步，第 9 秒已触发 | 17 步，第 5 秒已触发 |
+| 英语 `en-US` | 9 步，第 9 秒已触发 | 17 步，**第 0 秒桌面直接命中「Smart Traffic」** |
+| 阿拉伯语 `ar-EG` | 9 步，第 9 秒已触发 | 17 步，第 12 秒已触发 |
+
+`abnormal_type` 也逐值验过：7 暴雨、10 大雨、12 中雨都真机出过卡，
+写进记忆的值与前端选的一致（`"abnormalWeatherType":10` / `weatherName":"大雨"`）。
+
+卡片经常**不在第一屏**（被优先级更高的早安卡挤到轮播索引 3），
+所以判定方式是「先看桌面控件树，5 秒后不行就查 logcat」——
+命中 `TpkServiceCard onCardTrigger ... AITIPS_Road_conditions` /
+`onCardExposed` / `LauncherPreAnalytics ... Aitips_AITIPS_Road_conditions` 任一即算已触发。
 
 ### 调试页的坑
 
@@ -711,7 +777,7 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_power_outage.py` | 停电建议：停电预警卡片（**需 root**；注入内罗毕常住区 → 清原子化 → 目标日 11:49 → 息屏 60s → 解锁出卡） |
 | `scenario_power_saving.py` | 停电建议：停电省电提醒卡片（**需 root**；mock 电量 30% + KPLC 查公告 → 时间 12:30 → 息屏 10s → 解锁出卡） |
 | `scenario_power_restore.py` | 停电建议：停电恢复卡片（**需 root**；先清电池 mock 避免 conflict_group 抢卡 → KPLC 查公告 → 时间 16:30 → 息屏 10s → 解锁出卡） |
-| `scenario_smart_traffic.py` | 路况天气：智能路况卡片（mock = 清当日计数 + mock 按钮；real = 天气 App + 12 点前 + 1 分钟后闹钟，全程不碰 test brain） |
+| `scenario_smart_traffic.py` | 路况天气：智能路况卡片。mock = 调试页清当日计数 + 点 mock 按钮；real = 天气 App + 12 点前 + 写 MMKV 天气记忆 + 1 分钟后重复闹钟上滑关闭，全程不碰 test brain |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
 | `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |
