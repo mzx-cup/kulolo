@@ -12,6 +12,7 @@ Mock 触发只是让 atomicbrain 直接注入一条事件，等价于系统自�
 """
 from __future__ import annotations
 
+import re
 import time
 
 from phone_ctl import KEY_HOME, KEY_WAKEUP, Device, UiError
@@ -22,10 +23,18 @@ from scenario_birthday import Runner, _unlock_with_retries, _wait_screen_on, ens
 ATOMIC_PACKAGE = "com.transsion.atomicbrain"
 ATOMIC_ACTIVITY = "com.transsion.atomicbrain/.debug.Test"
 ATOMIC_APK = (r"\\10.205.4.20\Odc_Temp_File\archermind\zixin.mei\apk"
-              r"\TransAtomicBrain_full_signed.apk")
-# 2026-11-03 实测：53800373 字节，普通 APK（1775 条目、有 AndroidManifest.xml），
-# `adb install -r -t -d` → Success，装完版本 17.11.00.104（versionCode 171100104）。
-ATOMIC_OK_SIZES = (53800373,)
+              r"\TransAtomicBrain_full_signed(5).apk")
+# 2026-11-05 实测：53395133 字节，普通 APK，`adb install -r -t -d` → Success，
+# 装完版本 17.10.00.101（versionCode 171000101）。
+# 用这个包而不是旧的 `TransAtomicBrain_full_signed.apk`（53800373 字节 /
+# 17.11.00.104）：旧包的调试页里**没有**「智能路况」那一整块按钮
+# （`btn_mock_smart_traffic` / `btn_reset_smart_traffic_day_count` /
+# `btn_query_smart_traffic_state`），也没法跑智能路况卡的触发。
+ATOMIC_OK_SIZES = (53395133,)
+# 只有带智能路况调试区的版本才够用；装成别的版本（比如 17.11.00.104）
+# 会「看起来装了但按钮全无」，所以要对版本做一次校验。
+ATOMIC_MIN_VERSION_CODE = 171000000
+ATOMIC_SMART_TRAFFIC_RID = "com.transsion.atomicbrain:id/btn_mock_smart_traffic"
 
 # kind -> (mock 按钮 resource-id, 按钮文案, 卡片名)
 MOCK_BUTTONS = {
@@ -37,17 +46,14 @@ MOCK_BUTTONS = {
 OPEN_TIMEOUT = 20.0
 
 
-def ensure_installed(dev: Device, r: Runner) -> None:
-    """没装就从网络共享装 TransAtomicBrain；已装直接返回。"""
-    r.step(f"检查 Mock 测试 App 是否已安装：{ATOMIC_PACKAGE}")
-    if _app_installed(dev, ATOMIC_PACKAGE):
-        r.ok("已安装")
-        return
+def _version_code(dev: Device, package: str) -> int:
+    """读已装包的 versionCode，读不到返回 0。"""
+    out = dev.shell(f"dumpsys package {package} | grep -m1 versionCode")
+    m = re.search(r"versionCode=(\d+)", out)
+    return int(m.group(1)) if m else 0
 
-    r.log(f"未检测到 Mock 测试 App，从网络共享安装：{ATOMIC_APK}")
-    problem = _zip_broken(ATOMIC_APK, ATOMIC_OK_SIZES)
-    if problem:
-        r.log(f"预检提示：{problem}")
+
+def _install(dev: Device, r: Runner, problem: str | None) -> None:
     rc, out = _adb(dev, "install", "-r", "-t", "-d", ATOMIC_APK)
     if rc != 0 or not _app_installed(dev, ATOMIC_PACKAGE):
         hint = f"根因：{problem}。" if problem else ""
@@ -56,6 +62,31 @@ def ensure_installed(dev: Device, r: Runner) -> None:
             f"adb 输出：{out.strip()[:300]}。共享路径：{ATOMIC_APK}")
     ver = dev.shell(f"dumpsys package {ATOMIC_PACKAGE} | grep -m1 versionName").strip()
     r.ok(f"安装成功 {ver.split('=')[-1] if '=' in ver else ''}".strip())
+
+
+def ensure_installed(dev: Device, r: Runner) -> None:
+    """确认装的是**带智能路况调试区**的那个版本，不够就覆盖安装。
+
+    只看「包在不在」是不够的：旧包 17.11.00.104 也装着，但它的调试页里
+    没有 `btn_mock_smart_traffic` 这些按钮，跑到一半才会报
+    「滑了 N 次仍没看到按钮」，很难看出是版本问题。所以这里直接比 versionCode。
+    """
+    r.step(f"检查 Mock 测试 App 是否已安装且在可用版本：{ATOMIC_PACKAGE}")
+    installed = _app_installed(dev, ATOMIC_PACKAGE)
+    code = _version_code(dev, ATOMIC_PACKAGE) if installed else 0
+    if installed and code >= ATOMIC_MIN_VERSION_CODE:
+        r.ok(f"已安装 versionCode={code}")
+        return
+
+    if installed:
+        r.log(f"已装版本 versionCode={code} 低于所需的 "
+              f"{ATOMIC_MIN_VERSION_CODE}（旧包调试页没有智能路况按钮），覆盖安装")
+
+    r.log(f"从网络共享安装：{ATOMIC_APK}")
+    problem = _zip_broken(ATOMIC_APK, ATOMIC_OK_SIZES)
+    if problem:
+        r.log(f"预检提示：{problem}")
+    _install(dev, r, problem)
 
 
 def open_mock_page(dev: Device, r: Runner) -> None:

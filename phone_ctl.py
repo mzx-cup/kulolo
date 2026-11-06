@@ -174,6 +174,9 @@ class Device:
         self._stayon_changed = False
         self._size: tuple[int, int] | None = None
         self._model: str | None = None
+        # 有些 XOS 版本 `uiautomator dump /dev/tty` 会写出 XML 但不退出，
+        # 一旦探到就置 True，本次运行后续都走落盘式 dump。
+        self._dump_file_mode = False
         # 刚插上/刚换机时 transport 可能还没注册好，先确认一次再开工，
         # 否则第一步就报 `device 'xxx' not found`。
         self._call(lambda: self.d.shell("echo ok"))
@@ -222,6 +225,111 @@ class Device:
 
     def shell(self, cmd: str) -> str:
         return self._call(lambda: self.d.shell(cmd))
+
+    def shell_timeout(self, cmd: str, timeout: float = 8.0) -> str | None:
+        """跑一条 shell 命令，超时就返回 None（**不重试、不抛传输层错误**）。
+
+        `uiautomator dump /dev/tty` 在某些 XOS 版本上会「XML 已经写出来了但进程
+        不退出」，`adb shell` 就一直挂着。`_call()` 会把这种超时当成掉线重试
+        三次再抛错，那是错的 —— 这里单独开一条不重试的路径，让它能被快速判掉。
+        """
+        try:
+            return self.d.shell(cmd, timeout=timeout)
+        except Exception as exc:  # noqa: BLE001 —— 超时/关闭都算「没拿到结果」
+            if type(exc).__name__ == "AdbTimeout" or "timeout" in str(exc).lower():
+                return None
+            if _TRANSPORT_DOWN_RE.search(str(exc)):
+                return None
+            raise
+
+    def _dump_via_file(self, timeout: float = 1.2) -> list[Node]:
+        """落盘式 dump：`uiautomator dump <file>` 写文件，再从文件读回控件树。
+
+        用于 `/dev/tty` 会挂死的设备（实测 X6766 / Android 17：XML 已经写出来了，
+        但 `uiautomator` 进程自己不退出，`adb shell` 就一直挂着）。
+
+        实测结论（不要随便改成后台子 shell）：
+        * `(uiautomator dump f &)` 经 adbutils 下去**根本不会启动** —— 外层 shell
+          一退出，子进程就被带走了，文件永远不出来；
+        * 直接前台跑 + 短超时是对的：文件 1~1.6 秒就写完整了，超时只是
+          「进程没退」，不影响文件内容，之后 `pkill -9` 收尾即可。
+        * 超时设 1.2 秒，单次 dump ≈ 2.2 秒。
+        * **上一轮遗留的 uiautomator 进程会占着无障碍服务**，新起的那个拿不到
+          桥接就一个字节都不写（实测报 `could not get idle state.`）——所以每次
+          开跑前先 pkill 并等 0.4 秒，拿不到内容再重试一次。
+        """
+        remote = "/data/local/tmp/_dsh_dump.xml"
+        for _ in range(2):
+            # 先清掉上一轮可能还卡着的 uiautomator，否则新的那个拿不到桥接
+            self.shell("pkill -9 -f uiautomator >/dev/null 2>&1")
+            self.shell(f"rm -f {remote}")
+            time.sleep(0.4)
+            # 前台跑，超时是我们故意设的：文件基本已经写好了，只是进程不退
+            self.shell_timeout(f"uiautomator dump {remote}", timeout=timeout)
+
+            # 轮询到 XML 收尾标签出现为止
+            deadline = time.time() + 5.0
+            xml = ""
+            while time.time() < deadline:
+                size = (self.shell(f"stat -c %s {remote} 2>/dev/null") or "").strip()
+                if size.isdigit() and int(size) > 200:
+                    xml = self.shell(f"cat {remote}")
+                    if "</hierarchy>" in xml:
+                        break
+                time.sleep(0.3)
+            self.shell(f"rm -f {remote}; pkill -9 -f uiautomator >/dev/null 2>&1")
+
+            end = xml.find("</hierarchy>")
+            if end != -1:
+                return [Node(dict(_ATTR_RE.findall(m.group(0))))
+                        for m in _NODE_RE.finditer(xml[: end + 12])]
+            self.log("[info] 落盘式 dump 没拿到完整控件树，重试一次")
+        return []
+
+    def dump(self, retries: int = 3) -> list[Node]:
+        """读控件树。
+
+        `uiautomator dump` 在界面持续刷新时会报 `could not get idle state.`
+        （实测：时钟 App 的闹钟列表，倒计时文字每秒都在变），旧实现直接
+        抛「控件树为空」。这里改成重试 + `--compressed` 兜底：压缩模式
+        不等窗口 idle，能拿到树（只是少了部分无用节点）。
+
+        另外有些 XOS 版本（实测 X6766 / Android 17）上 `uiautomator dump
+        /dev/tty` 会**写出 XML 但不退出**，`adb shell` 一直挂着 —— 所以
+        第一次带超时探一下，超时就整体切到落盘式 dump。
+        """
+        if self._dump_file_mode:
+            nodes = self._dump_via_file()
+            if nodes:
+                return nodes
+            raise UiError("控件树为空（落盘式 dump 也没拿到内容），请确认屏幕已亮。")
+
+        last = ""
+        for attempt in range(1, retries + 1):
+            flag = "" if attempt == 1 else " --compressed"
+            raw = self.shell_timeout(f"uiautomator dump{flag} /dev/tty", timeout=4.0)
+            if raw is None:
+                # 挂住了：这台机器不能用 /dev/tty 模式，改落盘
+                self.log("[info] uiautomator dump /dev/tty 不返回，"
+                         "改用落盘式 dump（本次运行后续都走落盘）")
+                self._dump_file_mode = True
+                self.shell("pkill -f uiautomator >/dev/null 2>&1")
+                nodes = self._dump_via_file()
+                if nodes:
+                    return nodes
+                last = "落盘式 dump 也没拿到内容"
+                time.sleep(0.6)
+                continue
+            end = raw.find("</hierarchy>")
+            xml = raw[: end + len("</hierarchy>")] if end != -1 else raw
+            nodes = []
+            for m in _NODE_RE.finditer(xml):
+                nodes.append(Node(dict(_ATTR_RE.findall(m.group(0)))))
+            if nodes:
+                return nodes
+            last = raw[:200]
+            time.sleep(0.6)
+        raise UiError("控件树为空，dump 可能失败。原始输出前 200 字符：" + repr(last))
 
     def clear_atomic_services(self):
         """清空原子服务缓存 + 桌面数据，重试卡片前调用。
@@ -392,29 +500,6 @@ class Device:
         return False
 
     # ---------- 控件树 ----------
-    def dump(self, retries: int = 3) -> list[Node]:
-        """读控件树。
-
-        `uiautomator dump` 在界面持续刷新时会报 `could not get idle state.`
-        （实测：时钟 App 的闹钟列表，倒计时文字每秒都在变），旧实现直接
-        抛「控件树为空」。这里改成重试 + `--compressed` 兜底：压缩模式
-        不等窗口 idle，能拿到树（只是少了部分无用节点）。
-        """
-        last = ""
-        for attempt in range(1, retries + 1):
-            flag = "" if attempt == 1 else " --compressed"
-            raw = self.shell(f"uiautomator dump{flag} /dev/tty")
-            end = raw.find("</hierarchy>")
-            xml = raw[: end + len("</hierarchy>")] if end != -1 else raw
-            nodes = []
-            for m in _NODE_RE.finditer(xml):
-                nodes.append(Node(dict(_ATTR_RE.findall(m.group(0)))))
-            if nodes:
-                return nodes
-            last = raw[:200]
-            time.sleep(0.6)
-        raise UiError("控件树为空，dump 可能失败。原始输出前 200 字符：" + repr(last))
-
     def find_all(self, nodes=None, **kw) -> list[Node]:
         nodes = self.dump() if nodes is None else nodes
         return [n for n in nodes if _match(n, **kw)]

@@ -40,6 +40,7 @@ import scenario_power_outage
 import scenario_power_restore
 import scenario_power_saving
 import scenario_satellite
+import scenario_smart_traffic
 import scenario_summary_report
 from phone_ctl import Device, UiError
 
@@ -578,6 +579,45 @@ SCENARIOS = [
             {"k": "规则", "v": "64381 · KPLC"},
             {"k": "区域", "v": "MATASIA · 16:30"},
             {"k": "前置", "v": "清掉电池 mock"},
+        ],
+    },
+    {
+        "id": "smart_traffic",
+        "title": "智能路况卡片",
+        "tag": "smart · traffic · weather",
+        "desc": "对应 atomicbrain 规则 10058（需 08:00~11:59 的末闹 dismiss 时刻 + 当天"
+                "异常天气进记忆 + 每天 1 次额度）。两种触发方式：①Mock——装 "
+                "TransAtomicBrain_full_signed(5).apk，打开调试页滑到底部，先点「清理智能"
+                "路况当日计数」再点「MOCK 智能路况卡」，回桌面即出卡（十几秒）；"
+                "②真实——打开天气 App、系统时间调到当天 12 点前、注入天气记忆，"
+                "再设一个「当前时间下一分钟」的闹钟，息屏等它响，关掉闹钟后解锁回桌面出卡。",
+        "module": scenario_smart_traffic,
+        "group": "路况天气",
+        "icon": "road",
+        "retryable": False,
+        "params": [
+            {"key": "method", "type": "select", "label": "触发方式",
+             "value": "mock", "options": METHOD_OPTIONS},
+            {"key": "abnormal_type", "type": "select", "label": "异常天气",
+             "value": 7, "options": [
+                 {"v": 7, "t": "暴雨（7 · HEAVY_RAIN）"},
+                 {"v": 10, "t": "高温（10 · HIGH_TEMPERATURE）"},
+                 {"v": 12, "t": "中雨（12 · MODERATE_RAIN）"},
+                 {"v": 15, "t": "大风（15 · STRONG_WIND）"},
+             ]},
+            {"key": "hour", "type": "number", "label": "真实链路系统时间（时）",
+             "value": 11, "min": 0, "max": 11},
+            {"key": "minute", "type": "number", "label": "真实链路系统时间（分）",
+             "value": 28, "min": 0, "max": 59},
+            {"key": "wait_sec", "type": "number", "label": "解锁后等卡片",
+             "value": 90, "min": 20, "max": 240, "unit": "秒"},
+            {"key": "alarm_wait", "type": "number", "label": "等闹钟响",
+             "value": 150, "min": 10, "max": 300, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "规则", "v": "10058 · 智能路况"},
+            {"k": "白名单", "v": "7 / 10 / 12 / 15"},
+            {"k": "额度", "v": "每天 1 次"},
         ],
     },
     {

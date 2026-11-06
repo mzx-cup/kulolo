@@ -141,14 +141,32 @@ def card_dispatched(dev: Device, titles) -> str | None:
 
 
 def open_debug_page(dev: Device, r: Runner) -> None:
-    """先设好时间再 force-stop + start，让 KPLC 日期框默认成目标日。"""
+    """先设好时间再 force-stop + start，让 KPLC 日期框默认成目标日。
+
+    开跑前必须先唤醒 + 解锁：`am start` 在锁屏/通知栏状态下会把界面推到
+    NotificationShade 后面，`wait_focus("atomicbrain")` 直接超时（实测）。
+    """
     r.step("重启 TransAtomicBrain 调试页（让 KPLC 日期默认成今天）")
+    # 锁屏 / 亮着通知栏时 am start 起不来，先唤醒解锁
+    if not dev.screen_on():
+        dev.key(KEY_WAKEUP)
+        _wait_screen_on(dev, True, timeout=4.0)
+    if dev.locked():
+        _unlock_with_retries(dev, r, 3)
+        time.sleep(0.6)
     dev.shell(f"am force-stop {ATOMIC_PACKAGE}")
     time.sleep(1.6)
     out = dev.shell(f"am start -n {ATOMIC_ACTIVITY}")
     if "Error" in out or "Exception" in out:
         raise UiError(f"启动 {ATOMIC_ACTIVITY} 失败：{out.strip()[:300]}")
-    dev.wait_focus("atomicbrain", timeout=20.0)
+    try:
+        dev.wait_focus("atomicbrain", timeout=20.0)
+    except UiError:
+        # 偶尔焦点还留在 launcher / 通知栏，再解锁一次重试
+        r.log(f"启动后焦点还在 {dev.focus()!r}，解锁后重试一次")
+        _unlock_with_retries(dev, r, 3)
+        dev.shell(f"am start -n {ATOMIC_ACTIVITY}")
+        dev.wait_focus("atomicbrain", timeout=15.0)
     time.sleep(1.2)
     r.ok(dev.focus())
 

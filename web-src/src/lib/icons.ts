@@ -34,12 +34,14 @@ export const ICONS = {
   globe:
     '<circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8M12 3.6c2.7 2.6 4.1 5.4 4.1 8.4s-1.4 5.8-4.1 8.4c-2.7-2.6-4.1-5.4-4.1-8.4s1.4-5.8 4.1-8.4z"/>',
   bolt: '<path d="M13.6 2.6 5.2 13.4h5.6l-1 8 8.4-10.8h-5.6z"/>',
+  road: '<path d="M8.4 3.4 5 20.6M15.6 3.4 19 20.6M12 4.2v3M12 10v3M12 15.8v3"/>',
 } as const;
 
 export type IconKey = keyof typeof ICONS;
 
 /** 关键词 → 图标。顺序有意义：先匹配到的赢，所以更具体的规则要放前面。 */
 const RULES: ReadonlyArray<readonly [RegExp, IconKey]> = [
+  [/traffic|路况/, "road"],
   [/outage|power|kplc|停电|电力/, "bolt"],
   [/taxi|打车|yango|car/, "car"],
   [/food|点餐|外卖|foodpanda|restaurant/, "food"],

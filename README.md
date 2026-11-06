@@ -419,6 +419,92 @@ adb shell am start-service --user 0 \
 也就是说：命令发对了、规则也读明白了，**卡在「Boomplay 播不了歌」这一环**。
 换一台能正常播歌的机器（或给 Boomplay 通上它自己的服务），这张卡应该就能出来。
 
+## 智能路况卡片（两条路径）
+
+`smart_traffic`，分组 `路况天气`。这张卡有**两种触发方式**，用参数 `触发方式` 切换。
+
+出卡规则 **`rule_id=10058`**（`assets/rule/SMART_TRAFFIC.json`，
+`intent_id=transsion.intent.aitips.AITIPS_Road_conditions`）：
+
+| ability | 类型 | 条件 |
+|---|---|---|
+| 2 | 时间窗 | `RANGE 00_00_00 ~ 11_59_59`，`extra={"time_type":"DAY","time_source":"dismiss_latch"}` —— **看末次闹钟 dismiss 的时刻，不看当前时间** |
+| 22 | 日频控 | `EQUAL Int "1"`，key = `YYYY-MM-DD-10058`，每天 1 次 |
+| 44 | 路况 latch | `EQUAL Boolean "true"`（active ability，智能路况触发闩） |
+| 45 | 异常天气记忆 | `EQUAL Boolean "true"`（记忆里的今天要有白名单内的异常天气） |
+
+异常天气白名单是 **`[7, 10, 12, 15]`**（对应 `TYPE_HEAVY_RAIN` 暴雨 / `TYPE_HIGH_TEMPERATURE` 高温 /
+`TYPE_MODERATE_RAIN` 中雨 / `TYPE_STRONG_WIND` 大风），**硬编码在 App 里，改不了**。
+
+### mock 路径（默认，稳定可用）
+
+全程只动 test brain 调试页，不依赖真实天气：
+
+1. 检查/安装 `TransAtomicBrain_full_signed(5).apk`（**必须这个包**：17.11.00.104 的调试页
+   没有智能路况按钮，代码里靠 `versionCode >= 171000000` 判断，低了会覆盖安装）
+2. 确认联网（`svc wifi enable` + ping 8.8.8.8，不动时区/国家）
+3. `am force-stop` + `am start -n com.transsion.atomicbrain/.debug.Test`，滚到页面最底部的
+   「智能路况」区
+4. **先点「清理智能路况当日计数」** —— ability 22 一天只给 1 次，不先清后面评规则必 fail
+5. 再点「MOCK 智能路况卡」，它会写异常天气记忆 + arm 末闹 dismiss 时刻 + 触发评规则
+6. 回桌面，智慧建议出现「智能路况」
+
+mock 按钮返回的文本会直接把四条 ability 的自检结论打出来，例如：
+`天气快照已写入 WEATHER：date=2026-11-06 abnormalWeatherType=7(暴雨)，回读判定=true` /
+`已 arm dismiss_latch=2026-11-06 08:30:00` / `今天(2026-11-06) abnormalWeatherType=7 ∈ 白名单，白名单=[7, 10, 12, 15]`。
+实测三语言全通：中文 `智能路况` / 英语 `Smart Traffic` / 阿拉伯语 `حركة المرور الذكية`。
+
+### real 路径（不碰 test brain）
+
+按需求给的 6 步走，**全程不打开调试页**：
+
+1. 检查/安装同一个 APK
+2. 打开天气 App 并下拉刷新一次（首次会依次弹 GDPR「同意」页和系统定位授权页，自动点掉）
+3. 系统时间调到当天 12 点前（默认 11:28）
+4. `logcat` 查 `WeatherMemorySimulator|isAbnormalFromMemory|ingest normalized.*weather|SmartTrafficWeatherJudge`
+5. 发 `am startservice -n com.transsion.atomicbrain/.debug.DebugService -a brain.intent.action.DISPATCH_EVENT --es action_type simulate_weather_memory --es target_date <设备当天> --ei abnormal_type 7`
+6. 设「当前时间 + 1 分钟」闹钟 → 息屏等响 → 关闹钟 → 解锁回桌面
+
+> 闹钟时间必须**现读设备时钟**再 +1 分钟。用流程开始时算好的时刻会落在过去
+> （开天气 App + 刷新的耗时会让它过期），时钟会把它排到第二天。
+
+**这条路径在本版本 App 上出不了卡，原因是三件独立的事实**（都已实测确认）：
+
+- **`simulate_weather_memory` 这个 action 在 17.10.00.101 里根本不存在**。
+  `DebugService` 收到会打 `E TAB.RuleActionHandler: handleTestDataAction: unknown action_type=simulate_weather_memory`。
+  全 dex 扫 `simulate` / `weather_memory` / `abnormal_type` / `target_date` 都是 0 命中；
+  本地 6 个 atomicbrain APK（含共享路径两个）全扫也都是 0 命中。
+- **`action_type` 的合法值其实是 `handleTestDataAction` 的分支名**（`listener` / `memory` /
+  `mock_json` / `percept` / `query`），而且**参数名必须是驼峰 `dataType` / `jsonData`**
+  （写成 `data_type` / `json_data` 会得到 `dataType=null`）。四条分支都试过：
+  `memory` 能写进 MemGov（`saveLatestData:type=WEATHER`）但自检读的是 MMKV 的
+  `WEATHER_CHANGE_value`；`mock_json` 对 38 个候选 dataType 全部 `createTestEvent unkown type`；
+  `percept` 报 `unsupported type`；`query` 报 `failed to set test data`。
+- **真实天气接口不下发「今天」的 `abnormalWeatherType`**。`brain_SP` 里
+  `WEATHER_CHANGE_value` 的 `days[]` 只在**未来某一天**偶尔带
+  `abnormalWeather: {abnormalWeatherType: 17}`（17 = 毛毛雨，**不在白名单**），
+  今天那条永远是 null。把设备日期拨到那天再开天气 App，自检确实读到
+  `今天(2026-11-07) abnormalWeatherType=17 ∉ 白名单` —— 证明读的就是「今天」那条，
+  但 17 出不了卡。换城市也没用：这台机器的天气 App 位置固定在「两江新区」，
+  把 gps / fused / network 三个 provider 全 mock 成迪拜也不变。
+
+所以 real 路径的代码是**按需求原样实现的**（流程 14 步全跑通、闹钟会响会被关掉），
+但卡片出不来，`summary` 里会如实写「该版本不认识这个 action / 桌面上没有等到卡片」。
+要让这条路径真的出卡，需要一个**含 `simulate_weather_memory` 分支的新版 APK**，
+或者改成「mock 路径写天气记忆 + real 路径的闹钟 dismiss」的组合。
+
+### 调试页的坑
+
+- **`uiautomator dump /dev/tty` 在这台 X6766 / Android 17 上写出 XML 但不退出**，
+  `adb shell` 会永久挂住。`Device.dump()` 现在首次探测 4 秒，超时就自动切「落盘式
+  dump」（写到 `/data/local/tmp/_dsh_dump.xml` 再 `cat` 回来），之后整轮都走落盘。
+- **调试页输入框一碰键盘就糟**：键盘弹起会让整块区域滚出屏幕（`mServedView=null`），
+  之后按记的坐标点第二个框必定点错。改输入框后必须 `input keyevent 111` 收键盘再重新 dump。
+- **设备的灭屏超时很短**：滚十几轮 swipe 走完可能自己黑屏，黑屏后 dump 直接报
+  「控件树为空」。所以每轮滚屏、每次点按钮前都会先 `_ensure_awake()`（唤醒 + 解锁）。
+- **装包会弹 Google Play 保护机制**（`PlayProtectDialogsActivity`），三个按钮是
+  「发现未知应用时一律发送 / 本次发送 / **不发送**」，要点「不发送」，否则焦点被抢走。
+
 ## 界面
 
 界面按「场景目录 / 工作台 / 实时画面」三块重做，场景数涨到 30+ 也不会挤：
@@ -475,7 +561,9 @@ adb shell settings put system system_locales "ar-EG,zh-Hans-CN,en-GB,en-US"
 
 三套语言下 26 个场景都做过真机全量回归（Infinix X6766 / Android 17）：
 阿拉伯语 26/26、英语 26/26 通过。**停电建议的三张卡是这台机器换成 root 版 X6765 之后
-新增的第 27~29 个场景，中文 / 英语 / 阿拉伯语下也都逐张真机跑通过。**
+新增的第 27~29 个场景，中文 / 英语 / 阿拉伯语下也都逐张真机跑通过。
+智能路况是第 30 个场景，mock 路径三语言都通过；real 路径的流程也三语言跑通，
+但本版 App 出不了卡（原因见上一节）。**
 
 多语言下踩到并修掉的坑：
 
@@ -623,6 +711,7 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_power_outage.py` | 停电建议：停电预警卡片（**需 root**；注入内罗毕常住区 → 清原子化 → 目标日 11:49 → 息屏 60s → 解锁出卡） |
 | `scenario_power_saving.py` | 停电建议：停电省电提醒卡片（**需 root**；mock 电量 30% + KPLC 查公告 → 时间 12:30 → 息屏 10s → 解锁出卡） |
 | `scenario_power_restore.py` | 停电建议：停电恢复卡片（**需 root**；先清电池 mock 避免 conflict_group 抢卡 → KPLC 查公告 → 时间 16:30 → 息屏 10s → 解锁出卡） |
+| `scenario_smart_traffic.py` | 路况天气：智能路况卡片（mock = 清当日计数 + mock 按钮；real = 天气 App + 12 点前 + 1 分钟后闹钟，全程不碰 test brain） |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
 | `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |
