@@ -18,6 +18,7 @@
 :root {
   --topbar-h: 68px;
   --catalog-w: clamp(300px, 20vw, 356px);
+  --catnav-w: clamp(240px, 17vw, 300px);
   --dock-w: clamp(258px, 18vw, 318px);
   --radius-xl: 24px;
   --radius-lg: 20px;
@@ -28,6 +29,66 @@
   --ease-spring: cubic-bezier(.34, 1.56, .64, 1);
   --ease-in-out: cubic-bezier(.65, 0, .35, 1);
   --ease-bounce: cubic-bezier(.68, -.55, .265, 1.55);
+
+  /* 液态玻璃（liquid glass）材质令牌。
+     只描述玻璃本身——模糊层级、边缘亮线、内高光、厚度暗缘、悬浮投影；
+     颜色一律引用既有主题变量，不引入新配色。 */
+  --glass-blur-lg: blur(30px) saturate(1.55) brightness(1.03);
+  --glass-blur-md: blur(20px) saturate(1.45) brightness(1.03);
+  --glass-blur-sm: blur(12px) saturate(1.3);
+  --glass-edge: rgba(255, 255, 255, .13);
+  --glass-edge-strong: rgba(255, 255, 255, .26);
+  --glass-hi-top: rgba(255, 255, 255, .16);
+  --glass-hi-top-strong: rgba(255, 255, 255, .24);
+  --glass-shade-bottom: rgba(0, 0, 0, .17);
+  /* 斜向渐变反射 + 顶部光泽：玻璃面的「光」 */
+  --glass-reflect: linear-gradient(165deg,
+    rgba(255, 255, 255, .085), rgba(255, 255, 255, .02) 36%, transparent 62%);
+  --glass-sheen: linear-gradient(180deg, rgba(255, 255, 255, .12), rgba(255, 255, 255, 0) 42%);
+  /* 浮动层深投影：把弹层从界面「托」起来 */
+  --glass-float: 0 34px 80px -34px rgba(0, 0, 0, .8);
+
+  /* ── 液态玻璃核心光学：更接近 Apple Liquid Glass 的四层结构 ──────
+   *  rim   —— 边缘折射光：亮线只在受光的上缘与左上，不是均匀一圈
+   *  inner —— 内侧反射：玻璃厚度的渐变，上亮下沉
+   *  corner—— 顶角镜面高光：擦光亮斑，玻璃最像玻璃的地方
+   *  spec  —— 跟随光标的光斑（小、亮、有焦点）
+   */
+  --glass-rim: linear-gradient(150deg,
+    rgba(255, 255, 255, .34) 0%,
+    rgba(255, 255, 255, .10) 16%,
+    transparent 38%,
+    transparent 68%,
+    rgba(255, 255, 255, .07) 92%);
+  --glass-inner: inset 0 1px 0 rgba(255, 255, 255, .18),
+                 inset 0 -18px 28px -24px rgba(0, 0, 0, .55),
+                 inset 1px 0 0 rgba(255, 255, 255, .05),
+                 inset -1px 0 0 rgba(255, 255, 255, .04);
+  --glass-corner: radial-gradient(120% 80% at 18% -10%,
+    rgba(255, 255, 255, .16), transparent 52%);
+  /* 按钮镜面扫光：一条斜向的亮带，悬停时从左扫到右 */
+  --glass-sweep: linear-gradient(105deg,
+    transparent 30%, rgba(255, 255, 255, .32) 50%, transparent 70%);
+  /* 悬停时的表面折射微光：玻璃被光照到，整面略微提亮 */
+  --glass-hover-sheen: linear-gradient(180deg,
+    rgba(255, 255, 255, .06), transparent 60%);
+
+  /* 光标光斑参数：只定义「尺寸 / 强度」这类可继承的标量，
+     渐变色本身**不在这里拼** —— 见下方说明。
+
+     ⚠ 踩过的坑：曾经在这里写
+         --spotlight: radial-gradient(circle var(--glow-size) at var(--mx) var(--my), ...);
+       结果是光晕不跟随鼠标，只在正中亮一个固定的点。
+     原因：CSS 自定义属性的值在**它自己被声明的那一层**就求值了。
+       `--spotlight` 声明在 :root 上，:root 自己没有 --mx/--my，
+       于是 var(--mx, 50%) 当场取到 50% 并**固定进字符串**；
+       之后卡片上再设 --mx，--spotlight 里那个 50% 也不会变。
+     正确做法：把整条 radial-gradient 写在使用处（_liquid.scss 的 glow-paint），
+       让 var(--mx) 在**卡片元素**上解析，才能跟着指针动。
+
+     光晕是「圆形柔光」：暗、亮暗平滑渐变、screen 混合、无手电筒硬边。 */
+  --glow-r: 88px;
+  --glow-strength: .16;
 
   --sans: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC",
           "Hiragino Sans GB", system-ui, -apple-system, "Segoe UI", sans-serif;

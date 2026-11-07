@@ -118,6 +118,13 @@ CN_MONTH = ["一月", "二月", "三月", "四月", "五月", "六月",
             "七月", "八月", "九月", "十月", "十一月", "十二月"]
 
 REMIND_DAYS_BEFORE = 3
+
+# 纪念日类卡片（desktop_wait_sec > 0）的二次触发等待。
+# 实机踩过：这台 X6766 上「回桌面等 60s + 亮屏等 8s」不够，卡片还没渲染
+# 完就截了图，结果翻遍轮播都找不到。加长到 90s / 30s 后稳定出卡。
+# 两个值都放这里，避免散在函数里到处硬编码（README 里也单独记了一笔）。
+DESKTOP_WAIT_SEC = 90
+LOCK_RENDER_SEC = 30
 PUA_RE = re.compile(r"[\ue000-\uf8ff]")
 
 # 日历「重要日」事件类型（extendedproperties private:ts_cal_event_type 的 value，均已实机验证）
@@ -292,10 +299,45 @@ class Runner:
         self.dev = dev
         self.emit = emit or (lambda e: None)
         self.control = control or {}     # {"paused": bool, "stop": bool}，由服务注入
-        self.confirm_fn = confirm_fn     # 等待前端确认卡片的回调，None 时跳过确认
+        self.confirm_fn = confirm_fn     # 自动识别卡片的回调，None 时跳过
         self.ask_fn = ask_fn             # 触发前询问用户前置问题（如 OOBE 国家）的回调
+        # 这张卡片「长什么样」的自述：卡片标题里带随机名字（Bday110792）时，
+        # 名字只有跑到一半才知道，场景在这里写一句，确认时就能拿它当判据。
+        self.card_hint = ""
+        # 锁屏卡片只在解锁前的一瞬间可见；把那一刻控件树里的文案和区域
+        # 记下来，自动识别阶段（已回桌面）才有依据判断卡片是否出现。
+        self.lock_texts: list[str] = []
+        self.lock_box: tuple[int, int, int, int] | None = None
         self._no = 0
         self._t0 = 0.0
+
+    def note_lockscreen(self, dev: Device) -> None:
+        """在锁屏卡片可见时抓一份「证据快照」（文案 + 区域），供之后自动识别。
+
+        重要日卡片（生日策划案 / 纪念日 / 追星 / 重要日提醒）是锁屏卡片：
+        场景 `r.shot("锁屏卡片")` 拍完立刻就上滑解锁回桌面，等 `r.confirm()`
+        时屏幕早不在锁屏了。所以必须在这一刻把控件树记下来。
+
+        只做一次 dump，且不抛错 —— 这是个「顺手取证」的钩子，dump 失败
+        不该让整个场景挂掉（自动识别会退回桌面轮播那条路）。
+        """
+        try:
+            import card_probe
+            nodes = dev.dump()
+            texts = []
+            for n in nodes:
+                if n.short_id in card_probe.LOCK_CARD_RIDS:
+                    t = (n.text or "").strip() or (n.desc or "").strip()
+                    if t and t not in texts:
+                        texts.append(t)
+            self.lock_texts = texts
+            self.lock_box = card_probe.lock_card_box(nodes)
+            if texts:
+                self.log(f"锁屏卡片文案：{' / '.join(texts)}")
+                # 不动 card_hint：自动识别阶段直接拿 lock_texts 和关键词比，
+                # 比把整句文案塞回 card_hint 更可靠（后者会污染桌面轮播的判据）。
+        except Exception as exc:  # noqa: BLE001
+            self.log(f"锁屏卡片取证失败（不影响后续识别）：{exc}")
 
     def check(self) -> None:
         """步骤间/等待循环里检查暂停与结束。暂停则发事件挂起直到继续；结束则抛错终止。"""
@@ -310,7 +352,11 @@ class Runner:
             self.emit({"t": "resume", "no": self._no})
 
     def confirm(self) -> bool:
-        """等待用户在网页端确认锁屏卡片是否已触发。返回 True=已触发 / False=未触发。"""
+        """等场景自动确认卡片是否已触发。返回 True=已触发 / False=未触发。
+
+        以前是「等用户在网页上点已触发/未触发」，现在由服务端的自动识别
+        （card_probe 滑智慧建议轮播 + 认锁屏原子卡片）给出结论，不再打断人。
+        """
         if self.confirm_fn is None:
             return True
         return self.confirm_fn(self)
@@ -1410,6 +1456,9 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
         now_hms = dev.shell("date '+%H:%M:%S'").strip()
         # 先拍锁屏卡片作为证据，再自动上滑到桌面，最后才让用户确认卡片
         r.shot("锁屏卡片")
+        # 锁屏卡片只在解锁前这一瞬间可见。把当时的控件树文案记进 Runner，
+        # 之后自动识别（已回桌面）才有依据判断这张卡到底出来没有。
+        r.note_lockscreen(dev)
         _unlock_with_retries(dev, r, unlock_retries)
         dev.stayon(True)
         time.sleep(0.8)
@@ -1452,10 +1501,13 @@ def screen_off_wait_unlock(dev: Device, r: Runner, wait_sec: int,
     dev.key(KEY_WAKEUP)
     _wait_screen_on(dev, True, timeout=3.0)
     dev.stayon(True)
-    time.sleep(8)                       # 亮屏后等几秒卡片渲染（AOD→锁屏动画较慢）
+    # 亮屏后要等够 LOCK_RENDER_SEC 秒让锁屏卡片渲染完（AOD→锁屏动画慢），
+    # 早截一秒就会拍到还没出卡的空锁屏
+    time.sleep(LOCK_RENDER_SEC)
     now_hms = dev.shell("date '+%H:%M:%S'").strip()
     # 同样：先拍锁屏，再自动解锁到桌面，最后确认
     r.shot("锁屏卡片")
+    r.note_lockscreen(dev)
     _unlock_with_retries(dev, r, unlock_retries)
     dev.stayon(True)
     time.sleep(0.8)                     # 等桌面渲染完再截，避免截到锁屏残影
@@ -1500,6 +1552,9 @@ def run(dev: Device | None = None, emit=None, *, offset_days: int = 4,
         r.log(f"重新触发：{ev_display}日期平移 +{offset_months} 月 → {bday}")
     sysdate = bday - timedelta(days=REMIND_DAYS_BEFORE)
     name = name or gen_name(today)
+    # 策划案卡片的标题也带这个随机名字（「xx·生日 · 3 天后」），
+    # 登记给自动识别当判据
+    r.card_hint = name
     result = {"device_today": today.isoformat(), "birthday": bday.isoformat(),
               "sysdate": sysdate.isoformat(), "name": name}
 

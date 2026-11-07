@@ -52,6 +52,8 @@ export interface Scenario {
   desc?: string;
   group?: string;
   icon?: string;
+  /** 后端标注「这个机型不支持」的说明；有值时前端打标并禁用运行 */
+  unsupported_note?: string;
   params?: ScenarioParam[];
   specs?: ScenarioSpec[];
   retryable?: boolean;
@@ -137,6 +139,22 @@ export interface StopEvent extends EventBase {
   t: "stop";
 }
 
+/** 服务端自动识别卡片的结果（取代以前人工点「已触发/未触发」的 confirm 事件）。
+ *
+ *  `ok=false` 只表示「翻完轮播没认出来」，不代表场景失败；真出错走 error 事件。 */
+export interface CardEvent extends EventBase {
+  t: "card";
+  ok: boolean;
+  scenario?: string;
+  /** 控件树里命中的那条文案 */
+  text?: string;
+  keyword?: string;
+  /** home（桌面轮播）/ lock（锁屏） */
+  where?: string;
+  /** 有没有把截图存进卡片库 */
+  has_shot?: boolean;
+}
+
 export type RunEvent =
   | StepEvent
   | LogEvent
@@ -146,6 +164,7 @@ export type RunEvent =
   | DoneEvent
   | ConfirmEvent
   | AskEvent
+  | CardEvent
   | PauseEvent
   | ResumeEvent
   | StopEvent;
@@ -181,6 +200,28 @@ export interface DeviceEntry {
   model?: string;
 }
 
+/** 已采集到的一张卡片实拍图（卡片库里按场景 id 存的那张）。
+ *
+ *  后端 `card_gallery.record()` 写进 `%APPDATA%\phone-remote\cards\cards.json`，
+ *  `/api/status` 和 `/api/cards` 都会带出来。图本身走
+ *  `/api/cards/<scenario>.png`。 */
+export interface CardShot {
+  /** 场景 id，和 Scenario.id 对齐 */
+  scenario: string;
+  /** 场景标题，卡片库自己留的一份（场景改名了也看得出这是谁） */
+  title?: string;
+  /** 控件树里命中的那条文案（如「今天是Bday110792」） */
+  text?: string;
+  /** 命中的是哪个关键词 */
+  keyword?: string;
+  /** 在哪儿看到的：home（桌面轮播）/ lock（锁屏） */
+  where?: string;
+  /** 采集时间，Unix 秒 */
+  ts: number;
+  /** 相对 cards 目录的文件名 */
+  file: string;
+}
+
 export interface StatusResponse {
   connected: boolean;
   /** 找到的 scrcpy.exe 路径；空表示没找到，前端据此禁用按钮 */
@@ -195,6 +236,14 @@ export interface StatusResponse {
   /** 用户手动指定的设备 serial（多机时） */
   selected?: string | null;
   run?: RunSnapshot;
+  /** 卡片库索引：scenario id → 实拍图记录 */
+  cards?: Record<string, CardShot>;
+  /** 电量百分比 0~100；-1 表示读不到（前端隐藏电量徽标） */
+  battery?: number;
+  /** 充电状态：charging / discharging / full / not-charging / unknown */
+  battery_status?: string;
+  /** 系统版本，形如 "Android 14"；空串表示读不到 */
+  android?: string;
 }
 
 /** ── 通用响应 ─────────────────────────────────────────────────── */

@@ -1,4 +1,5 @@
 import type {
+  CardShot,
   EventsResponse,
   RunRequestBody,
   ScenariosResponse,
@@ -57,4 +58,8 @@ export const api = {
 
   /** 截图返回的是二进制，这里单独给一个不解析 JSON 的入口 */
   screenshot: (): Promise<Response> => fetch("/api/screenshot"),
+
+  /** 卡片库索引：scenario id → 实拍图记录。
+   *  图本身是 /api/cards/<id>.png，见 lib/cardArt.ts 的 shotUrl()。 */
+  cards: () => request<{ cards: Record<string, CardShot> }>("/api/cards"),
 };

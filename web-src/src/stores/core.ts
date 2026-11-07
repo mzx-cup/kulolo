@@ -1,5 +1,5 @@
 import { reactive } from "vue";
-import type { DeviceEntry, ScenarioGroup, ScenarioView } from "@/types/api";
+import type { CardShot, DeviceEntry, ScenarioGroup, ScenarioView } from "@/types/api";
 
 /** 日志行：kind 决定颜色，text 是正文 */
 export interface LogLine {
@@ -36,9 +36,13 @@ export const state = reactive({
   query: "",
   collapsed: new Set<string>(),
   recent: [] as string[],
+  /** 收藏的场景 id（收藏是纯前端偏好，不依赖后端） */
+  favorites: [] as string[],
   loading: true,
   loadError: "",
   catalogOpen: false,
+  /** 参数抽屉是否打开 */
+  paramsOpen: false,
 
   /* ── 参数 ─────────────────────────────────────────────────── */
   /** 当前场景的参数值，key 与 ScenarioParam.key 一致。
@@ -93,6 +97,12 @@ export const state = reactive({
   devTitle: "设备状态",
   devAria: "",
   devMeta: "等待设备接入…",
+  /** 电量百分比 0~100；-1 表示不可用 */
+  battery: -1,
+  /** 充电状态：charging / discharging / full / not-charging / unknown */
+  batteryStatus: "",
+  /** 系统版本，形如 "Android 14"；空串表示不可用 */
+  androidVer: "",
   scrcpyPath: "",
   scrcpyDisabled: true,
   devices: [] as DeviceEntry[],
@@ -107,6 +117,16 @@ export const state = reactive({
   shotGap: 5,
   shotStateText: "",
   shotStateOn: false,
+
+  /* ── 卡片库 ───────────────────────────────────────────────── */
+  /** 自动识别时采集到的卡片实拍图：scenario id → 记录。
+   *  由 /api/status 一起带回来（每 3~5 秒刷新），跑完一轮自动出现新图。 */
+  cards: {} as Record<string, CardShot>,
+  /** 放大查看的卡片场景 id；空表示没开灯箱 */
+  cardZoomId: "",
+  /** 运行事件里最近一次「自动识别结果」，给 Steps 面板显示 */
+  cardProbeText: "",
+  cardProbeOk: null as boolean | null,
 
   /* ── 外观 ─────────────────────────────────────────────────── */
   theme: "dark" as "dark" | "light" | "rose" | "mint" | "violet" | "midnight",

@@ -9,6 +9,7 @@ import { pad2 } from "@/lib/format";
 import { refs } from "@/lib/refs";
 import { resetRunUi } from "@/actions/session";
 import { loadScenarios } from "@/actions/boot";
+import { artFor, openCardZoom } from "@/actions/cards";
 
 export default defineComponent({
   name: "CatalogPanel",
@@ -92,6 +93,18 @@ export default defineComponent({
       void loadScenarios();
     }
 
+    /** 目录卡片上的缩略图：有实拍图（自动识别采到的）或设计稿时才显示，
+     *  没有就继续用原来的 SVG 图标。 */
+    function art(id: string): string {
+      return artFor(id);
+    }
+
+    /** 点缩略图：放大看这张卡，不切换选中的场景（两个动作别互相干扰）。 */
+    function onArt(e: Event, id: string): void {
+      e.stopPropagation();
+      openCardZoom(id);
+    }
+
     return {
       state,
       visible,
@@ -101,6 +114,8 @@ export default defineComponent({
       recentItems,
       pad2,
       iconBody,
+      art,
+      onArt,
       onSelect,
       onGroupHead,
       onFilter,
@@ -176,7 +191,7 @@ export default defineComponent({
           v-for="s in recentItems"
           :key="s.id"
           type="button"
-          class="recent-chip"
+          class="recent-chip glow-target"
           :title="s.title"
           @click="onSelect(s.id)"
         >
@@ -187,7 +202,7 @@ export default defineComponent({
 
     <div id="filters" class="filters" role="group" aria-label="按分组筛选">
       <button
-        class="filter"
+        class="filter glow-target"
         :class="{ on: state.activeFilter === 'all' }"
         type="button"
         data-group="all"
@@ -200,7 +215,7 @@ export default defineComponent({
       <button
         v-for="g in state.groups"
         :key="g.name"
-        class="filter"
+        class="filter glow-target"
         :class="{ on: state.activeFilter === g.name }"
         type="button"
         :data-group="g.name"
@@ -264,21 +279,32 @@ export default defineComponent({
                   <li v-for="(s, i) in sec.list" :key="s.id">
                     <button
                       type="button"
-                      class="card"
-                      :class="{ on: state.selected?.id === s.id }"
+                      class="card glow-target"
+                      :class="{ on: state.selected?.id === s.id, unsupported: Boolean(s.unsupported_note) }"
                       :data-id="s.id"
                       :aria-pressed="state.selected?.id === s.id"
                       :style="{ '--ci': String(Math.min(i, 12)), '--g-tone': sec.group.tone }"
-                      :title="`${s.title} · ${s.tag}`"
+                      :title="s.unsupported_note ? `${s.title} · ${s.unsupported_note}` : `${s.title} · ${s.tag}`"
                       @click="onSelect(s.id)"
                     >
-                      <span class="card-glyph" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" v-html="iconBody(s)" />
+                      <span class="card-glyph" :class="{ 'has-art': Boolean(art(s.id)) }" aria-hidden="true">
+                        <!-- 有实拍/设计稿就显示缩略图；点它只会放大看，不切场景 -->
+                        <img
+                          v-if="art(s.id)"
+                          class="card-thumb"
+                          :src="art(s.id)"
+                          alt=""
+                          loading="lazy"
+                          decoding="async"
+                          @click="onArt($event, s.id)"
+                        />
+                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" v-html="iconBody(s)" />
                       </span>
                       <span class="card-main">
                         <span class="card-line">
                           <span class="card-no">{{ pad2(s._no) }}</span>
                           <span class="card-title" v-html="highlight(s.title, state.query)" />
+                          <span v-if="s.unsupported_note" class="card-unsupported">{{ s.unsupported_note }}</span>
                         </span>
                         <span class="card-tag" v-html="highlight(s.tag, state.query)" />
                       </span>

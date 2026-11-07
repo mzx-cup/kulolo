@@ -1,0 +1,568 @@
+// ═══════════════════════════════════════════════════════════════════
+//   Liquid Glass 液态玻璃美学体系
+//
+//   材质四层结构（这是「像玻璃」和「只是半透明方框」的区别）：
+//     rim    边缘折射亮线 —— 只在受光上缘/左上角发亮，不是均匀描边
+//     inner  内侧反射 —— 上亮下沉的厚度渐变，玻璃有实体感
+//     corner 顶角镜面擦光 —— 真正的高光斑
+//     spec   跟随光标的光斑 —— 有焦点，柔和克制
+//
+//   交互动效（本次重点）：
+//     1. 面板悬停浮起 + 边缘高光随之变化
+//     2. 按钮悬停镜面扫光 + 表面微光
+//     3. 点击压缩 + 弹性回弹
+//     4. 场景切换渐变/位移/缩放过渡（coverflow 由 _stage.scss 驱动）
+//     5. 抽屉从空间展开
+//     6. 下拉/弹窗自然悬浮
+//     7. 收藏按钮形变
+//     8. 设备刷新克制反馈
+//     9. 运行结果精致状态过渡
+//
+//   颜色全部引用既有主题令牌；动画走 transform/opacity 合成层；
+//   尊重 prefers-reduced-motion；不支持 backdrop-filter 时有实底降级。
+// ═══════════════════════════════════════════════════════════════════
+
+/* ── 不支持 backdrop-filter 的降级 ─────────────────────────────── */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .panel, .catnav, .catalog, .theme-menu, .modal-card, .params-drawer,
+  .sel-menu, .toast, .stage-card, .recentbar-card {
+    background-color: var(--panel-solid);
+  }
+}
+
+/* ═══ 光标光晕：圆形柔光（暗、亮暗渐变、非手电筒） ═══════════════════
+   渐变必须写在使用处（不能放 :root，否则 --mx 被固定在 50%）。
+
+   设计：
+     · 圆形（circle），范围克制
+     · 中心到边缘是**平滑的亮暗渐变**：中心只是略亮，往外极缓衰减，
+       没有突兀的"聚光点"，也不像手电筒照出的硬边光斑
+     · 用 screen 混合（比 plus-lighter 更柔，不会过曝）
+     · 整体偏暗，只是玻璃上的一抹微光 */
+@mixin glow-paint {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background-image:
+    radial-gradient(circle var(--glow-r, 90px)
+        at var(--mx, 50%) var(--my, 50%),
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, .16) * 100%), transparent) 0%,
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, .16) * 55%), transparent) 30%,
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, .16) * 22%), transparent) 55%,
+        transparent 82%);
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity .35s var(--ease-out);
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: screen;
+}
+
+.glow-target,
+.panel,
+.device-panel,
+.catnav,
+.catalog,
+.stage-card,
+.recentbar-card,
+.btn,
+.icon-btn,
+.vbtn,
+.stage-icbtn,
+.filter,
+.chip,
+.recent-chip,
+.catnav-subitem,
+.catnav-item-inner,
+.catnav-fold,
+.catalog .card,
+.theme-option,
+.sel-opt { position: relative; }
+/* 注：.stage-nav 不在上面 —— 它必须 absolute（定位在视口两侧）。 */
+
+.glow-target::after,
+.panel::after,
+.device-panel::after,
+.catnav::after,
+.catalog::after,
+.stage-card::after,
+.recentbar-card::after,
+.btn::after,
+.icon-btn::after,
+.vbtn::after,
+.stage-icbtn::after,
+.filter::after,
+.chip::after,
+.recent-chip::after,
+.catnav-subitem::after,
+.catnav-item-inner::after,
+.catnav-fold::after,
+.catalog .card::after,
+.theme-option::after,
+.sel-opt::after { @include glow-paint; }
+
+.glow-target:hover::after,
+.panel:hover::after,
+.device-panel:hover::after,
+.catnav:hover::after,
+.catalog:hover::after,
+.stage-card:hover::after,
+.recentbar-card:hover::after,
+.btn:hover::after,
+.icon-btn:hover::after,
+.vbtn:hover::after,
+.stage-icbtn:hover::after,
+.filter:hover::after,
+.chip:hover::after,
+.recent-chip:hover::after,
+.catnav-subitem:hover::after,
+.catnav-item-inner:hover::after,
+.catnav-fold:hover::after,
+.catalog .card:hover::after,
+.theme-option:hover::after,
+.sel-opt:hover::after,
+.glow-target:focus-visible::after { opacity: 1; }
+
+.glow-target > *,
+.btn > *,
+.icon-btn > *,
+.vbtn > *,
+.stage-icbtn > * { position: relative; z-index: 1; }
+
+.btn:disabled::after,
+.icon-btn:disabled::after,
+.vbtn:disabled::after { opacity: 0; }
+
+/* 强度分级：圆形，整体偏暗（柔和微光，非手电筒） */
+.stage-card.is-center { --glow-strength: .18; --glow-r: 96px; }
+.device-panel { --glow-strength: .14; --glow-r: 84px; }
+.panel,
+.catnav { --glow-strength: .13; --glow-r: 92px; }
+.recentbar-card,
+.catalog .card { --glow-strength: .15; --glow-r: 72px; }
+.btn,
+.icon-btn,
+.vbtn,
+.commit,
+.stage-icbtn,
+.filter,
+.chip,
+.recent-chip,
+.catnav-subitem,
+.catnav-item-inner,
+.catnav-fold,
+.theme-option,
+.sel-opt { --glow-strength: .14; --glow-r: 54px; }
+
+.commit {
+  background-image:
+    radial-gradient(circle var(--glow-r, 88px)
+        at var(--mx, 50%) var(--my, 50%),
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, 0) * 100%), transparent) 0%,
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, 0) * 55%), transparent) 30%,
+        color-mix(in srgb, var(--amber) calc(var(--glow-strength, 0) * 22%), transparent) 55%,
+        transparent 82%),
+    linear-gradient(180deg, rgba(255, 255, 255, .30), rgba(255, 255, 255, 0) 46%),
+    var(--accent-grad);
+  background-repeat: no-repeat;
+  --glow-strength: 0;
+  --glow-r: 88px;
+  transition: transform .18s var(--ease-spring),
+              box-shadow .26s var(--ease-out),
+              filter .26s var(--ease-out);
+}
+.commit:hover:not(:disabled) { --glow-strength: .18; }
+
+/* ═══ L1 · 主玻璃面板 ═════════════════════════════════════════════ */
+
+.panel,
+.catnav,
+.catalog {
+  position: relative;
+  border: 1px solid var(--glass-edge);
+  background-image:
+    var(--glass-corner),
+    var(--glass-reflect),
+    var(--glass-sheen),
+    linear-gradient(180deg, rgba(255, 255, 255, .035), transparent 30%);
+  -webkit-backdrop-filter: var(--glass-blur-lg);
+  backdrop-filter: var(--glass-blur-lg);
+  box-shadow:
+    var(--shadow-panel),
+    var(--glass-inner);
+  transition:
+    transform .32s var(--ease-out),
+    box-shadow .32s var(--ease-out),
+    border-color .32s var(--ease-out);
+}
+/* 边缘折射亮线 */
+.panel::before,
+.catnav::before,
+.catalog::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: .85;
+  transition: opacity .32s var(--ease-out);
+}
+
+/* ── 1. 面板悬停：轻微浮起 + 边缘高光随之变化 ─────────────────────
+   只有「面板」是景（不是物），浮起量极小（-2px），像被光照到微微抬头，
+   不是弹跳。边缘亮线随之增强，投影加深，空间层次立现。 */
+.panel:hover,
+.catnav:hover,
+.catalog:hover {
+  transform: translateY(-2px);
+  border-color: var(--glass-edge-strong);
+  box-shadow:
+    var(--shadow-lift),
+    var(--glass-inner);
+}
+.panel:hover::before,
+.catnav:hover::before,
+.catalog:hover::before { opacity: 1; }
+
+.topbar {
+  border-bottom-color: var(--glass-edge);
+  background-image:
+    linear-gradient(180deg, rgba(255, 255, 255, .05), rgba(255, 255, 255, 0) 72%),
+    var(--topbar-bg);
+  -webkit-backdrop-filter: blur(24px) saturate(1.5);
+  backdrop-filter: blur(24px) saturate(1.5);
+  box-shadow: inset 0 -1px 0 rgba(255, 255, 255, .06);
+}
+
+/* ═══ L2 · 浮动玻璃（弹窗/抽屉/下拉/Toast） ═══════════════════════ */
+
+.modal-card,
+.theme-menu,
+.sel-menu,
+.toast,
+.rt-card,
+.params-drawer {
+  border: 1px solid var(--glass-edge-strong);
+  background-image:
+    var(--glass-corner),
+    var(--glass-reflect),
+    var(--glass-sheen),
+    linear-gradient(180deg, rgba(255, 255, 255, .05), transparent 34%);
+  -webkit-backdrop-filter: var(--glass-blur-md);
+  backdrop-filter: var(--glass-blur-md);
+  box-shadow:
+    var(--glass-float),
+    var(--shadow-pop),
+    var(--glass-inner);
+}
+.modal-card,
+.sel-menu,
+.toast,
+.rt-card { background-color: var(--modal-bg); }
+.params-drawer { background-color: var(--panel-solid); }
+.theme-menu { background-color: var(--panel); }
+
+/* ── 弹窗：从空间展开（下方向上浮起 + 轻微 3D 回正） ─────────────── */
+.modal .modal-card {
+  transform: translateY(18px) scale(.94) rotateX(4deg);
+  transform-origin: 50% 100%;
+  transition: transform .38s var(--ease-out), opacity .3s var(--ease-out);
+}
+.modal.show .modal-card { transform: none; }
+
+/* ── 主题菜单：从顶部轻盈落下 + 回正 ───────────────────────────── */
+.theme-menu {
+  transform: translateY(-12px) scale(.96);
+  transform-origin: top right;
+  transition: transform .3s var(--ease-out), opacity .25s var(--ease-out);
+}
+.theme-menu.open { transform: none; }
+
+/* ── 5. 参数抽屉：玻璃从右侧空间展开 ─────────────────────────────
+   不只是一条直线滑入，而是带一点「先探出再回正」的纵深展开感：
+   从 translateX(102%) 开始，叠加一点 scaleX 让玻璃像从侧面长出来。 */
+.params-drawer {
+  border-left-color: var(--glass-edge-strong);
+  box-shadow:
+    -42px 0 90px -30px rgba(0, 0, 0, .78),
+    var(--glass-inner);
+  transform: translateX(102%) scaleX(.98);
+  transform-origin: right center;
+  transition: transform .42s var(--ease-out);
+}
+.params-drawer.open { transform: none; }
+
+/* ── 6. 下拉菜单：液滴聚拢感 ───────────────────────────────────── */
+.sel-menu {
+  transform-origin: top center;
+  animation: selDrop .16s var(--ease-out) both;
+}
+@keyframes selDrop {
+  from { opacity: 0; transform: translateY(-5px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+
+/* ═══ L3 · 玻璃控件 ══════════════════════════════════════════════ */
+
+/* ── 2/3. 按钮：悬停镜面扫光 + 按压压缩回弹 ─────────────────────── */
+.btn,
+.icon-btn,
+.vbtn,
+.stage-icbtn {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--glass-edge);
+  background-image: var(--glass-corner), var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  box-shadow: var(--glass-inner);
+  transition:
+    transform .16s var(--ease-spring),
+    border-color .18s var(--ease-out),
+    background-color .18s var(--ease-out),
+    box-shadow .22s var(--ease-out);
+}
+/* 镜面扫光：一条斜向亮带，悬停时从左扫到右 */
+.btn::before,
+.icon-btn::before,
+.vbtn::before,
+.stage-icbtn::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-sweep);
+  transform: translateX(-130%);
+  transition: transform .6s var(--ease-out);
+  pointer-events: none;
+  z-index: 1;
+}
+.btn:hover::before,
+.icon-btn:hover::before,
+.vbtn:hover::before,
+.stage-icbtn:hover::before { transform: translateX(130%); }
+
+.btn:hover:not(:disabled),
+.icon-btn:hover,
+.vbtn:hover,
+.stage-icbtn:hover {
+  border-color: var(--glass-edge-strong);
+  background-color: var(--panel-3);
+  box-shadow:
+    var(--shadow-card),
+    inset 0 1px 0 var(--glass-hi-top-strong),
+    inset 0 -10px 18px -16px rgba(0, 0, 0, .5);
+}
+/* 按压：轻微压缩，松手靠 spring 弹性回弹 */
+.btn:active:not(:disabled),
+.icon-btn:active,
+.vbtn:active,
+.stage-icbtn:active { transform: translateY(1px) scale(.95); }
+
+/* 一键运行按钮：玻璃质感强调，保持扫光 + 光晕 */
+.commit {
+  position: relative;
+  overflow: hidden;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .55),
+    inset 0 -2px 6px rgba(0, 0, 0, .18),
+    0 20px 44px -18px var(--accent-glow);
+}
+.commit:hover:not(:disabled) {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .6),
+    inset 0 -2px 6px rgba(0, 0, 0, .2),
+    0 26px 56px -18px var(--accent-glow);
+}
+.commit:active:not(:disabled) { transform: translateY(1px) scale(.975); }
+
+/* 输入框：玻璃凹面 */
+.field input,
+.field select,
+#cat-search,
+#sc-search,
+.interval,
+.sel-btn {
+  box-shadow:
+    inset 0 1px 2px rgba(0, 0, 0, .28),
+    inset 0 -1px 0 rgba(255, 255, 255, .07);
+  transition: box-shadow .2s var(--ease-out), border-color .2s var(--ease-out);
+}
+.field input:focus,
+.field select:focus,
+#cat-search:focus,
+#sc-search:focus {
+  box-shadow:
+    0 0 0 3px var(--amber-soft),
+    inset 0 1px 2px rgba(0, 0, 0, .28),
+    inset 0 -1px 0 rgba(255, 255, 255, .09);
+}
+
+/* ═══ 场景卡片（coverflow 由 _stage.scss 的 is-deck 驱动） ═══════ */
+
+.stage-card {
+  border: 1px solid var(--glass-edge);
+  background-image:
+    var(--glass-corner),
+    var(--glass-reflect),
+    var(--glass-sheen);
+  -webkit-backdrop-filter: var(--glass-blur-md);
+  backdrop-filter: var(--glass-blur-md);
+  box-shadow: var(--shadow-panel), var(--glass-inner);
+}
+.stage-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: var(--glass-rim);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 2;
+  opacity: .9;
+  transition: opacity .32s var(--ease-out);
+}
+.stage-card:hover::before { opacity: 1; }
+
+.stage-card-glyph {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, .12),
+    0 6px 16px -10px rgba(0, 0, 0, .6);
+}
+
+/* 拖拽时关掉 backdrop-filter（每帧重采样是卡顿元凶） */
+.stage-viewport.dragging .stage-card.is-deck {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  background-color: color-mix(in srgb, var(--panel-solid) 92%, transparent);
+}
+
+/* 侧卡材质：玻璃但稍收敛 */
+.stage-card.is-side {
+  background-image:
+    var(--glass-corner),
+    var(--glass-reflect),
+    var(--glass-sheen),
+    linear-gradient(160deg, rgba(255, 255, 255, .05), transparent 46%);
+  -webkit-backdrop-filter: var(--glass-blur-md);
+  backdrop-filter: var(--glass-blur-md);
+}
+.stage-card.is-side:hover {
+  border-color: var(--glass-edge-strong);
+}
+
+/* ── 最近使用卡片 ─────────────────────────────────────────────── */
+.recentbar-card {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--glass-edge);
+  background-image:
+    var(--glass-corner),
+    var(--glass-sheen),
+    linear-gradient(160deg, rgba(255, 255, 255, .05), transparent 42%);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  box-shadow: var(--glass-inner);
+  transition:
+    transform .24s var(--ease-spring),
+    box-shadow .24s var(--ease-out),
+    border-color .2s var(--ease-out);
+}
+.recentbar-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--glass-sweep);
+  transform: translateX(-130%);
+  transition: transform .55s var(--ease-out);
+  pointer-events: none;
+  z-index: 1;
+}
+.recentbar-card:hover::before { transform: translateX(130%); }
+.recentbar-card:hover {
+  transform: translateY(-4px) scale(1.012);
+  border-color: var(--glass-edge-strong);
+  box-shadow:
+    var(--shadow-lift),
+    inset 0 1px 0 var(--glass-hi-top-strong);
+}
+.recentbar-card:active { transform: translateY(-1px) scale(.985); }
+
+/* ═══ 7. 收藏按钮：形态与状态变化 ══════════════════════════════════ */
+
+/* 收藏（心形）图标：切换到收藏态时，心脏先瘪一下再弹满 */
+.stage-icbtn.on svg,
+.recentbar-fav.on svg {
+  animation: favBeat .42s var(--ease-spring);
+  transform-origin: center;
+}
+@keyframes favBeat {
+  0%   { transform: scale(.6); }
+  45%  { transform: scale(1.28); }
+  70%  { transform: scale(.92); }
+  100% { transform: scale(1); }
+}
+/* 收藏态按钮本体：轻微发光，强调「已收藏」 */
+.stage-icbtn.on {
+  border-color: var(--amber-line);
+  background: var(--amber-soft);
+  color: var(--amber);
+}
+
+/* ═══ 8. 设备预览刷新：克制反馈 ═══════════════════════════════════ */
+
+/* 截图换新瞬间，给手机画面一次极淡的「呼吸」提示（不抢戏） */
+.device-screen.swap .shot {
+  animation: shotRefresh .55s var(--ease-out);
+}
+@keyframes shotRefresh {
+  0%   { opacity: .55; transform: scale(1.008); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ═══ 9. 运行结果：精致状态过渡 ═══════════════════════════════════ */
+
+/* 结算卡片入场：从右下角滑入 + 轻微弹性 */
+.rt-card {
+  animation: rtFloatIn .42s var(--ease-out) both;
+}
+@keyframes rtFloatIn {
+  from { opacity: 0; transform: translateY(16px) translateX(12px) scale(.96); }
+  to   { opacity: 1; transform: none; }
+}
+/* 成功/失败图标：到位后弹一下 */
+.result-fx.ok .rt-icon,
+.result-fx.fail .rt-icon {
+  animation: rtIconPop .5s var(--ease-spring) .1s both;
+}
+@keyframes rtIconPop {
+  0%   { transform: scale(.4); opacity: 0; }
+  60%  { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); }
+}
+
+/* ── 灯箱图片入场 ─────────────────────────────────────────────── */
+.lightbox img { transition: transform .5s var(--ease-spring), box-shadow .4s var(--ease-out); }
+
+/* ── 减少动态：关闭全部动效，保留静态玻璃 ───────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .glow-target::after { display: none; }
+  .panel, .catnav, .catalog { transform: none !important; }
+  .btn::before, .icon-btn::before, .vbtn::before,
+  .stage-icbtn::before, .recentbar-card::before { display: none; }
+  .params-drawer { transform: none; }
+  .stage-icbtn.on svg,
+  .recentbar-fav.on svg { animation: none; }
+  .device-screen.swap .shot { animation: none; }
+}

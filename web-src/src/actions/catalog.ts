@@ -108,6 +108,20 @@ export function selectScenario(id: string, opts: { force?: boolean; silent?: boo
   const s = state.scenarios.find((x) => x.id === id);
   if (!s) return false;
 
+  /* 选中的场景不在当前分组筛选里 → 自动退回「全部场景」。
+   *
+   * 为什么必须在这里做：`currentVisible()` 是按 activeFilter 过滤的，
+   * 而轮播的索引（ScenarioStage.syncIndex）只认可见列表。如果筛选停在
+   * 「时间管理」却选了「重要日卡片」下的场景，可见列表里根本找不到它，
+   * syncIndex 就会把中央卡强行拉回时间管理组的第一张 ——
+   * 表现就是「点了别的分类的卡没反应，必须先点全部场景」。
+   *
+   * 放在 selectScenario 而不是各个组件里，是为了让左侧条目、最近使用、
+   * 快捷键等所有入口都自动获得这个行为，不必各自复制一遍判断。 */
+  if (state.activeFilter !== "all" && s._group !== state.activeFilter) {
+    state.activeFilter = "all";
+  }
+
   if (state.selected && state.selected.id === id && !opts.force) {
     return true;
   }
@@ -154,11 +168,41 @@ export function cycleScenario(dir: number): void {
   selectScenario(next.id);
 }
 
-/** 收藏的分组折叠状态（只在「无搜索、无筛选」时生效，和以前一致） */
+/** 分组折叠状态。
+ *
+ *  以前这里有个坑：折叠只在「无搜索、无筛选」时生效（组件里用
+ *  `!filtering && collapsed.has(name)` 算 closed），而点分组头本身就会
+ *  触发筛选 —— 于是一点分组就进了筛选态，折叠被永久锁死，表现得像
+ *  「展开收起坏了」。
+ *
+ *  现在改成：折叠是纯用户意图，任何时候都生效；唯一例外是正在搜索
+ *  （用户要找东西，别让折叠挡住结果）。 */
 export function toggleGroupCollapsed(name: string): void {
   if (state.collapsed.has(name)) state.collapsed.delete(name);
   else state.collapsed.add(name);
   writeJSON(STORAGE_KEYS.collapsed, [...state.collapsed]);
+}
+
+/** 某个分组当前是否应该显示为折叠。
+ *
+ *  @param name  分组名
+ *  @param searching  是否正在搜索（搜索时强制展开） */
+export function isGroupClosed(name: string, searching: boolean): boolean {
+  if (searching) return false;
+  return state.collapsed.has(name);
+}
+
+/** 一次性展开全部分组 */
+export function expandAllGroups(): void {
+  state.collapsed.clear();
+  writeJSON(STORAGE_KEYS.collapsed, []);
+}
+
+/** 一次性收起全部分组 */
+export function collapseAllGroups(): void {
+  const names = state.groups.map((g) => g.name);
+  state.collapsed = new Set(names);
+  writeJSON(STORAGE_KEYS.collapsed, names);
 }
 
 export function setFilter(name: string): void {
@@ -174,14 +218,57 @@ export function clearFilters(): void {
   state.activeFilter = "all";
 }
 
+/** 收藏开关：点一下在收藏 / 取消收藏之间切换。纯前端偏好，写 localStorage。 */
+export function toggleFavorite(id: string): void {
+  if (!id) return;
+  if (state.favorites.includes(id)) {
+    state.favorites = state.favorites.filter((x) => x !== id);
+  } else {
+    state.favorites = [id, ...state.favorites];
+  }
+  writeJSON(STORAGE_KEYS.favorites, state.favorites);
+}
+
+/** 某场景是否已收藏 */
+export function isFavorite(id: string): boolean {
+  return state.favorites.includes(id);
+}
+
 /** 从 localStorage 恢复上次的偏好 */
 export function loadPrefs(): void {
-  const rawCollapsed = readJSON<unknown>(STORAGE_KEYS.collapsed, []);
-  state.collapsed = new Set(Array.isArray(rawCollapsed) ? (rawCollapsed as string[]) : []);
+  const rawCollapsed = readJSON<unknown>(STORAGE_KEYS.collapsed, null);
+  if (Array.isArray(rawCollapsed)) {
+    state.collapsed = new Set(rawCollapsed as string[]);
+    collapsedRestored = true;
+  } else {
+    /* 首次访问：没有历史折叠记录。
+     * 30 个场景、10 个分组如果全展开，侧栏内容会溢出一倍多，分组头被
+     * 挤出可视区，用起来像「点不动」。所以首次全部收起，只自动展开
+     * 「当前选中场景所在的那一组」，用户再按需展开其它。 */
+    state.collapsed = new Set();
+    collapsedRestored = false;
+  }
   const rawRecent = readJSON<unknown>(STORAGE_KEYS.recent, []);
   state.recent = Array.isArray(rawRecent) ? (rawRecent as string[]) : [];
+  const rawFavs = readJSON<unknown>(STORAGE_KEYS.favorites, []);
+  state.favorites = Array.isArray(rawFavs) ? (rawFavs as string[]) : [];
   const gap = Number(readText(STORAGE_KEYS.shotGap));
   state.shotGap = Number.isFinite(gap) && gap >= 1 ? Math.min(60, Math.round(gap)) : 5;
   const theme = readText(STORAGE_KEYS.theme);
   state.theme = theme === "light" ? "light" : "dark";
+}
+
+/** 有没有恢复过用户的折叠偏好（false = 本次是首次，需要给个默认展开策略） */
+let collapsedRestored = false;
+
+/** 首次进入时默认全部收起。
+ *
+ *  为什么不是「展开当前选中组」：重要日卡片一个组就有 8 个条目，
+ *  展开后仍会把后面 9 个分组头推出可视区 —— 用户看到的就是「点不动」。
+ *  全部收起时 10 个分组头能一次看全（实测无溢出），想看哪个点箭头即可。
+ *  已有历史偏好时尊重用户自己的选择，不覆盖。 */
+export function applyInitialCollapse(): void {
+  if (collapsedRestored) return;
+  state.collapsed = new Set(state.groups.map((g) => g.name));
+  writeJSON(STORAGE_KEYS.collapsed, [...state.collapsed]);
 }

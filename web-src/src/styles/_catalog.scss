@@ -30,14 +30,7 @@
   from { opacity: 0; transform: translate3d(0, 10px, 0); }
   to   { opacity: 1; transform: none; }
 }
-.catalog::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong) 30%, var(--line-strong) 70%, transparent);
-  pointer-events: none;
-}
+/* 注：.catalog::before 的顶缘亮线已由 _liquid.scss 的玻璃边缘折射接管。 */
 
 /* ── 头部 ───────────────────────────────────────────────────────── */
 .catalog-head {
@@ -436,6 +429,32 @@
               border-color .2s var(--ease-out);
 }
 .card-glyph svg { width: 18px; height: 18px; }
+
+/* 有实拍图/设计稿时，图标位置换成卡片缩略图。
+ * 缩略图本身已经抠成透明圆角，所以这里去掉原来的描边和底色，
+ * 只留一点点内边距，让它在 36px 的格子里像一枚小卡片。 */
+.card-glyph.has-art {
+  padding: 0;
+  background: none;
+  border-color: transparent;
+  overflow: visible;
+}
+.card-thumb {
+  display: block;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  object-fit: cover;
+  cursor: zoom-in;
+  /* 透明圆角图在深色面板上容易糊掉，加一层很淡的投影把它「托起来」 */
+  filter: drop-shadow(0 3px 7px rgba(0, 0, 0, .45));
+  transition: transform .24s var(--ease-spring), filter .24s var(--ease-out);
+}
+.card-glyph.has-art:hover .card-thumb,
+.card.on .card-thumb {
+  transform: scale(1.06) rotate(-2deg);
+  filter: drop-shadow(0 5px 12px rgba(0, 0, 0, .5));
+}
 .card:hover .card-glyph,
 .card.on .card-glyph {
   transform: rotate(-5deg) scale(1.12);
@@ -473,6 +492,22 @@
 }
 .card.on .card-title { color: var(--ink); }
 .card.on .card-no { color: var(--g-tone); }
+
+/* 机型不支持（如 NOTE 系列不支持纪念日策划案卡）：卡片变灰、打一枚小标 */
+.card.unsupported { opacity: .62; }
+.card.unsupported .card-glyph { filter: grayscale(.8); }
+.card-unsupported {
+  flex: none;
+  padding: 1px 6px;
+  border: 1px solid color-mix(in srgb, var(--rust) 50%, transparent);
+  border-radius: 999px;
+  background: var(--rust-soft);
+  color: var(--rust);
+  font: 8.5px/1.5 var(--mono);
+  letter-spacing: .02em;
+  white-space: nowrap;
+}
+
 .card-tag {
   display: block;
   margin: 1px 0 0 24px;

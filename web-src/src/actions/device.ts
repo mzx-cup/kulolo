@@ -29,6 +29,11 @@ export async function refreshStatus(): Promise<void> {
       state.devTitle = `${model}${s.serial ? ` · ${s.serial}` : ""}\n点击立即重新检测设备`;
       state.devAria = `${label}，已连接。点击重新检测设备`;
       state.devMeta = `${s.width || "?"} × ${s.height || "?"} · ${s.keyguard ? "锁屏" : "亮屏"}`;
+      /* 电量与系统版本：后端读不到时给的是 -1 / 空串，直接存下来，
+         模板据此决定显不显示这一块。 */
+      state.battery = typeof s.battery === "number" ? s.battery : -1;
+      state.batteryStatus = s.battery_status || "";
+      state.androidVer = s.android || "";
     } else {
       state.devTone = "off";
       const label = s.serial ? `设备异常 · ${s.serial}` : "未连接设备";
@@ -36,6 +41,9 @@ export async function refreshStatus(): Promise<void> {
       state.devTitle = s.error || "点击重新检测设备";
       state.devAria = `${label}。点击重新检测设备`;
       state.devMeta = "等待设备接入…";
+      state.battery = -1;
+      state.batteryStatus = "";
+      state.androidVer = "";
     }
 
     if (lastConnected !== null && lastConnected !== conn) {
@@ -47,6 +55,8 @@ export async function refreshStatus(): Promise<void> {
     state.scrcpyDisabled = !s.scrcpy;
     state.devices = (s.devices || []).filter((d) => d.state === "device");
     state.selectedSerial = s.selected ?? null;
+    /* 卡片库索引随状态一起下发：跑完一轮场景，缩略图会自动换新 */
+    if (s.cards) state.cards = s.cards;
 
     shotStateRefresh();
 
@@ -71,7 +81,24 @@ export async function refreshStatus(): Promise<void> {
     }
     state.scrcpyDisabled = true;
     state.devices = [];
+    state.battery = -1;
+    state.batteryStatus = "";
+    state.androidVer = "";
     shotStateRefresh();
+  }
+}
+
+/** 单独刷一次卡片库索引。
+ *
+ *  平时靠 `refreshStatus` 顺带更新；但这个函数是「刚跑完一轮、自动识别
+ *  存了新图」时立刻要用的 —— 场景可能还要再跑几十秒，等下一轮状态轮询
+ *  太慢，用户会以为图没存上。 */
+export async function refreshCards(): Promise<void> {
+  try {
+    const r = await api.cards();
+    if (r.cards) state.cards = r.cards;
+  } catch {
+    /* 拉不到就等下一次状态轮询；不打扰用户 */
   }
 }
 

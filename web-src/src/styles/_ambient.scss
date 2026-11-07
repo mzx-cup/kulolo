@@ -1,8 +1,13 @@
-// 环境背景：柔光晕 + 斜向缎带 + 细密网点 + 噪点
+// 环境背景：柔光晕 + 斜向缎带 + 简笔画散落图案 + 噪点
 //
-// 设计意图：不用方格网（太像工程图纸、跟「场景工坊」的手作感冲突），
-// 改成「三层柔光 + 两条斜向缎带 + 一层极细网点」，从左上到右下有方向感，
-// 同时保持足够低的对比度，不抢前景卡片。
+// 设计意图：不用方格网（太像工程图纸、跟「场景工坊」的手作感冲突）。
+// 底纹改成「手绘简笔画随机散落」——太阳、云、树、房子、山、星星、
+// 月亮、鸟、猫、兔、鱼、花、蘑菇、叶子、水波、雨滴、蝴蝶……
+// 位置随机、大小不一、角度略有倾斜，刻意不做任何行列对齐，
+// 远看是若隐若现的纹理，近看才发现画的是什么。
+//
+// 图案本体由 tools/make_ambient_doodles.py 生成到 _ambient-doodles.scss，
+// 这里只负责把它摆进布局并控制透明度。
 
 /* ── 环境背景 ───────────────────────────────────────────────────── */
 .ambient {
@@ -45,29 +50,58 @@
   mask-composite: intersect;
 }
 
-/* ── 细密网点：两层错开的 1px 圆点，近看是纹理、远看是雾 ────────── */
-.ambient .stars {
+/* ── 简笔画散落底纹 ─────────────────────────────────────────────────
+ *  这一层就是 tools/make_ambient_doodles.py 生成的那张图（_ambient-doodles.scss）。
+ *  图案随机散落、大小不一、带轻微旋转，所以平铺后不会出现「一排一排」的对齐感。
+ *
+ *  平铺尺寸 1200px（原图多大就多大），配合极低透明度，
+ *  在深色底上呈现为若隐若现的白色线稿。
+ */
+.ambient .doodles {
   position: absolute;
-  inset: -120px;
-  background-image:
-    radial-gradient(circle at 1px 1px, var(--star) 1px, transparent 1.5px),
-    radial-gradient(circle at 1px 1px, var(--star) 1px, transparent 1.5px);
-  background-size: 26px 26px, 26px 26px;
-  background-position: 0 0, 13px 13px;
-  opacity: calc(var(--star-opacity) * .52);
+  inset: -8%;
+  /* --doodle-url 的值本身已经是 url("data:...") 形式，
+     这里直接引用变量即可，不要再包一层 url() —— 否则会变成
+     url(url(...)) 这种非法值，整条声明失效、背景直接不显示。 */
+  background-image: var(--doodle-url, none);
+  background-size: 1100px 1100px;
+  background-repeat: repeat;
+  background-position: center top;
+  /* 线条是白色描边，靠 opacity 压到不抢内容 ——
+     0.16 时空白处能清楚辨认出画的是什么（房子/太阳/猫…），
+     同时不会盖过卡片里的文字。 */
+  color: #fff;
+  opacity: .16;
+  /* 四周淡出：中间稍清晰，边缘消隐 */
   -webkit-mask-image:
-    radial-gradient(ellipse 96% 88% at 50% 26%, #000 10%, transparent 82%);
+    radial-gradient(ellipse 92% 88% at 50% 42%, #000 6%, rgba(0, 0, 0, .55) 52%, transparent 88%);
   mask-image:
-    radial-gradient(ellipse 96% 88% at 50% 26%, #000 10%, transparent 82%);
+    radial-gradient(ellipse 92% 88% at 50% 42%, #000 6%, rgba(0, 0, 0, .55) 52%, transparent 88%);
 }
 
-/* 斜向漂移：让网点缓慢流动，不至于死板 */
-@keyframes dotDrift {
-  from { transform: translate3d(0, 0, 0); }
-  to   { transform: translate3d(-26px, 26px, 0); }
+/* 第二层：同样的图案、更小的平铺尺寸、更低透明度，并轻微旋转错位。
+   两层周期不同（1100 vs 620）叠加后，人眼很难再察觉规律性重复，
+   整体看起来就是「随处散落」。 */
+.ambient .doodles::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background-image: var(--doodle-url, none);
+  background-size: 620px 620px;
+  background-repeat: repeat;
+  background-position: -40px 60px;
+  opacity: .5;           /* 相对父级 .16 再乘 0.5，形成更淡的一层 */
+  transform: rotate(3deg) scale(1.05);
 }
-.ambient .stars {
-  animation: dotDrift 90s linear infinite;
+
+/* 极缓慢地漂移，让底纹像浮在空中，不会显得死板。
+   位移量正好等于一个平铺单元，循环时无跳变。 */
+@keyframes doodleDrift {
+  from { transform: translate3d(0, 0, 0); }
+  to   { transform: translate3d(-1100px, 0, 0); }
+}
+.ambient .doodles {
+  animation: doodleDrift 240s linear infinite;
 }
 
 /* ── 噪点：压一层极细颗粒，消除渐变的色带 ───────────────────────── */

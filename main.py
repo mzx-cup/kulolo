@@ -24,6 +24,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 import adbutils
+import card_gallery
+import card_probe
 import locale_kit
 import locale_switch
 import runtime_paths
@@ -56,6 +58,64 @@ WEB = runtime_paths.resource_path("web")
 #   retryable  卡片未触发时是否提供「下月同日重跑」；不写则节日场景 False、其余 True
 #   icon       卡片图标键：cake / heart / exam / ticket / pin / lantern / spark / calendar / gift / star / clock ...
 #   accent     保留字段，前端目前按 group 自动配色
+#   card_keywords  卡片认领文案（见下）
+#
+# card_keywords 怎么用
+# --------------------
+# 场景跑完不再弹「卡片出来了吗」让人点，而是拿这串关键词去设备上自动认卡
+# （card_probe：先看锁屏原子卡片，再回桌面翻智慧建议轮播）。命中就截图存进
+# 卡片库、算这一轮成功。
+#
+# 写法约定：
+#   * **具体的放前面**：先写卡片标题里的固定片段（如 "幸运四叶草"），
+#     再退到更泛的词；顺序就是匹配优先级。
+#   * 能跨语言就都写上：卡片文案跟着系统语言走，只写中文在英语/阿拉伯语
+#     环境下必然认不出。
+#   * 也可以写成 `lambda r: (...)`：卡片标题里带随机名字时（如 Bday110792）
+#     要等场景跑到一半才知道，交给回调按 `r.card_hint` 现算。
+#   * 不写这个字段 = 这个场景不做自动识别（回调直接放行，行为同以前）。
+
+# 重要日类卡片的认领文案，按「卡片类型」分三组。
+#
+# 这些卡大多是**锁屏卡片**：标题里带这一轮随机生成的名字（Bday110792 之类），
+# 副标题随卡片不同而不同。所以主判据一律用 `r.card_hint`（场景跑到一半把
+# 名字写进来），拿不到再退到各类型的固定文案。
+#
+# 为什么按类型分：策划案卡是「xx·生日 · 3 天后」、考前提醒是「考试还有 3 天」
+# 这类，跟祝福卡的「今天是xx / 抽取你的幸运四叶草」完全不重叠；用一套通用
+# 词会把「没出卡」误判成「出了别的卡」。
+GREETING_CARD_KEYWORDS = (
+    "今天是", "幸运四叶草", "抽取你的", "四叶草", "祝你顺利", "clover",
+)
+# 策划案卡（生日/纪念日/考试前 3 天）：文案形如「xx·生日 · 3 天后」
+PLAN_CARD_KEYWORDS = (
+    "天后", "策划案", "还有 3 天", "3 天后", "days later", "in 3 days",
+    "birthday plan", "upcoming",
+)
+# 追星 / 重要日提醒类：文案更泛，靠名字 + 通用词兜底
+REMINDER_CARD_KEYWORDS = (
+    "今天是", "提醒", "重要日", "观演", "追星", "演出", "reminder", "today",
+)
+
+
+def important_day_keywords(kind: str):
+    """按卡片类型造一个 callable：优先本轮随机名字，再退到该类型的固定文案。"""
+    fallbacks = {
+        "greeting": GREETING_CARD_KEYWORDS,
+        "plan": PLAN_CARD_KEYWORDS,
+        "reminder": REMINDER_CARD_KEYWORDS,
+    }[kind]
+
+    def _kw(r) -> tuple[str, ...]:
+        name = (getattr(r, "card_hint", "") or "").strip()
+        own = (name,) if name else ()
+        return own + fallbacks
+
+    return _kw
+
+
+# 兼容旧名字（exam_greeting 等场景已用）
+greeting_keywords = important_day_keywords("greeting")
 
 # 时间管理三张卡片的触发方式：真实触发要改系统时间 + 建/关闹钟 + 息屏等待；
 # Mock 触发靠 TransAtomicBrain 调试页一键注入事件，几秒钟出卡。
@@ -88,6 +148,7 @@ SCENARIOS = [
             {"key": "wait_sec", "type": "number", "label": "息屏",
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
+        "card_keywords": important_day_keywords("plan"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "from": "offset_days", "prefix": "今天 + ", "suffix": " 天"},
@@ -106,6 +167,7 @@ SCENARIOS = [
             {"key": "wait_sec", "type": "number", "label": "息屏",
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
+        "card_keywords": important_day_keywords("greeting"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "v": "生日当天"},
@@ -119,6 +181,7 @@ SCENARIOS = [
                 "息屏 60 秒后第一次解锁，回桌面再等 1 分钟，二次息屏亮屏后"
                 "验证锁屏上的纪念日提醒卡片。",
         "module": scenario_birthday,
+        "unsupported_note": "NOTE 系列手机不支持",
         "params": [
             {"key": "offset_days", "type": "number", "label": "纪念日 = 今天 +",
              "value": 4, "min": 1, "max": 27, "unit": "天"},
@@ -127,7 +190,8 @@ SCENARIOS = [
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
         "hidden": {"ev_value": "anniversary", "ev_display": "纪念日",
-                  "desktop_wait_sec": 60},
+                  "desktop_wait_sec": 90},
+        "card_keywords": important_day_keywords("plan"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "from": "offset_days", "prefix": "今天 + ", "suffix": " 天"},
@@ -147,7 +211,8 @@ SCENARIOS = [
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
         "hidden": {"ev_value": "anniversary", "ev_display": "纪念日",
-                   "desktop_wait_sec": 60},
+                   "desktop_wait_sec": 90},
+        "card_keywords": important_day_keywords("greeting"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "v": "纪念日当天"},
@@ -168,6 +233,7 @@ SCENARIOS = [
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
         "hidden": {"ev_value": "exam", "ev_display": "考试"},
+        "card_keywords": important_day_keywords("plan"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "from": "offset_days", "prefix": "今天 + ", "suffix": " 天"},
@@ -181,6 +247,8 @@ SCENARIOS = [
                 "上滑解锁，查看锁屏上的考试祝福卡片。日历里没有考试事件时会自动"
                 "在「今天+1」新建一个。",
         "module": scenario_greeting,
+        "icon": "exam",
+        "card_keywords": important_day_keywords("greeting"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "息屏",
@@ -208,6 +276,7 @@ SCENARIOS = [
         ],
         "hidden": {"ev_value": "performance", "ev_display": "观演日",
                    "second_off_sec": 2},
+        "card_keywords": important_day_keywords("reminder"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "v": "观演日当天"},
@@ -227,6 +296,7 @@ SCENARIOS = [
              "value": 60, "min": 5, "max": 300, "unit": "秒"},
         ],
         "hidden": {"ev_value": "none", "ev_display": "重要日", "no_lookup": True},
+        "card_keywords": important_day_keywords("reminder"),
         "specs": [
             {"k": "息屏", "from": "wait_sec", "suffix": "s"},
             {"k": "目标", "v": "重要日当天"},
@@ -244,6 +314,7 @@ SCENARIOS = [
         "group": "时间管理",
         "icon": "clock",
         "retryable": False,
+        "card_keywords": ("延后", "睡得有点晚", "闹钟", "alarm", "delay", "snooze"),
         "params": [
             {"key": "method", "type": "select", "label": "触发方式",
              "value": "real", "options": METHOD_OPTIONS},
@@ -269,6 +340,8 @@ SCENARIOS = [
         "group": "时间管理",
         "icon": "clock",
         "retryable": False,
+        "card_keywords": ("要开启明天的闹钟吗", "明天是工作日", "开启明天的闹钟",
+                          "turn on tomorrow", "tomorrow's alarm", "workday"),
         "params": [
             {"key": "method", "type": "select", "label": "触发方式",
              "value": "real", "options": METHOD_OPTIONS},
@@ -291,6 +364,8 @@ SCENARIOS = [
         "group": "时间管理",
         "icon": "clock",
         "retryable": False,
+        "card_keywords": ("要关闭明天的闹钟吗", "明天是休息日", "关闭明天的闹钟",
+                          "turn off tomorrow", "tomorrow's alarm", "day off"),
         "params": [
             {"key": "method", "type": "select", "label": "触发方式",
              "value": "real", "options": METHOD_OPTIONS},
@@ -312,6 +387,7 @@ SCENARIOS = [
         "group": "生活服务卡片",
         "icon": "car",
         "retryable": False,
+        "card_keywords": ("打车", "Yango", "yango", "ride", "taxi"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "等待卡片",
              "value": 5, "min": 2, "max": 60, "unit": "秒"},
@@ -333,6 +409,7 @@ SCENARIOS = [
         "group": "生活服务卡片",
         "icon": "food",
         "retryable": False,
+        "card_keywords": ("点餐", "foodpanda", "Foodpanda", "外卖", "food", "delivery"),
         "params": [
             {"key": "hour", "type": "time", "label": "点餐时间", "h": 11, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "等待卡片",
@@ -359,6 +436,7 @@ SCENARIOS = [
         "group": "BoomPlay",
         "icon": "music",
         "retryable": False,
+        "card_keywords": ("最近播放", "Boomplay", "boomplay", "音乐", "music", "recently played"),
         "params": [
             {"key": "gap", "type": "select", "label": "间隔（频率控制）",
              "value": "2h",
@@ -392,6 +470,7 @@ SCENARIOS = [
         "group": "玩机技巧卡片",
         "icon": "satellite",
         "retryable": False,
+        "card_keywords": ("卫星通话", "卫星", "satellite", "Satellite"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "10点后等待",
              "value": 75, "min": 65, "max": 300, "unit": "秒"},
@@ -412,6 +491,7 @@ SCENARIOS = [
         "group": "体验报告卡片",
         "icon": "calendar",
         "retryable": False,
+        "card_keywords": ("月度总结", "本月总结", "体验报告", "monthly summary", "monthly report"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "解锁后等待",
               "value": 90, "min": 30, "max": 180, "unit": "秒"},
@@ -433,6 +513,7 @@ SCENARIOS = [
         "group": "体验报告卡片",
         "icon": "star",
         "retryable": False,
+        "card_keywords": ("年度总结", "年度报告", "体验报告", "yearly summary", "annual report"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "解锁后等待",
               "value": 90, "min": 30, "max": 180, "unit": "秒"},
@@ -456,6 +537,7 @@ SCENARIOS = [
         "group": "位置感知卡片",
         "icon": "globe",
         "retryable": False,
+        "card_keywords": ("跨国", "跨城", "印度", "India", "in India", "abroad"),
         "params": [
             {"key": "method", "type": "select", "label": "触发方式",
              "value": "mock_country",
@@ -488,6 +570,11 @@ SCENARIOS = [
         "group": "停电建议",
         "icon": "bolt",
         "retryable": False,
+        "card_keywords": (
+            "停电预警", "请提前做好电力储备", "停电", "电力储备",
+            "power outage", "outage", "kplc",
+            "انقطاع التيار", "انقطاع الكهرباء", "الكهرباء",
+        ),
         "params": [
             {"key": "year", "type": "number", "label": "触发年份",
              "value": 2026, "min": 2024, "max": 2100},
@@ -523,6 +610,11 @@ SCENARIOS = [
         "group": "停电建议",
         "icon": "bolt",
         "retryable": False,
+        "card_keywords": (
+            "省电建议", "开启省电模式", "省电模式", "建议您及时开启省电",
+            "power saving", "battery saver", "save power",
+            "توفير الطاقة", "توفير البطارية", "توفير",
+        ),
         "params": [
             {"key": "year", "type": "number", "label": "触发年份",
              "value": 2026, "min": 2024, "max": 2100},
@@ -559,6 +651,11 @@ SCENARIOS = [
         "group": "停电建议",
         "icon": "bolt",
         "retryable": False,
+        "card_keywords": (
+            "电力恢复时间", "恢复时间", "电力已恢复", "供电已恢复", "电力恢复",
+            "power restoration", "power restored", "restoration time",
+            "استعادة الكهرباء", "عودة الكهرباء", "وقت الاستعادة",
+        ),
         "params": [
             {"key": "year", "type": "number", "label": "触发年份",
              "value": 2026, "min": 2024, "max": 2100},
@@ -595,6 +692,11 @@ SCENARIOS = [
         "module": scenario_smart_traffic,
         "group": "路况天气",
         "icon": "road",
+        "card_keywords": (
+            "智能路况", "大雨可能影响车费", "暴雨可能影响", "路况",
+            "smart traffic", "traffic conditions", "heavy rain may affect",
+            "حركة المرور", "الطرق", "الأمطار",
+        ),
         "retryable": False,
         "params": [
             {"key": "method", "type": "select", "label": "触发方式",
@@ -629,6 +731,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("新年", "元旦", "New Year", "New Year's"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -648,6 +751,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("端午", "龙舟", "Dragon Boat"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -667,6 +771,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("中秋", "月饼", "Mid-Autumn"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -686,6 +791,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("国庆", "National Day"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -705,6 +811,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("冬至", "Winter Solstice"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -724,6 +831,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "圣诞夜不依赖中国 OOBE，触发前不询问国家。",
         "module": scenario_festival,
+        "card_keywords": ("圣诞", "平安夜", "Christmas", "Christmas Eve"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -743,6 +851,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "圣诞节不依赖中国 OOBE，触发前不询问国家。",
         "module": scenario_festival,
+        "card_keywords": ("圣诞", "Christmas"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -762,6 +871,7 @@ SCENARIOS = [
                 "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
                 "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
         "module": scenario_festival,
+        "card_keywords": ("春节", "春节快乐", "Spring Festival", "Chinese New Year"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -797,7 +907,7 @@ MIME = {
 _lock = threading.Lock()
 _events: list[dict] = []
 _state = {"running": False, "result": None, "error": None,
-          "started_at": None, "finished_at": None}
+          "scenario": None, "started_at": None, "finished_at": None}
 # 上一次跑完的场景：id + 是否算成功（confirmed_ok is False 或抛异常 → 失败）。
 # 用它兜底：同一个场景上次没触发成功，这次再点运行就自动当「重试」处理（先清原子服务），
 # 不依赖前端是否带 retry=1（老页面缓存 JS 时会漏传）。
@@ -877,6 +987,31 @@ def _device_model(serial: str) -> str:
     return name
 
 
+def _find_scrcpy_async() -> str | None:
+    """`_find_scrcpy()` 的非阻塞版：只在后台线程里扫一次，状态接口立刻返回。
+
+    为什么必须这样：`_find_scrcpy` 会去 `D:\\`、`C:\\Program Files` 这类根目录
+    各扫一层 `*/scrcpy.exe`。冷缓存时这一步在机械盘上能卡十几秒，而
+    `/api/status` 是前端每 3~5 秒拉一次的接口 —— 于是整个页面「连设备都检测
+    不出来」，报错却是超时，根本不像 scrcpy 的问题（实测踩过）。
+
+    扫描结果沿用 `_scrcpy` 缓存：第一次返回 None（前端先禁用按钮），
+    后台扫完之后的下一轮轮询就能拿到真路径。
+    """
+    global _scrcpy
+    if _scrcpy is not _SCRCPY_UNSET:
+        return _scrcpy  # type: ignore[return-value]
+
+    def _work() -> None:
+        try:
+            _find_scrcpy()
+        except Exception:  # noqa: BLE001 —— 扫描失败就当没找到，不该影响状态接口
+            pass
+
+    threading.Thread(target=_work, name="find-scrcpy", daemon=True).start()
+    return None
+
+
 def _adb_devs() -> list[tuple[str, str]]:
     """实时设备列表 [(serial, state)]，state ∈ device / offline / unauthorized。
 
@@ -903,14 +1038,32 @@ def _adb_devs() -> list[tuple[str, str]]:
     with _lock:
         if _state["running"]:
             return devs
-    try:
-        # 用解析出来的 adb 绝对路径：打包后 PATH 里没有 adb，
-        # 只有资源目录里那份，直接写 "adb" 会 FileNotFoundError。
-        subprocess.run([_ADB or "adb", "start-server"], capture_output=True, timeout=15)
-        devs = _list()
-    except Exception:
-        pass
-    return devs
+
+    def _start(exe: str, env: dict | None = None) -> int:
+        """起一次 daemon，返回进程返回码（0 = 成功）。"""
+        try:
+            return subprocess.run([exe, "start-server"], capture_output=True,
+                                  timeout=15, env=env).returncode
+        except Exception:
+            return -1
+
+    # 用解析出来的 adb 绝对路径：打包后 PATH 里没有 adb，只有资源目录里那份
+    rc = _start(_ADB or "adb")
+    if rc != 0:
+        # 内置 adb 36.0.0 起 daemon 时必定写 `<TEMP>\adb.log`；某些机器上
+        # 这个路径对 detached daemon 不可写（`cannot open adb.log: Permission
+        # denied`），于是 daemon 直接退出，所有 adb 命令报 cannot connect to
+        # daemon —— 设备明明插着却「检测不到」。
+        # 判定不能用 Python 写文件（实测 Python 能写、adb 仍失败），只能用
+        # 上面这次 start-server 的真实返回码，失败就换到应用目录旁再试一次。
+        alt = runtime_paths.adb_temp_dir()
+        if alt is not None:
+            env = dict(os.environ)
+            env["TMP"] = env["TEMP"] = str(alt)
+            if _start(_ADB or "adb", env) == 0:
+                # 后续 adbutils / phone_ctl 都继承本进程环境，保持一致
+                os.environ["TMP"] = os.environ["TEMP"] = str(alt)
+    return _list()
 
 
 def get_device() -> Device:
@@ -946,6 +1099,10 @@ def _scenarios_json() -> list[dict]:
     out = []
     for s in SCENARIOS:
         item = {k: s[k] for k in ("id", "title", "tag", "desc", "params", "specs")}
+        # 机型不支持的场景仍然列在目录里（保留完整性），但带一句说明，
+        # 前端据此在卡片上打标并禁用「一键运行」，免得白等两分钟。
+        if s.get("unsupported_note"):
+            item["unsupported_note"] = s["unsupported_note"]
         item["group"] = s.get("group") or (
             "节日祝福卡片" if s["id"].startswith("festival_") else "重要日卡片")
         item["retryable"] = bool(s.get("retryable", not s["id"].startswith("festival_")))
@@ -1014,24 +1171,150 @@ def _allowed_params(sce: dict, params: dict) -> dict:
 
 
 def _confirm_fn(r) -> bool:
-    """场景线程的确认回调：发 confirm 事件给前端，阻塞等用户点「已触发/未触发」。
-    可被暂停/结束打断；120 秒无回应默认按「已触发」继续（兜底不卡死流程）。"""
-    with _lock:
-        _confirm_state.update(pending=True, ok=None)
-    _confirm_evt.clear()
-    _emit({"t": "confirm", "no": r._no, "msg": "卡片是否已成功触发？"})
-    deadline = time.time() + 120
-    while time.time() < deadline:
+    """场景线程的确认回调：**自动**识别卡片是否出来了，不再问人。
+
+    以前这里会发一个 confirm 事件、阻塞等前端点「已触发 / 未触发」。
+    现在改成：拿当前场景声明的关键词（SCENARIOS[*].card_keywords），
+    回桌面首页，在**智慧建议小部件**里一张一张滑轮播去找。
+    命中就现场截取小部件里的卡片、存进卡片库并返回 True；翻完一轮没有才
+    返回 False。
+
+    重要：锁屏 / 顶部灵动岛的原子卡片（atomic_title）是另一种 UI，
+    不能当作智慧建议卡片截图归位。哪怕锁屏文案与目标关键词一致，也必须
+    继续回桌面找真正的智慧建议卡片，不能用锁屏图片冒充。
+
+    三个决定行为的细节：
+
+    * **没有声明关键词的场景**（例如弹窗类、锁屏通知类）直接返回 True ——
+      和以前「不调用就是通过」的行为一致，不能因为识别不了就判失败。
+    * **自动识别失败也不弄死整轮流程**：返回 False 只会让前端显示「未触发」，
+      场景本身的步骤都跑完了。真正的报错仍然走异常。
+    * 可被暂停/结束打断：识别期间穿插 r.check()，点了「结束」能立刻停。
+    """
+    sid = _current_scenario_id()
+    sce = SCENARIOS_BY_ID.get(sid) or {}
+    keywords = sce.get("card_keywords") or ()
+    # 有的卡片标题里带随机名字，要等场景跑到一半才知道 —— 允许写成回调
+    if callable(keywords):
+        keywords = keywords(r)
+    keywords = tuple(k for k in (keywords or ()) if k)
+    if not keywords:
+        _emit({"t": "log", "no": r._no,
+               "msg": "本场景没有登记卡片文案，跳过自动识别（按已触发处理）"})
+        return True
+
+    _emit({"t": "log", "no": r._no,
+           "msg": "自动识别桌面智慧建议卡片（滑动轮播），无需人工确认…"})
+    try:
+        dev = get_device()
+    except Exception as exc:  # noqa: BLE001
+        _emit({"t": "log", "no": r._no, "msg": f"自动识别跳过：取不到设备（{exc}）"})
+        return True
+
+    log = lambda m: _emit({"t": "log", "no": r._no, "msg": m})
+    hit = None
+
+    # 只接受桌面智慧建议卡片。锁屏快照仅用于诊断日志，绝不能作为归位图片。
+    lock_texts = list(getattr(r, "lock_texts", None) or [])
+    if lock_texts:
+        log(f"锁屏原子卡片文案（不作为智慧建议图片）：{' / '.join(lock_texts)}")
+
+    # 轮播是「按时间轮换」的，第一次可能刚好没轮到 —— 给两轮机会。
+    for attempt in range(1, 3):
         if _ctrl["stop"]:
             raise UiError("用户结束场景")
-        if _confirm_evt.wait(0.3):
-            with _lock:
-                ok = _confirm_state["ok"]
-                _confirm_state["pending"] = False
-            return bool(ok)
-    with _lock:
-        _confirm_state["pending"] = False
+        if _ctrl["paused"]:
+            return True      # 暂停中不折腾设备，交给用户继续时再跑
+        hit = card_probe.find_card_anywhere(dev, keywords, log=log)
+        if hit:
+            break
+        if attempt < 2:
+            log(f"第 {attempt} 轮没找到，歇 6 秒再翻一轮...")
+            time.sleep(6)
+
+    if not hit:
+        log(f"翻完轮播仍未找到智慧建议卡片（关键词 {tuple(keywords)}）")
+        _emit({"t": "card", "no": r._no, "ok": False, "scenario": sid})
+        return False
+
+    # 命中：截图 → 抠成透明圆角卡片 → 存进卡片库。
+    # 截图失败不影响判定（控件树里的文案已经是足够的证据）。
+    #
+    # 为什么必须抠：整屏 1208x2644 缩到 36px 什么也看不清，直接裁成方块
+    # 又会带着桌面的黑底/壁纸。这里按卡片本体的紧框裁切再画圆角 alpha，
+    # 前端拿到的就是可以直接贴的素材（和 public/cards/ 里的设计稿一致）。
+    #
+    # 图源始终是桌面智慧建议小部件的当前画面。禁止用锁屏截图代替：
+    # 锁屏原子卡片与桌面智慧建议卡片不是同一个 UI。
+    png = _safe_screenshot(dev)
+    if png and hit.box:
+        try:
+            from tools import make_card_art
+            png = make_card_art.cutout_png(png, box=hit.box)
+        except Exception as exc:  # noqa: BLE001 —— 抠图失败不能让识别白跑
+            log(f"抠图失败，改用原始裁切：{exc}")
+            try:
+                import io
+                from PIL import Image
+                im = Image.open(io.BytesIO(png))
+                x1, y1, x2, y2 = hit.box
+                im = im.crop((max(0, x1), max(0, y1),
+                              min(im.width, x2), min(im.height, y2)))
+                buf = io.BytesIO()
+                im.save(buf, format="PNG")
+                png = buf.getvalue()
+            except Exception:  # noqa: BLE001
+                pass
+    entry = {}
+    if png:
+        entry = card_gallery.record(
+            sid, title=sce.get("title") or sid, png=png,
+            text=hit.text, keyword=hit.keyword, where=hit.where)
+    log(f"已识别：{hit.where} / 「{hit.text}」"
+        + (f"，截图已存入卡片库（{entry.get('file')}）" if entry else "，截图失败"))
+    _emit({"t": "card", "no": r._no, "ok": True, "scenario": sid,
+           "text": hit.text, "keyword": hit.keyword, "where": hit.where,
+           "has_shot": bool(entry)})
     return True
+
+
+def _safe_screenshot(dev) -> bytes:
+    """截图，失败返回 b""。自动识别不该因为截图掉链子而失败。"""
+    try:
+        return dev.screenshot_png()
+    except Exception:  # noqa: BLE001
+        return b""
+
+
+def _last_lockscreen_shot() -> bytes:
+    """取本轮场景已经发过的最后一张「锁屏卡片」截图（base64 → bytes）。
+
+    为什么需要它：重要日卡片（生日策划案 / 纪念日 / 追星 / 重要日提醒）
+    是**锁屏卡片**，场景在 `r.shot("锁屏卡片")` 拍完就立刻上滑解锁、
+    回桌面，然后才调 `r.confirm()`。等我们自动识别时屏幕早就不在锁屏了，
+    现截一张只会得到桌面。
+
+    好在 `Runner.shot()` 把当时的 PNG 以 base64 发进了事件流，从事件流里
+    取回来就是「卡片确实出现那一刻」的锁屏画面，比事后补截准得多。
+    """
+    import base64
+
+    with _lock:
+        shots = [e for e in _events
+                 if e.get("t") == "shot" and "锁屏" in (e.get("tag") or "")]
+    if not shots:
+        return b""
+    try:
+        return base64.b64decode(shots[-1].get("png_b64") or "")
+    except Exception:  # noqa: BLE001
+        return b""
+
+
+def _current_scenario_id() -> str:
+    """当前正在跑（或刚跑完）的场景 id。"""
+    with _lock:
+        return str(_state.get("scenario") or "")
+
 
 
 def _ask_fn(r, prompt: str) -> bool:
@@ -1062,6 +1345,8 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
     with _lock:
         _ctrl.update(paused=False, stop=False)
         _confirm_state.update(pending=False, ok=None)
+        # 自动识别回调要靠它查「这个场景该认哪几个文案」
+        _state["scenario"] = scenario_id
     try:
         if sce is None:
             raise ValueError(f"未知场景 {scenario_id!r}")
@@ -1190,6 +1475,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._events_after(parse_qs(url.query).get("after", ["0"])[0])
         if path == "/api/screenshot":
             return self._screenshot()
+        if path == "/api/cards":
+            return self._json({"cards": card_gallery.list_all()})
+        if path.startswith("/api/cards/"):
+            return self._card_image(path[len("/api/cards/"):])
         if path in ("/", "/index.html"):
             return self._static("index.html")
         if path.startswith("/") and ".." not in path:
@@ -1197,6 +1486,22 @@ class Handler(BaseHTTPRequestHandler):
             if (WEB / name).is_file():
                 return self._static(name)
         self._json({"error": "not found"}, 404)
+
+    def _card_image(self, rest: str):
+        """按场景 id 取卡片截图（自动识别时存下来的那张）。
+
+        `/api/cards/<scenario_id>.png`，前端直接当 <img src> 用。
+        `?ts=` 是前端加的时间戳，用来破缓存；服务端不看它。
+        """
+        sid = rest[:-4] if rest.endswith(".png") else rest
+        if not sid or ".." in sid or "/" in sid or "\\" in sid:
+            return self._json({"error": "bad id"}, 400)
+        png = card_gallery.read_png(sid)
+        if png is None:
+            return self._json({"error": "not found"}, 404)
+        # 卡片图按 id 覆盖写（同一场景重跑就换一张），所以不能让浏览器缓存：
+        # 前端每次带 ?ts=，但 no-store 更保险，也省得记 URL 版本。
+        self._bytes(png, "image/png")
 
     def _static(self, name: str):
         try:
@@ -1206,10 +1511,14 @@ class Handler(BaseHTTPRequestHandler):
         self._bytes(data, MIME.get(Path(name).suffix, "application/octet-stream"))
 
     def _status(self):
-        info = {"connected": False, "scrcpy": _find_scrcpy()}
+        info = {"connected": False, "scrcpy": _find_scrcpy_async()}
         with _lock:
             info["run"] = {k: _state[k] for k in ("running", "result", "error")}
             info["run"]["paused"] = _ctrl["paused"]
+            info["run"]["scenario"] = _state["scenario"]
+        # 已采集到的卡片索引：前端左侧每张卡片据此显示「实拍图」缩略图。
+        # 单独一个 /api/cards 也有，但这条和状态同发，首屏就能拿到，省一次请求。
+        info["cards"] = card_gallery.list_all()
         devs = _adb_devs()   # 实时列表，前端每 3~5 秒拉一次，插线/换机自动识别
         info["devices"] = [{"serial": s, "state": st, "model": _device_model(s)}
                            for s, st in devs]
@@ -1231,6 +1540,18 @@ class Handler(BaseHTTPRequestHandler):
             info.update(connected=True, serial=d.serial, model=d.model(),
                         width=w, height=h, focus=d.focus(),
                         keyguard=d.keyguard_showing())
+            # 电量与系统版本：读不到就给 -1 / 空串，前端据此隐藏对应显示。
+            # 这两项各自一次 adb 往返，失败不影响其它字段。
+            try:
+                info["battery"] = d.battery_level()
+                info["battery_status"] = d.battery_status()
+            except Exception:
+                info["battery"] = -1
+                info["battery_status"] = ""
+            try:
+                info["android"] = d.android_version()
+            except Exception:
+                info["android"] = ""
         except Exception as exc:
             info["error"] = str(exc)
         self._json(info)

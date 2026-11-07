@@ -4,6 +4,65 @@
 左侧是场景目录（可搜索 / 筛选 / 折叠），中间调参数并运行，右侧看手机实时画面；
 新增场景沿用同一套逻辑，加到 30+ 种也仍有条理。
 
+**卡片自动识别 + 自动归位**
+
+场景跑完不再弹「卡片出来了吗」让人点确认，改由后端自动判定（`card_probe.py`）：
+
+1. 先看锁屏上的系统 UI 原子卡片（`com.android.systemui:id/atomic_title`）；
+2. 回桌面首页，在「智慧建议」小部件里**竖滑轮播**一屏一屏翻（横滑会翻桌面分页，
+   所以只能竖滑；实测一轮 4 张，翻满一圈自动收工），拿场景登记的
+   `card_keywords` 去比控件树文案；
+3. 命中就截图，裁成卡片本身（不是整屏），按场景 id 存进卡片库
+   （`card_gallery.py`，落在 `%APPDATA%\phone-remote\cards`）；
+4. 前端左侧目录卡片显示缩略图、「卡片实拍」面板显示大图，`/api/cards` 提供索引，
+   `/api/cards/<场景id>.png` 提供图片。实拍图优先于设计稿，都没有就退回 SVG 图标。
+
+识别关键词写在 `main.py` 的 `SCENARIOS[*]["card_keywords"]`。带随机名字的卡片
+（如考试祝福「今天是Bday110871」）可以写成回调 `lambda r: (...)`，场景跑到一半把
+名字塞进 `r.card_hint` 即可。没写关键词的场景跳过识别、按「已触发」放行。
+
+**抠图工具**：`python tools/make_card_art.py`。把 `资源/图片资源/_incoming/` 里的
+卡片截图（四周带桌面壁纸 / 黑边）抠成透明圆角 PNG，输出到
+`web-src/public/cards/`。原理是用 top-hat 提取卡片自带的亮色描边 → 量外接框和
+圆角半径 → 按几何重画 alpha，不靠颜色阈值猜（卡片浅绿渐变和灰壁纸的 RGB 距离
+只有 ~32，任何容差都会同时漏进卡片和漏出背景）。
+
+**批量采集重要日卡片**：`python tools/collect_important_days.py`（也可指定单个 id）。
+串行触发「重要日卡片」分组的场景，每张真机卡片自动识别 + 裁切 + 抠图后按场景 id
+存进卡片库，前端目录缩略图与「卡片实拍」面板会自动出现。`--status` 只看现状。
+
+其中 **纪念日策划案卡片（anniversary）在 NOTE 系列机型上不支持**（实测轮播翻一圈
+都不出卡），`main.py` 里给它标了 `unsupported_note = "NOTE 系列手机不支持"`：
+前端目录打标、运行按钮禁用，采集脚本也跳过它。
+
+**纪念日类卡片等待时长**：`desktop_wait_sec > 0` 的二次触发流程（纪念日动效卡等）
+原本「回桌面等 60s + 亮屏等 8s」不够，卡片还没渲染完就截了图。现改为
+`DESKTOP_WAIT_SEC = 90` / `LOCK_RENDER_SEC = 30`（`scenario_birthday.py` 顶部常量），
+`main.py` 里两个纪念日场景的 `hidden.desktop_wait_sec` 也同步改成 90。
+**不要调小** —— 这台 X6766 上等不够就是不出卡。
+
+**输入法自动纠正兜底**：日历输入框常把 ASCII 名字纠成中文（实测
+`Bday111760` → `B答应111760`），旧逻辑按 title 精确匹配找不到刚建的事件就整轮报错。
+现在 `scenario_greeting._run_fast()` 在建事件前记下 `newest_event_id()`，
+找不到就取 id 更大的最新那条事件（`_locate_after_seed()`），不再依赖标题文本。
+
+**锁屏卡片取证**：重要日卡片是锁屏卡片，解锁后就没了。
+`Runner.note_lockscreen(dev)` 在 `r.shot("锁屏卡片")` 那一刻把控件树文案和区域
+存进 `r.lock_texts` / `r.lock_box`；`_confirm_fn` 先拿关键词比这份快照，命中就
+从事件流里取当时那张锁屏截图（`_last_lockscreen_shot()`）裁切 + 抠图，
+不会等回到桌面再补截（那时只剩桌面了）。
+
+**构建前端**：`cd web-src && npm run build`（产物直接写进 `web/`）。
+Vite 需要 esbuild 起子进程，若在某些受限环境里报 `spawn EPERM`，用
+`npm run build` 并给该命令一次完整权限即可。
+
+**adb daemon 日志目录**：内置 adb 36.0.0 起 daemon 时必定写 `<TEMP>\adb.log`。
+某些机器上这个路径对 detached daemon 不可写，会报
+`cannot open adb.log: Permission denied` 然后所有 adb 命令都连不上、设备「凭空消失」。
+`main.py` 的 `_adb_devs()` 会在 `start-server` 真的失败时换到应用目录旁的
+`_adb_tmp/`（见 `runtime_paths.adb_temp_dir()`）再试一次。注意不能用「Python 能不能
+写 adb.log」来判断，实测 Python 能写但 adb 仍失败，必须看 start-server 的返回码。
+
 **生日祝福卡片**（greeting）
 
 1. 首次运行在「今天 + 1」建一个 fixture 测试事件（走一次日历 UI）

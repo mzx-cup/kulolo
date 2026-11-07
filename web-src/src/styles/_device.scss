@@ -58,30 +58,7 @@
   pointer-events: none;
 }
 
-.island {
-  position: absolute;
-  z-index: 6;
-  top: 9px;
-  left: 50%;
-  width: 60px;
-  height: 18px;
-  border-radius: 999px;
-  background: #010204;
-  border: 1px solid rgba(255, 255, 255, .07);
-  transform: translateX(-50%);
-}
-.island::after {
-  content: "";
-  position: absolute;
-  top: 50%;
-  right: 8px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #0d1822;
-  transform: translateY(-50%);
-  box-shadow: inset 0 0 1px rgba(255, 255, 255, .35);
-}
+/* 注：顶部灵动岛（.island）已移除，不再遮挡截图顶部内容。 */
 .shot {
   position: absolute;
   inset: 0;
@@ -202,18 +179,9 @@
   color: var(--on-accent);
   transform: scale(1.08);
 }
-.home-bar {
-  position: absolute;
-  z-index: 7;
-  left: 50%;
-  bottom: 7px;
-  width: 76px;
-  height: 3px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, .32);
-  transform: translateX(-50%);
-  pointer-events: none;
-}
+/* 注：顶部灵动岛（.island）与底部小白条（.home-bar）已移除 ——
+   它们只是装饰，却会压住截图内容，遮挡真实画面。 */
+
 .shottag {
   margin: 4px 0 0;
   text-align: center;
@@ -230,6 +198,102 @@
   color: var(--ink-3);
   opacity: .8;
 }
+
+/* ── 设备指标：电量 + 系统版本 ──────────────────────────────────── */
+/*  放在「自动刷新」上方，两枚小玻璃胶囊并排；
+    电量 < 20% 转红，其余绿色，充电时带一点呼吸感。 */
+.dev-stats {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+  margin-top: 12px;
+}
+
+.dev-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--glass-edge);
+  border-radius: 999px;
+  background-image: var(--glass-sheen);
+  background-color: var(--panel-2);
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  font: 10.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  color: var(--ink-2);
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .1);
+}
+
+/* 电量胶囊：正常绿、偏低红 */
+.dev-battery.ok {
+  color: var(--jade);
+  border-color: color-mix(in srgb, var(--jade) 34%, transparent);
+  background-color: color-mix(in srgb, var(--jade) 10%, transparent);
+}
+.dev-battery.low {
+  color: var(--rust);
+  border-color: color-mix(in srgb, var(--rust) 40%, transparent);
+  background-color: color-mix(in srgb, var(--rust) 12%, transparent);
+}
+/* 充电中：轻微呼吸，暗示正在补电 */
+.dev-battery.charging .batt-glyph {
+  animation: battBreathe 2.2s var(--ease-in-out) infinite;
+}
+@keyframes battBreathe {
+  0%, 100% { opacity: .85; }
+  50%      { opacity: 1; }
+}
+
+/* 电池小图标：外壳 + 正极凸点 + 按百分比填充的内芯 */
+.batt-glyph {
+  position: relative;
+  width: 18px;
+  height: 9px;
+  flex: none;
+  border: 1.3px solid currentColor;
+  border-radius: 2.5px;
+  opacity: .9;
+}
+/* 正极凸点 */
+.batt-glyph::after {
+  content: "";
+  position: absolute;
+  right: -3.4px;
+  top: 50%;
+  width: 2px;
+  height: 4px;
+  border-radius: 0 1.5px 1.5px 0;
+  background: currentColor;
+  transform: translateY(-50%);
+}
+.batt-fill {
+  position: absolute;
+  left: 1px;
+  top: 1px;
+  bottom: 1px;
+  border-radius: 1px;
+  background: currentColor;
+  transition: width .5s var(--ease-out);
+}
+
+.batt-num { font-weight: 600; }
+
+/* 系统版本胶囊：低调的中性玻璃 */
+.dev-android svg {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  opacity: .8;
+}
+
 .device-tip {
   margin: 11px 0 0;
   text-align: center;

@@ -1,0 +1,38 @@
+// 卡片大图（灯箱）
+//
+// 「卡片实拍」面板已经移除 —— 看大图的入口统一改到左侧场景中心：
+// 点条目左边的缩略图即可放大预览（CategoryNav.vue → openCardZoom）。
+// 这里只保留灯箱里那张大图的排版样式。
+
+/* ── 大图 ───────────────────────────────────────────────────────── */
+/* 复用 .lightbox 的遮罩与入场；这里只补卡片本身的尺寸和标题排版 */
+.lightbox .card-zoom-img {
+  max-width: min(88vw, 420px);
+  max-height: 74vh;
+  border: 0;
+  border-radius: 26px;
+  /* 卡片本身已经是透明圆角的，阴影要跟着圆角走，不能再套一圈描边 */
+  box-shadow: 0 46px 120px -30px #000, 0 0 0 1px rgba(255, 255, 255, .07);
+}
+.lightbox .card-zoom-img,
+.lightbox.show .card-zoom-img {
+  transform: none;      /* 卡片图不需要手机截图那种 scale 入场 */
+}
+.lightbox-cap b {
+  display: block;
+  font-size: 11.5px;
+  font-weight: 550;
+  color: rgba(255, 255, 255, .9);
+  letter-spacing: .02em;
+}
+.lightbox-cap em {
+  display: block;
+  margin-top: 3px;
+  font-style: normal;
+  color: rgba(255, 255, 255, .55);
+}
+
+/* 窄屏 */
+@media (max-width: 720px) {
+  .lightbox .card-zoom-img { max-width: 86vw; border-radius: 20px; }
+}

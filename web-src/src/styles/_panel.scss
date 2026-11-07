@@ -14,25 +14,8 @@
               background .28s var(--ease-out);
   isolation: isolate;
 }
-.panel::before {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--line-strong) 24%, var(--line-strong) 76%, transparent);
-  pointer-events: none;
-  z-index: 1;
-  transition: opacity .28s var(--ease-out);
-}
-.panel:hover {
-  border-color: var(--line-strong);
-  box-shadow: var(--shadow-panel), 0 0 0 1px rgba(255, 214, 234, .08) inset;
-}
-.panel::focus-visible {
-  outline: 2px solid var(--amber);
-  outline-offset: 2px;
-  border-radius: calc(var(--radius-xl) + 2px);
-}
+/* 注：.panel::before 的顶缘亮线已由 _liquid.scss 的玻璃边缘折射（--glass-rim）
+   统一接管，这里不再重复定义，避免两套亮线叠在一起显脏。 */
 .panel-head {
   display: flex;
   align-items: center;
@@ -81,12 +64,6 @@
 .log-panel { --panel-tone: var(--jade); }
 .device-panel { --panel-tone: var(--blue); }
 
-/* 顶部装饰光条（给 Hero 面板用） */
-.panel.lit::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 auto;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--panel-tone, var(--amber)) 40%, var(--panel-tone, var(--amber)) 60%, transparent);
-  opacity: .5;
-}
+/* 注：.panel.lit::after 的顶部装饰光条已移除 —— ::after 现在专用于
+   液态玻璃的光标光晕（_liquid.scss）。需要强调的面板改用 --panel-tone
+   驱动的 .panel-title h3::before 竖条即可，语义更清楚。 */

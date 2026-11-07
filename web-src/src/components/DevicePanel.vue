@@ -1,7 +1,7 @@
 <script lang="ts">
-import { defineComponent } from "vue";
+import { computed, defineComponent } from "vue";
 import { state } from "@/stores/core";
-import { openLightbox, setShotGap } from "@/actions/shot";
+import { manualShot, openLightbox, setShotGap } from "@/actions/shot";
 import { refs } from "@/lib/refs";
 
 export default defineComponent({
@@ -19,7 +19,31 @@ export default defineComponent({
       if (state.hasShot) openLightbox();
     }
 
-    return { state, onGap, onScreenClick, openLightbox };
+    /** 电量是否已知（后端给 -1 表示读不到，此时整块隐藏） */
+    const hasBattery = computed(() => state.battery >= 0);
+    /** 低于 20% 变红，其余绿色 */
+    const batteryLow = computed(() => state.battery >= 0 && state.battery < 20);
+    const batteryTone = computed(() => (batteryLow.value ? "low" : "ok"));
+    /** 充电中时电量徽标带一点动效，表明正在补电 */
+    const charging = computed(
+      () => state.batteryStatus === "charging" || state.batteryStatus === "full",
+    );
+
+    /** 系统版本：没读到就不显示 */
+    const hasAndroid = computed(() => Boolean(state.androidVer));
+
+    return {
+      state,
+      onGap,
+      onScreenClick,
+      manualShot,
+      openLightbox,
+      hasBattery,
+      batteryLow,
+      batteryTone,
+      charging,
+      hasAndroid,
+    };
   },
   mounted() {
     refs.deviceScreenEl = this.$refs.screen as HTMLElement;
@@ -35,8 +59,16 @@ export default defineComponent({
         <h3>实时画面</h3>
         <span class="head-note">device</span>
       </div>
-      <button id="btn-shot-dock" class="icon-btn sm" type="button" title="查看大图" aria-label="查看大图" @click="onScreenClick">
-        <svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <!-- 手动刷新一张截图（之前这里误绑成了「查看大图」） -->
+      <button
+        id="btn-shot-dock"
+        class="icon-btn sm"
+        type="button"
+        title="立即刷新一次截图"
+        aria-label="立即刷新截图"
+        @click.stop="manualShot"
+      >
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <path d="M20.5 11a8.5 8.5 0 1 0-2.4 6" /><path d="M20.5 4.5V11h-6.5" />
         </svg>
       </button>
@@ -45,7 +77,6 @@ export default defineComponent({
     <div class="device-body">
       <div class="device">
         <div id="device-screen" ref="screen" class="device-screen" :class="{ 'has-shot': state.hasShot, swap: state.shotSwap }" @click="onScreenClick">
-          <span class="island" aria-hidden="true" />
           <img id="shot" ref="img" alt="截图" class="shot" :class="{ empty: !state.hasShot }" :src="state.shotSrc || undefined" />
           <span class="glare" aria-hidden="true" />
           <span class="scan" aria-hidden="true" />
@@ -61,11 +92,36 @@ export default defineComponent({
               <path d="M9 4H4v5M15 4h5v5M20 15v5h-5M4 15v5h5" />
             </svg>
           </button>
-          <span class="home-bar" aria-hidden="true" />
         </div>
       </div>
+
       <p id="shottag" class="shottag">{{ state.shotTag }}</p>
       <p id="dev-meta" class="dev-meta">{{ state.devMeta }}</p>
+
+      <!-- 设备指标：电量 + 系统版本（读不到就整条隐藏） -->
+      <div v-if="hasBattery || hasAndroid" class="dev-stats">
+        <span
+          v-if="hasBattery"
+          class="dev-stat dev-battery"
+          :class="[batteryTone, { charging }]"
+          :title="`电量 ${state.battery}%${state.batteryStatus ? ' · ' + state.batteryStatus : ''}`"
+        >
+          <!-- 电池外形：外壳 + 正极小凸点 + 内部按百分比填充 -->
+          <span class="batt-glyph" aria-hidden="true">
+            <span class="batt-fill" :style="{ width: Math.max(4, state.battery) + '%' }" />
+          </span>
+          <span class="batt-num">{{ state.battery }}%</span>
+        </span>
+
+        <span v-if="hasAndroid" class="dev-stat dev-android" :title="`系统版本 ${state.androidVer}`">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="6" y="2.6" width="12" height="18.8" rx="2.6" />
+            <path d="M10.5 5.2h3" />
+          </svg>
+          <span>{{ state.androidVer }}</span>
+        </span>
+      </div>
+
       <div class="shot-ctrl">
         <span class="k">自动刷新</span>
         <label class="interval">

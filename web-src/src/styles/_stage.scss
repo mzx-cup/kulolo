@@ -1,0 +1,496 @@
+// 中央 3D 场景卡片轮播舞台
+//
+// 核心视觉：中央大卡 + 左右邻卡透视露出，带缩放/倾斜/透明度层次。
+// 动画用 transform（GPU 合成），避免布局抖动。
+
+/* ── 舞台容器 ─────────────────────────────────────────────────── */
+/*  高度固定：舞台是等尺寸的「展示台」，卡片内容长短不同也不会改变
+    它的占位，下面的面板因此永远不动。 */
+.stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-height: 460px;
+}
+
+/* 给中央卡预留的固定占位高度：所有卡片都按这个高度排版，
+   描述长短的差异用内部滚动/省略消化，不往外传。
+   数值 = 卡片典型内容高度（标题 + 2 行描述 + 规格 + 按钮 + 状态行）。 */
+:root { --stage-card-h: 396px; }
+
+.stage-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 0 4px;
+}
+.stage-title { min-width: 0; }
+.stage-kicker {
+  display: block;
+  font: 8.5px/1 var(--mono);
+  letter-spacing: .22em;
+  text-transform: uppercase;
+  color: var(--g-tone, var(--amber));
+  margin-bottom: 7px;
+}
+.stage-name {
+  margin: 0;
+  font-size: clamp(22px, 2.4vw, 30px);
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.25;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-block: 2px;
+}
+
+.stage-pos {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: none;
+  padding-bottom: 4px;
+}
+.stage-pos-num {
+  font: 11px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .08em;
+  color: var(--ink-3);
+}
+.stage-dots { display: inline-flex; gap: 5px; }
+.stage-dots .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-4);
+  opacity: .4;
+  cursor: pointer;
+  transition: width .3s var(--ease-out), background .3s var(--ease-out),
+              opacity .3s var(--ease-out), transform .2s var(--ease-spring);
+}
+.stage-dots .dot:hover {
+  opacity: .8;
+  transform: scale(1.3);
+}
+.stage-dots .dot.on {
+  width: 20px;
+  border-radius: 999px;
+  background: var(--g-tone, var(--amber));
+  opacity: 1;
+  cursor: default;
+}
+
+/* ── 轮播视口 ─────────────────────────────────────────────────── */
+/*  视口是「舞台台面」：高度由卡片占位高度决定，与卡片内容无关。
+     这样无论换成哪张场景卡，台面尺寸恒定，下方布局永不动。 */
+.stage-viewport {
+  position: relative;
+  flex: 1;
+  min-height: calc(var(--stage-card-h) + 24px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  perspective: 1400px;
+  /* 透视原点在顶部中央：书页从顶部装订翻动，
+     侧卡的 translateZ 深度不会把它们的顶部投影下移，与中央卡顶部齐平。 */
+  perspective-origin: 50% 0%;
+  cursor: grab;
+  touch-action: pan-y;
+}
+.stage-viewport.dragging { cursor: grabbing; }
+
+/* 空状态 */
+.stage-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 60px 24px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.stage-empty-glyph {
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 8px;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-3);
+}
+.stage-empty-glyph svg { width: 26px; height: 26px; }
+.stage-empty p { margin: 0; font-size: 14px; color: var(--ink-2); }
+.stage-empty > span { font-size: 11.5px; opacity: .85; }
+
+/* ── 卡片通用 ─────────────────────────────────────────────────── */
+.stage-card {
+  position: absolute;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel-solid);
+  box-shadow: var(--shadow-panel);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
+  transform-style: preserve-3d;
+  will-change: transform, translate;
+  transition: transform .52s var(--ease-spring),
+              opacity .4s var(--ease-out),
+              box-shadow .4s var(--ease-out);
+  overflow: hidden;
+}
+
+/* 卡片顶部光条 */
+.stage-card-topline {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--g-tone, var(--amber)), transparent);
+  opacity: .55;
+  pointer-events: none;
+}
+
+/* 中央卡片
+ *
+ * 布局原则：
+ *   · position: absolute —— 脱离文档流，不撑开视口
+ *   · 用 min-height 而不是固定 height —— 卡片是「内容多高就多高」，
+ *     但永远不小于舞台基准高度，避免高矮不一；
+ *     内容多时向下生长（视口留了余量），不会溢出被裁切
+ *   · 内容垂直居中，不做「按钮贴底」——贴底会在描述短时留出一大块空洞 */
+.stage-card.is-center {
+  position: absolute;
+  width: min(410px, 88%);
+  min-height: var(--stage-card-h);
+  opacity: 1;
+  cursor: grab;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 22px 22px 18px;
+  inset: 0;
+  margin: auto;
+}
+/* 拖拽时用手型，且不选中文字 */
+.stage-card.is-center:active { cursor: grabbing; }
+.stage-card.is-center:hover {
+  box-shadow: var(--shadow-pop);
+}
+
+/* 描述区：最多 3 行，超出省略。
+   用 min-height 保证短描述的卡也不会「塌下去」，长描述则被截断。 */
+.stage-card-desc {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* 卡片主体：自然排列，不再强制 flex:1 撑满 */
+.stage-card-body { min-height: 0; }
+
+/* 操作区：与上方内容保持固定间距（不再用 margin-top:auto 贴底） */
+.stage-actions { margin-top: 18px; }
+
+/* 卡片光晕 */
+.stage-card-glow {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(500px 240px at 50% -10%, var(--hero-glow), transparent 68%);
+  pointer-events: none;
+}
+
+/* 卡片图标 */
+.stage-card-glyph {
+  position: relative;
+  z-index: 1;
+  width: 62px;
+  height: 62px;
+  display: grid;
+  place-items: center;
+  border-radius: 18px;
+  color: var(--g-tone);
+  background: color-mix(in srgb, var(--g-tone) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-tone) 20%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--g-tone) 8%, transparent);
+  /* 图标不透明度由 --rich 控制（富内容一起淡出）；竖向由 --gly 控制，
+     松手后图标随位移缓慢上移，而不是突然消失 */
+  opacity: var(--rich, 1);
+  translate: 0 calc(-1 * var(--gly, 0px));
+  transition: transform .3s var(--ease-spring), opacity .4s var(--ease-out) .04s,
+              translate .5s var(--ease-out) .04s;
+}
+.stage-card-glyph svg { width: 30px; height: 30px; }
+.stage-card-glyph img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+/* 中央卡片内容 */
+.stage-card-body {
+  position: relative;
+  z-index: 1;
+  margin-top: 18px;
+  min-width: 0;
+  /* 中央卡文字也随 --txop 渐入渐出：拖拽经过中心时渐显，滑开渐隐。
+     过渡用更长的时长 + 轻微延迟，让文字跟手但更柔和、不突兀。 */
+  opacity: var(--txop, 1);
+  transition: opacity .42s var(--ease-out) .04s;
+}
+/* 富内容（一键运行按钮 / 规格 / 状态行 / 进度条）随 --rich 渐出：
+   卡片被顶替、滑离中央时按钮和文字跟着慢慢消失，形成完整堆叠态切换。
+   注意：所有卡（中央 + 侧卡）都渲染富内容，所以这里不限定 .is-center，
+   让 --rich 统一驱动富内容淡出/淡入，内容永不卸载。 */
+.stage-card.is-deck .stage-actions,
+.stage-card.is-deck .stage-progress,
+.stage-card.is-deck .stage-runstate,
+.stage-card.is-deck .stage-card-specs {
+  opacity: var(--rich, 1);
+  transition: opacity .4s var(--ease-out) .04s;
+}
+/* 说明：不再用 deckRichFade 入场动画 —— 它的 both 填充 + 延迟会把新中央卡
+   内容钉在 opacity:0 上，造成「松手后短暂空白再显现」。内容透明度已由
+   --rich / --txop 随拖动连续驱动，无需额外入场动画。 */
+.stage-card-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font: 9px/1 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+.stage-card-crumbs .crumb-group { color: var(--g-tone, var(--amber)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-card-crumbs .crumb-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-4); }
+.stage-card-crumbs .crumb-no { flex: none; }
+
+.stage-card-title {
+  margin: 12px 0 9px;
+  font-size: clamp(20px, 2vw, 26px);
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.25;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.stage-card-desc {
+  margin: 0;
+  max-width: 44em;
+  color: var(--ink-2);
+  font-size: 13.5px;
+  line-height: 1.8;
+}
+
+.stage-card-specs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 14px;
+}
+.stage-spec {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+  font-size: 11px;
+}
+.stage-spec i {
+  font-style: normal;
+  font: 8.5px/1 var(--mono);
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  opacity: .8;
+}
+.stage-spec b {
+  font-weight: 550;
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.stage-unsupported {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 12px;
+  padding: 7px 11px;
+  border: 1px solid color-mix(in srgb, var(--rust) 34%, transparent);
+  border-radius: 9px;
+  background: var(--rust-soft);
+  color: var(--rust);
+  font-size: 11.5px;
+}
+.stage-unsupported svg { width: 14px; height: 14px; flex: none; }
+
+/* 操作区 */
+.stage-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 20px;
+}
+.stage-run {
+  flex: 1;
+  height: 52px;
+  border-radius: 15px;
+}
+.stage-icbtn {
+  position: relative;
+  width: 46px;
+  height: 46px;
+  flex: none;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background .18s var(--ease-out), border-color .18s var(--ease-out), color .18s var(--ease-out), transform .16s var(--ease-spring);
+}
+.stage-icbtn:hover { border-color: var(--line-strong); background: var(--panel-3); color: var(--ink); transform: translateY(-1px); }
+.stage-icbtn:active { transform: translateY(1px) scale(.96); }
+.stage-icbtn svg { width: 19px; height: 19px; }
+.stage-icbtn.on { color: var(--amber); border-color: var(--amber-line); background: var(--amber-soft); }
+.stage-icbtn.on svg { animation: favPop .4s var(--ease-spring); }
+@keyframes favPop {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+.stage-icbadge {
+  position: absolute;
+  right: -5px;
+  top: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--amber);
+  color: var(--on-accent);
+  font: 8.5px/1 var(--mono);
+  font-weight: 700;
+}
+
+.stage-runstate {
+  position: relative;
+  z-index: 1;
+  margin-top: 10px;
+  min-height: 18px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-3);
+}
+.stage-runstate.doing { color: var(--amber); }
+.stage-runstate.ok { color: var(--jade); }
+.stage-runstate.fail { color: var(--rust); }
+
+/* 中央卡片进度条（复用 .progress / .bar，仅补舞台内布局） */
+.stage-progress {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+.stage-progress .progress { flex: 1; }
+.stage-progress .elapsed {
+  flex: none;
+  min-width: 40px;
+  font: 10px/1 var(--mono);
+  color: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* ── 卡组（coverflow deck）：所有卡片共用同一套中心定位 ───────────────
+ *
+ *  中央大卡和左右侧卡都绝对定位在视口中心，横向位移 / 横向缩放 / 纵向缩放 /
+ *  透明度全部由 JS 注入的 CSS 变量驱动：
+ *    --so   横向位移（px，相对中心）
+ *    --scx  横向缩放（1 = 中央，越靠边越窄）
+ *    --scy  纵向缩放（1 = 中央，越靠边越短）
+ *    --op   透明度（越靠边越淡）
+ *    --zi   层级（中央最高，越靠边越低）
+ *  侧卡和中央卡共用同一宽度，靠 scaleX/scaleY 分离两个轴向：拖动时卡从
+ *  「短窄的侧卡」平滑长成「又宽又高的中央卡」，反过来则缩短，形成堆叠态切换。 */
+.stage-card.is-deck {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  z-index: var(--zi, 1);
+  width: min(410px, 88%);
+  translate: var(--so, 0px) 0;
+  scale: var(--scx, 1) var(--scy, 1);
+  opacity: var(--op, 1);
+  transition:
+    translate .42s var(--ease-out),
+    scale .42s var(--ease-out),
+    opacity .32s var(--ease-out),
+    box-shadow .32s var(--ease-out);
+}
+/* 拖拽进行中：跟手，去掉位移过渡，让卡组严格贴着手指 */
+.stage-viewport.dragging .stage-card.is-deck {
+  transition: box-shadow .3s var(--ease-out);
+}
+
+/* ── 左右邻卡（紧凑内容）────────────────────────────────────────
+ *  宽度与中央卡一致（继承 .is-deck 的 min(410px, 88%)），靠 scaleX/scaleY
+ *  缩小成「短窄」的侧卡；高度用 min-height 兜底，实际长度由 --scy 控制。
+ *  内容结构已与中央卡统一（正文/规格/按钮都渲染），所以这里只做布局微调，
+ *  不再单独定义侧卡正文/图标 —— 它们统一由 .stage-card-body/.stage-card-glyph
+ *  配合 --txop / --rich / --gly 驱动淡入淡出与位移。 */
+.stage-card.is-side {
+  min-height: calc(var(--stage-card-h) + 24px);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;   /* 内容少时垂直居中，不会顶到上边 */
+  gap: 12px;
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+.stage-card.is-side:hover {
+  box-shadow: var(--shadow-lift);
+}
+
+/* 拖拽中：抓取光标，禁止选中文字、拖拽图片 */
+.stage-viewport {
+  cursor: grab;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.stage-viewport.dragging {
+  cursor: grabbing;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.stage-viewport img {
+  -webkit-user-drag: none;
+  pointer-events: none;
+}
+
+/* ── 减少动态 ─────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .stage-card { transition: none; }
+  /* 关掉卡组位移/缩放过渡，切换时直接换内容 */
+  .stage-card.is-deck { transition: none; }
+}

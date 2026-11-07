@@ -457,6 +457,49 @@ class Device:
                            or "unknown")
         return self._model
 
+    def battery_level(self) -> int:
+        """当前电量百分比（0~100）。
+
+        用 `dumpsys battery` 的 `level:` 行 —— 它读的是 BatteryManager
+        的当前读数，场景里 `dumpsys battery set level N` 之后这里也会
+        跟着变（这正是我们想要的：界面上显示的就是「手机以为」的电量）。
+        读不到就返回 -1，前端据此隐藏电量徽标。"""
+        try:
+            out = self.shell("dumpsys battery")
+        except Exception:
+            return -1
+        m = re.search(r"^\s*level:\s*(\d+)", out, re.MULTILINE)
+        return int(m.group(1)) if m else -1
+
+    def battery_status(self) -> str:
+        """充电状态文字：charging / discharging / full / not-charging / unknown。"""
+        try:
+            out = self.shell("dumpsys battery")
+        except Exception:
+            return ""
+        m = re.search(r"^\s*status:\s*(\d+)", out, re.MULTILINE)
+        if not m:
+            return ""
+        return {
+            1: "unknown", 2: "charging", 3: "discharging",
+            4: "not-charging", 5: "full",
+        }.get(int(m.group(1)), "")
+
+    def android_version(self) -> str:
+        """系统版本，形如 `Android 14`。
+
+        版本号走 ro.build.version.release；厂商 ROM（如 XOS）再带一个
+        ro.build.version.tr 之类的增量号，拿不到就不带。"""
+        try:
+            rel = (self._call(lambda: self.d.prop.get("ro.build.version.release")) or "").strip()
+        except Exception:
+            rel = ""
+        if not rel:
+            return ""
+        # 有些 ROM 会返回 "14"、有些返回 "14.0.0"，统一成短形态
+        rel = re.sub(r"\.0+$", "", rel)
+        return f"Android {rel}"
+
     def stayon(self, on: bool) -> None:
         self.shell(f"svc power stayon {'usb' if on else 'false'}")
         self._stayon_changed = True

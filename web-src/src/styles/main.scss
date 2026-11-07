@@ -9,15 +9,21 @@
 
 @use "_tokens";
 @use "_base";
+@use "_ambient-doodles";   // 生成物：--doodle-url 变量（必须在 _ambient 之前）
 @use "_ambient";
 @use "_topbar";
 @use "_buttons";
 @use "_layout";
+@use "_catnav";
 @use "_catalog";
 @use "_panel";
+@use "_stage";
+@use "_drawer";
+@use "_recent";
 @use "_hero";
 @use "_select";
 @use "_workspace";
+@use "_cards";
 @use "_device";
 @use "_modals";
 @use "_toast";
@@ -25,5 +31,8 @@
 @use "_ripple";
 @use "_kuromi";
 @use "_refine";
+@use "_liquid";
 @use "_responsive";
 @use "_a11y";
+// 光标必须最后一个加载：它要覆盖前面各组件里写的 cursor 声明
+@use "_cursor";

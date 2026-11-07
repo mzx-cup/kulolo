@@ -6,6 +6,7 @@ import type { RunEvent, RunSnapshot } from "@/types/api";
 import { collectParams } from "./params";
 import { toast } from "./toast";
 import { isBusy, selectScenario } from "./catalog";
+import { refreshCards } from "./device";
 import { setShot, shotStateRefresh } from "./shot";
 import {
   appendLine,
@@ -114,6 +115,23 @@ export function renderEvent(e: RunEvent, run: RunSnapshot | null): void {
     case "error":
       appendLine("err", "!! " + (e.msg ?? ""));
       toast("执行失败：" + (e.msg ?? "未知错误"), true);
+      break;
+    case "card":
+      /* 服务端自动识别卡片的结果（不再弹人工确认框）。
+         成功时把实拍图挂到对应场景名下，前端卡片缩略图随之更新。 */
+      if (e.ok) {
+        const where = e.where === "lock" ? "锁屏" : "桌面";
+        state.cardProbeOk = true;
+        state.cardProbeText = `${where}识别到「${e.text ?? ""}」`;
+        appendLine("ok", `自动识别：${state.cardProbeText}`);
+        if (e.scenario) {
+          void refreshCards();
+        }
+      } else {
+        state.cardProbeOk = false;
+        state.cardProbeText = "翻完轮播没找到卡片";
+        appendLine("err", "自动识别：翻完智慧建议轮播仍未找到卡片");
+      }
       break;
     case "done":
       state.countdownLive = false;

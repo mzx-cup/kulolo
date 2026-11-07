@@ -8,12 +8,15 @@
   padding: 26px 30px 24px;
   overflow: hidden;
 }
-.hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(700px 300px at 90% -20%, var(--hero-glow), transparent 68%);
-  pointer-events: none;
+/* 注：原来这里用 .hero::after 画装饰径向光，但 ::after 已经被液态玻璃的
+   光标光晕占用（见 _liquid.scss）。改走 background-image 最上层，
+   两者可以共存，且不会互相覆盖。 */
+.hero {
+  background-image:
+    radial-gradient(700px 300px at 90% -20%, var(--hero-glow), transparent 68%),
+    var(--glass-corner),
+    var(--glass-reflect),
+    var(--glass-sheen);
 }
 .hero-main,
 .hero-act,

@@ -1,16 +1,19 @@
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted } from "vue";
+import { defineComponent, onMounted, onUnmounted, ref } from "vue";
 import TheTopbar from "@/components/TheTopbar.vue";
-import CatalogPanel from "@/components/CatalogPanel.vue";
-import HeroPanel from "@/components/HeroPanel.vue";
+import CategoryNav from "@/components/CategoryNav.vue";
+import ScenarioStage from "@/components/ScenarioStage.vue";
+import DevicePanel from "@/components/DevicePanel.vue";
+import RecentBar from "@/components/RecentBar.vue";
+import ParamsDrawer from "@/components/ParamsDrawer.vue";
 import StepsPanel from "@/components/StepsPanel.vue";
 import LogPanel from "@/components/LogPanel.vue";
-import DevicePanel from "@/components/DevicePanel.vue";
 import ModalVerify from "@/components/ModalVerify.vue";
 import ModalAsk from "@/components/ModalAsk.vue";
 import ModalRetry from "@/components/ModalRetry.vue";
 import ModalStop from "@/components/ModalStop.vue";
 import ShotLightbox from "@/components/ShotLightbox.vue";
+import CardZoom from "@/components/CardZoom.vue";
 import ResultFx from "@/components/ResultFx.vue";
 import ToastBar from "@/components/ToastBar.vue";
 import { state } from "@/stores/core";
@@ -26,20 +29,26 @@ export default defineComponent({
   name: "App",
   components: {
     TheTopbar,
-    CatalogPanel,
-    HeroPanel,
+    CategoryNav,
+    ScenarioStage,
+    DevicePanel,
+    RecentBar,
+    ParamsDrawer,
     StepsPanel,
     LogPanel,
-    DevicePanel,
     ModalVerify,
     ModalAsk,
     ModalRetry,
     ModalStop,
     ShotLightbox,
+    CardZoom,
     ResultFx,
     ToastBar,
   },
   setup() {
+    /** 轮播组件实例引用，用来把 ← / → 键盘事件转发进去 */
+    const stageRef = ref<{ onKey: (dir: number) => void } | null>(null);
+
     /** 全局快捷键。原来这一大坨在 bind() 里，现在单独一个函数，
      *  顺序保持原样：先处理面板类（Ctrl+K / Ctrl+Enter / Esc / 斜杠），
      *  再处理方向键 —— 否则在输入框里按方向键会误切场景。 */
@@ -60,6 +69,10 @@ export default defineComponent({
       }
       if (meta && e.key === "Enter") {
         e.preventDefault();
+        if (state.selected?.unsupported_note) {
+          toast(state.selected.unsupported_note, true);
+          return;
+        }
         void runScenario();
         return;
       }
@@ -68,15 +81,18 @@ export default defineComponent({
           closeLightbox();
           return;
         }
+        if (state.paramsOpen) {
+          state.paramsOpen = false;
+          return;
+        }
         if (state.stopOpen) {
           state.stopOpen = false;
           return;
         }
-        if (state.catalogOpen) {
-          state.catalogOpen = false;
+        if (state.query) {
+          state.query = "";
           return;
         }
-        if (state.query) state.query = "";
         return;
       }
       if (e.key === "/" && !typing && !meta) {
@@ -85,6 +101,11 @@ export default defineComponent({
         return;
       }
       if (typing) return;
+      if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
+        e.preventDefault();
+        stageRef.value?.onKey(e.key === "ArrowRight" ? 1 : -1);
+        return;
+      }
       if (e.key === "ArrowDown" || e.key === "ArrowUp") {
         e.preventDefault();
         cycleScenario(e.key === "ArrowDown" ? 1 : -1);
@@ -92,9 +113,8 @@ export default defineComponent({
     }
 
     function openSearch(): void {
-      state.catalogOpen = true;
       window.setTimeout(() => {
-        const el = document.querySelector<HTMLInputElement>("#sc-search");
+        const el = document.querySelector<HTMLInputElement>("#cat-search");
         el?.focus();
         el?.select();
       }, 90);
@@ -108,6 +128,64 @@ export default defineComponent({
       if (v) {
         void poll();
         void refreshStatus();
+      }
+    }
+
+    /* 液态玻璃光晕：全局 pointermove 把光标坐标写进 hover 中卡片/控件的
+     *  --mx / --my（百分比），CSS 用它定位跟随指针的径向光斑；中央大卡
+     *  再叠加轻微 3D 倾斜。只写 CSS 变量，不做 DOM 增删。
+     *
+     *  GLOW_SEL 是「哪些元素有光晕」的唯一事实来源：
+     *  .glow-target 是显式标注（模板里挂的），后面那串是自动覆盖
+     *  （面板 / 按钮 / 芯片 / 卡片等玻璃面），与 _liquid.scss 里的
+     *  强度分级一一对应。命中即写变量，没命中就什么都不做。 */
+    const GLOW_SEL = [
+      ".glow-target",
+      ".panel",
+      ".device-panel",
+      ".catnav",
+      ".catalog",
+      ".stage-card",
+      ".recentbar-card",
+      ".btn",
+      ".icon-btn",
+      ".vbtn",
+      ".commit",
+      ".stage-icbtn",
+      ".filter",
+      ".chip",
+      ".recent-chip",
+      ".catnav-subitem",
+      ".catnav-item-inner",
+      ".catnav-fold",
+      ".card",
+      ".theme-option",
+      ".sel-opt",
+    ].join(",");
+
+    function onPointerMove(e: PointerEvent): void {
+      const glow = (e.target as HTMLElement | null)?.closest<HTMLElement>(GLOW_SEL) ?? null;
+      if (glow) {
+        const r = glow.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          glow.style.setProperty("--mx", (((e.clientX - r.left) / r.width) * 100).toFixed(2) + "%");
+          glow.style.setProperty("--my", (((e.clientY - r.top) / r.height) * 100).toFixed(2) + "%");
+        }
+      }
+      /* 中央大卡的 3D 倾斜：拖拽时由 ScenarioStage 自己接管 --dx，
+       *  这里只做悬停时的轻倾斜（拖拽中禁用，避免双重 transform 打架） */
+      const center = document.querySelector<HTMLElement>(".stage-card.is-center");
+      if (!center) return;
+      if (center.closest(".stage-viewport")?.classList.contains("dragging")) return;
+      if (center.contains(e.target as Node)) {
+        const r = center.getBoundingClientRect();
+        const px = (e.clientX - r.left) / r.width - 0.5;
+        const py = (e.clientY - r.top) / r.height - 0.5;
+        center.style.setProperty("--tilt-y", (px * 5).toFixed(2) + "deg");
+        center.style.setProperty("--tilt-x", (-py * 4).toFixed(2) + "deg");
+      } else {
+        center.style.setProperty("--tilt-y", "0deg");
+        center.style.setProperty("--tilt-x", "0deg");
       }
     }
 
@@ -161,6 +239,7 @@ export default defineComponent({
       document.addEventListener("keydown", onKeydown);
       document.addEventListener("visibilitychange", onVisibility);
       document.addEventListener("pointerdown", onPointerDown);
+      document.addEventListener("pointermove", onPointerMove, { passive: true });
 
       /* 首屏渲染完成后给 shell 加 page-loaded 类，触发整页淡入 */
       window.requestAnimationFrame(() => {
@@ -173,38 +252,46 @@ export default defineComponent({
       document.removeEventListener("keydown", onKeydown);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("pointermove", onPointerMove);
     });
 
-    return { state };
+    return { state, stageRef };
   },
 });
 </script>
 
 <template>
-  <div class="ambient" aria-hidden="true"><span class="stars"></span></div>
+  <!-- 背景层：柔光晕 + 简笔画散落底纹（太阳/云/树/房子/动物…随机排布） -->
+  <div class="ambient" aria-hidden="true"><span class="doodles"></span></div>
   <a class="skip-link" href="#sc-title">跳到场景内容</a>
 
   <TheTopbar />
 
   <main class="shell">
-    <CatalogPanel />
+    <!-- 左侧：分类导航 -->
+    <CategoryNav />
     <div class="scrim" :class="{ show: state.catalogOpen }" :hidden="!state.catalogOpen" @click="state.catalogOpen = false" />
 
+    <!-- 中央工作区：舞台 + 设备舱 + 最近使用 + 步骤 + 日志 -->
     <div class="workspace">
-      <div class="work-grid">
-        <HeroPanel />
+      <ScenarioStage ref="stageRef" />
+      <DevicePanel />
+      <RecentBar />
+      <div class="flow">
         <StepsPanel />
         <LogPanel />
-        <DevicePanel />
       </div>
     </div>
   </main>
+
+  <ParamsDrawer />
 
   <ModalVerify />
   <ModalAsk />
   <ModalRetry />
   <ModalStop />
   <ShotLightbox />
+  <CardZoom />
   <ResultFx />
   <ToastBar />
 </template>

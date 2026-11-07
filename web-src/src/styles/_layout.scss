@@ -1,33 +1,66 @@
 // 主布局 shell + workspace 骨架
+//
+// 三栏布局：左侧分类导航 | 中央卡片轮播+最近 | 右侧设备预览
 
 /* ── 主布局 ─────────────────────────────────────────────────────── */
+/*  两栏外壳：左分类导航 + 中央工作区。
+    设备舱不再是外壳的第三栏，而是工作区内部网格的右列——
+    这样任何宽度下它都贴着舞台右侧、sticky 在顶部，不会被挤到页面底部。 */
 .shell {
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: var(--catalog-w) minmax(0, 1fr);
+  grid-template-columns: var(--catnav-w) minmax(0, 1fr);
   gap: 22px;
   align-items: start;
-  max-width: 1800px;
+  max-width: 1920px;
   margin: 0 auto;
   padding: 22px 26px 42px;
 }
 .shell.page-loaded { animation: pageFade .8s var(--ease-out) both; }
+
+/* ── 中央工作区：舞台 + 设备舱双栏，其余纵向堆叠 ─────────────────── */
+/*  列宽：主栏 + 设备舱。steps / log 并排成一行（.flow），共同占主栏，
+    与舞台、最近使用保持同一条右边界；设备舱右列在它们右侧继续留白，
+    视觉上是完整的一列。卡片实拍面板已移除（看大图改从左侧场景中心的
+    缩略图进入），所以 steps / log 顺势上移，紧跟在「最近使用」之后。 */
 .workspace {
   min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, var(--dock-w));
+  grid-template-areas:
+    "stage  device"
+    "recent device"
+    "flow   device";
   gap: 22px;
+  align-items: start;
+}
+.stage { grid-area: stage; }
+.recentbar { grid-area: recent; }
+.device-panel { grid-area: device; }
+
+/* 执行序列 + 运行日志：并排一行，各自收窄到主栏的一半宽度，
+   并让两块面板左右严格等高（stretch + 面板纵向 flex）。 */
+.flow {
+  grid-area: flow;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 22px;
+  align-items: stretch;
 }
 
-/* 面板入场错峰 */
+/* 面板入场错峰。
+   关键：动画只能动 opacity 和 translate（独立属性），不能动 transform。
+   否则 `both` 填充模式会把 transform 永久锁在终态 none，
+   hover 浮起（transform: translateY）就被覆盖失效了 —— 和卡片拖不动的坑同源。 */
 .reveal {
   animation: rise .7s var(--ease-out) both;
   animation-delay: calc(var(--i, 0) * 100ms);
 }
 @keyframes rise {
-  from { opacity: 0; transform: translate3d(0, 16px, 0); }
-  to   { opacity: 1; transform: none; }
+  from { opacity: 0; translate: 0 16px; }
+  to   { opacity: 1; translate: 0 0; }
 }
 
 /* 顶栏以下的内容区容器，方便全局动效覆盖 */

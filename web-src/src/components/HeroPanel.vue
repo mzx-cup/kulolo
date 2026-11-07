@@ -40,8 +40,14 @@ export default defineComponent({
       return "bar";
     });
 
+    /** 机型不支持的场景：按钮禁用，点一下给个说明，别让人白等两分钟 */
+    const unsupported = computed(() => Boolean(sel.value?.unsupported_note));
+
     function onRun(): void {
-      if (state.runDisabled) return;
+      if (state.runDisabled || unsupported.value) {
+        if (unsupported.value) toast(sel.value?.unsupported_note || "此机型不支持该场景", true);
+        return;
+      }
       void runScenario();
     }
 
@@ -98,6 +104,7 @@ export default defineComponent({
       progressPct,
       barClass,
       hasLiveSpec,
+      unsupported,
       onRun,
       onReset,
       onInput,
@@ -145,13 +152,14 @@ export default defineComponent({
         class="commit"
         :class="{ busy: state.runBusy }"
         type="button"
-        :disabled="state.runDisabled"
+        :disabled="state.runDisabled || unsupported"
+        :title="unsupported ? sel?.unsupported_note : undefined"
         @click="onRun"
       >
         <svg class="play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M8.5 5.8c0-.8.9-1.3 1.6-.9l8.2 5.9c.6.4.6 1.3 0 1.7l-8.2 5.9c-.7.4-1.6-.1-1.6-.9z" />
         </svg>
-        <span class="lbl">{{ state.runLabel }}</span>
+        <span class="lbl">{{ unsupported ? "此机型不支持" : state.runLabel }}</span>
         <span class="spin" aria-hidden="true" />
         <span class="kbd">Ctrl ↑</span>
       </button>

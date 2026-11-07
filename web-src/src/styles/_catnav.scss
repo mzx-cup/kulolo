@@ -1,0 +1,569 @@
+// 左侧分类导航：纵向导航 + 搜索 + 分类计数 + 折叠
+
+/* ── 分类导航容器 ─────────────────────────────────────────────── */
+.catnav {
+  position: sticky;
+  top: calc(var(--topbar-h) + 18px);
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100vh - var(--topbar-h) - 36px);
+  max-height: calc(100dvh - var(--topbar-h) - 36px);
+  min-height: 420px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  background: var(--panel);
+  -webkit-backdrop-filter: var(--glass);
+  backdrop-filter: var(--glass);
+  box-shadow: var(--shadow-panel);
+  overflow: hidden;
+  isolation: isolate;
+  animation: catnavIn .55s var(--ease-out) both;
+}
+@keyframes catnavIn {
+  from { opacity: 0; transform: translate3d(-14px, 0, 0); }
+  to   { opacity: 1; transform: none; }
+}
+/* 注：.catnav::before 的顶缘亮线已由 _liquid.scss 的玻璃边缘折射接管，
+   这里不再重复定义，避免两套亮线叠在一起。 */
+
+/* 头部 */
+.catnav-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 20px 18px 12px;
+  flex: none;
+}
+.catnav-heading { min-width: 0; }
+.kicker {
+  display: block;
+  font: 8.5px/1 var(--mono);
+  letter-spacing: .26em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+  margin-bottom: 8px;
+}
+.catnav-heading h2 {
+  margin: 0;
+  font-family: var(--sans);
+  font-size: 24px;
+  font-weight: 650;
+  letter-spacing: .01em;
+  line-height: 1.35;
+  color: var(--ink);
+  padding-block: 2px;
+}
+.count-badge {
+  min-width: 34px;
+  height: 23px;
+  padding: 0 8px;
+  margin-top: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel-2);
+  color: var(--ink-3);
+  font: 9.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .03em;
+}
+
+/* 搜索框 */
+.search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin: 2px 16px 12px;
+  flex: none;
+}
+.search > svg {
+  position: absolute;
+  left: 13px;
+  width: 15px;
+  height: 15px;
+  color: var(--ink-4);
+  pointer-events: none;
+  transition: color .2s var(--ease-out);
+}
+#cat-search {
+  width: 100%;
+  height: 44px;
+  padding: 0 62px 0 38px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--field-bg);
+  color: var(--ink);
+  font: 13px/1 var(--sans);
+  transition: border-color .2s var(--ease-out), box-shadow .2s var(--ease-out), background .2s var(--ease-out);
+}
+#cat-search::placeholder { color: var(--ink-4); }
+#cat-search::-webkit-search-cancel-button { display: none; }
+#cat-search:hover { border-color: var(--line-strong); }
+#cat-search:focus {
+  outline: none;
+  border-color: var(--amber-line);
+  background: var(--field-focus);
+  box-shadow: 0 0 0 3px var(--amber-soft), 0 0 28px -14px var(--accent-glow);
+}
+.search:focus-within > svg { color: var(--amber); }
+.search-kbd {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  transition: opacity .18s var(--ease-out);
+}
+.search.has-value .search-kbd { opacity: 0; }
+.search-clear {
+  position: absolute;
+  right: 9px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  background: var(--panel-3);
+  color: var(--ink-3);
+  cursor: pointer;
+  transition: background .18s, color .18s, transform .14s var(--ease-spring);
+}
+.search-clear:hover { background: var(--amber); color: var(--on-accent); transform: scale(1.08); }
+.search-clear svg { width: 14px; height: 14px; }
+
+/* 分类滚动区 */
+.catnav-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  padding: 4px 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* 分类项 */
+.catnav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 12.5px/1.4 var(--sans);
+  cursor: pointer;
+  text-align: left;
+  transition: background .24s var(--ease-out),
+              border-color .24s var(--ease-out),
+              color .24s var(--ease-out),
+              transform .2s var(--ease-spring),
+              box-shadow .28s var(--ease-out);
+}
+/* 左侧强调竖条：默认隐藏（高度 0），hover/选中时生长出来。
+   用 --g-tone 强调色，带光晕，是「强调色动画」的主体。 */
+.catnav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--amber-bright), var(--g-tone, var(--amber)));
+  box-shadow: 0 0 12px var(--accent-glow);
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: height .3s var(--ease-spring), opacity .24s var(--ease-out);
+  pointer-events: none;
+}
+.catnav-item:hover {
+  background: var(--panel-2);
+  color: var(--ink-2);
+  transform: translateX(3px);
+}
+.catnav-item:hover::before {
+  height: 42%;
+  opacity: .7;
+}
+.catnav-item:active { transform: translateX(3px) scale(.99); }
+.catnav-item.on {
+  background: var(--card-active);
+  border-color: var(--amber-line);
+  color: var(--amber);
+  box-shadow: 0 10px 26px -20px var(--accent-glow), inset 0 0 0 1px var(--amber-line);
+}
+.catnav-item.on::before {
+  height: 64%;
+  opacity: 1;
+}
+
+/* 注：强调柔光不再用 ::after —— 它已被 _liquid.scss 的光晕占用
+   （.catnav-subitem::after / .catnav-item-inner::after）。
+   强调色的「柔光」感由 liquid 光晕 + 左侧竖条 + 边框高光共同承担，
+   不再重复叠加一层。 */
+
+.catnav-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 50%;
+  background: var(--g-tone, var(--amber));
+  box-shadow: 0 0 8px -1px var(--g-tone, var(--amber));
+  transition: transform .3s var(--ease-spring), box-shadow .3s var(--ease-out);
+}
+.catnav-item.on .catnav-dot {
+  transform: scale(1.4);
+  box-shadow: 0 0 12px 0 var(--g-tone, var(--amber));
+}
+
+.catnav-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.catnav-count {
+  flex: none;
+  font: 9.5px/1 var(--mono);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-4);
+  background: var(--panel-2);
+  padding: 2px 7px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  transition: color .18s, background .18s;
+}
+.catnav-item.on .catnav-count {
+  color: var(--amber);
+  background: var(--amber-soft);
+}
+
+/* 分组折叠箭头（具体旋转与交互由 .catnav-fold 决定，见下） */
+.catnav-caret {
+  width: 13px;
+  height: 13px;
+  flex: none;
+  color: currentColor;
+  transition: transform .26s var(--ease-out);
+}
+
+/* ── 分组头：名字区（筛选）+ 箭头区（折叠）两块分离 ─────────────── */
+.catnav-group-head {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  border: 1px solid transparent;
+  border-radius: 12px;
+  transition: background .2s var(--ease-out), border-color .2s var(--ease-out);
+}
+.catnav-group-head:hover { background: var(--panel-2); }
+.catnav-group-head.on {
+  background: var(--card-active);
+  border-color: var(--amber-line);
+}
+/* 分组标题的左侧强调竖条 + 柔光（与 .catnav-item 同一套动画语言） */
+.catnav-group-head::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--amber-bright), var(--g-tone, var(--amber)));
+  box-shadow: 0 0 12px var(--accent-glow);
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: height .3s var(--ease-spring), opacity .24s var(--ease-out);
+  pointer-events: none;
+}
+.catnav-group-head:hover::before {
+  height: 44%;
+  opacity: .7;
+}
+.catnav-group-head.on::before {
+  height: 66%;
+  opacity: 1;
+}
+/* 注：.catnav-group-head 有 glow-target，::after 已被 liquid 光晕占用，
+   不再叠加强调柔光。强调色动画 = 竖条（::before）+ 边框高光 + 计数变色。 */
+.catnav-group-head > * { position: relative; z-index: 1; }
+/* 内层筛选按钮：撑满剩余宽度，自身不再重复画选中底 */
+.catnav-item-inner {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 4px 10px 12px;
+  border: 0;
+  background: transparent;
+  border-radius: 12px 0 0 12px;
+}
+.catnav-item-inner:hover { background: transparent; transform: none; }
+.catnav-item-inner.on {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+.catnav-group-head.on .catnav-name { color: var(--amber); }
+.catnav-group-head.on .catnav-count {
+  color: var(--amber);
+  background: var(--amber-soft);
+  border-color: var(--amber-line);
+}
+
+/* 折叠按钮：独立点击区，够大好点 */
+.catnav-fold {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-right: 4px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink-4);
+  cursor: pointer;
+  transition: background .18s var(--ease-out),
+              color .18s var(--ease-out),
+              transform .16s var(--ease-spring);
+}
+.catnav-fold:hover {
+  background: var(--panel-3);
+  color: var(--ink-2);
+}
+.catnav-fold:active { transform: scale(.9); }
+.catnav-fold .catnav-caret { transition: transform .28s var(--ease-out); }
+.catnav-group.closed .catnav-fold .catnav-caret { transform: rotate(-90deg); }
+
+/* 头部右侧：计数 + 全展开/全收起 */
+.catnav-head-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.catnav-toggle-all { flex: none; }
+.catnav-toggle-all svg { transition: transform .3s var(--ease-spring); }
+.catnav-toggle-all svg.flipped { transform: rotate(180deg); }
+
+/* ── 分组下的场景子列表（下拉展开） ─────────────────────────────── */
+.catnav-sub {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  transition: grid-template-rows .35s var(--ease-out), opacity .25s var(--ease-out);
+}
+.catnav-sub.open { grid-template-rows: 1fr; opacity: 1; }
+.catnav-sub-inner { overflow: hidden; }
+
+/* 展开的子列表**不再自己滚动** —— 让整个左侧只有一个滚动区（.catnav-scroll）。
+ *
+ * 原来这里设了 max-height + overflow-y: auto + overscroll-behavior: contain，
+ * 形成「嵌套滚动」：鼠标在内层子列表上滚轮只滚内层，滚到边界后被
+ * contain 吞掉、不传给外层 —— 用户感觉「卡住滚不动」。
+ * 现在让内层自然展开、由外层统一滚动，滚轮行为线性一致，
+ * 也不会出现「再大的分组把后面分组头挤出视野」的问题（外层本来就能滚）。 */
+.catnav-sub.open .catnav-sub-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 4px 0 8px 10px;
+  overflow: visible;
+}
+.catnav-subitem {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 11.5px/1.4 var(--sans);
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background .24s var(--ease-out),
+              border-color .24s var(--ease-out),
+              color .24s var(--ease-out),
+              transform .2s var(--ease-spring),
+              box-shadow .28s var(--ease-out);
+}
+/* 左侧强调竖条：hover/选中时生长出来，随 --g-tone 变色 */
+.catnav-subitem::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 0;
+  border-radius: 0 3px 3px 0;
+  background: linear-gradient(180deg, var(--amber-bright), var(--g-tone, var(--amber)));
+  box-shadow: 0 0 10px var(--accent-glow);
+  transform: translateY(-50%);
+  opacity: 0;
+  transition: height .3s var(--ease-spring), opacity .24s var(--ease-out);
+  pointer-events: none;
+}
+.catnav-subitem:hover::before {
+  height: 55%;
+  opacity: .75;
+}
+.catnav-subitem.on::before {
+  height: 78%;
+  opacity: 1;
+}
+/* 注：强调柔光不用 ::after —— 已被 liquid 光晕占用，避免冲突。
+   强调色动画由左侧竖条（::before）+ 边框高光 + 缩略图缩放共同承担。 */
+.catnav-subitem > * { position: relative; z-index: 1; }
+
+.catnav-subitem:hover {
+  background: var(--panel-2);
+  color: var(--ink-2);
+  border-color: color-mix(in srgb, var(--g-tone, var(--amber)) 26%, transparent);
+  transform: translateX(3px);
+}
+.catnav-subitem.on {
+  background: var(--card-active);
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--g-tone, var(--amber)) 40%, transparent);
+}
+
+/* 卡片 UI 缩略图：现在是独立按钮 —— 点它放大预览，点名字才切换场景。
+   有实拍/设计稿时显示图片，否则显示图标（此时禁用点击）。 */
+.catnav-thumb {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 8px;
+  color: var(--g-tone, var(--amber));
+  background: color-mix(in srgb, var(--g-tone, var(--amber)) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--g-tone, var(--amber)) 20%, transparent);
+  overflow: hidden;
+  cursor: zoom-in;
+  transition: transform .26s var(--ease-spring),
+              border-color .24s var(--ease-out),
+              background .24s var(--ease-out),
+              box-shadow .28s var(--ease-out),
+              color .24s var(--ease-out);
+}
+/* 没有图（纯图标兜底）时不可点，光标也回到普通状态 */
+.catnav-thumb:disabled {
+  cursor: inherit;
+}
+.catnav-thumb svg { width: 16px; height: 16px; transition: transform .26s var(--ease-spring); }
+.catnav-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  /* 透明圆角卡片图在深底上容易糊，加一层淡投影托起来 */
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .45));
+  transition: transform .26s var(--ease-spring), filter .24s var(--ease-out);
+}
+/* 有真实卡片图时去掉图标那种色框，让它像一张小卡片 */
+.catnav-thumb.has-art {
+  background: var(--input-bg);
+  border-color: var(--glass-edge);
+  border-radius: 9px;
+}
+.catnav-subitem:hover .catnav-thumb:not(:disabled),
+.catnav-subitem.on .catnav-thumb:not(:disabled) {
+  transform: scale(1.08) rotate(-2deg);
+  border-color: color-mix(in srgb, var(--g-tone, var(--amber)) 42%, transparent);
+  box-shadow: 0 0 14px -6px color-mix(in srgb, var(--g-tone, var(--amber)) 60%, transparent);
+}
+.catnav-subitem:hover .catnav-thumb img,
+.catnav-subitem.on .catnav-thumb img {
+  transform: scale(1.06);
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, .5));
+}
+.catnav-subitem:hover .catnav-thumb svg,
+.catnav-subitem.on .catnav-thumb svg {
+  transform: scale(1.12) rotate(-3deg);
+}
+/* 悬停在缩略图上：再明显一点，暗示「这里可以点开」 */
+.catnav-thumb:not(:disabled):hover {
+  transform: scale(1.16) rotate(-4deg);
+  border-color: color-mix(in srgb, var(--g-tone, var(--amber)) 62%, transparent);
+  box-shadow: 0 8px 20px -8px color-mix(in srgb, var(--g-tone, var(--amber)) 75%, transparent);
+}
+
+/* 名字区：占满剩余宽度，点它选中场景 */
+.catnav-submain {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+}
+.catnav-subname {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 空状态 */
+.catnav-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 40px 16px 30px;
+  text-align: center;
+  color: var(--ink-4);
+}
+.catnav-empty .nr-glyph {
+  width: 46px;
+  height: 46px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 6px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  color: var(--ink-3);
+}
+.catnav-empty .nr-glyph svg { width: 22px; height: 22px; }
+.catnav-empty p { margin: 0; font-size: 12.5px; color: var(--ink-2); }
+
+/* 底部快捷键 */
+.catnav-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 11px 16px;
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel-solid) 30%, transparent);
+  font: 9px/1 var(--mono);
+  color: var(--ink-4);
+  flex: none;
+}
+.catnav-foot > span { display: inline-flex; align-items: center; gap: 3px; }

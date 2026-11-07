@@ -106,6 +106,9 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
         r.log(f"重新触发：目标日期平移 +{offset_months} 月 → {target}")
     name = name or gen_name(today)
     et = _EV_TYPES.get(ev_value, _EV_TYPES[CAL_TYPE_BIRTHDAY])
+    # 告诉自动识别这一轮卡片标题长什么样（「今天是<名字>」），名字是随机的，
+    # 只有跑到这里才知道，所以在这里登记而不是写死在场景注册表里。
+    r.card_hint = name
 
     fx = fixtures.get(dev, ev_value)
     fx_row = fixtures.get_event(dev, int(fx["event_id"])) if fx else None
@@ -121,11 +124,29 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
     else:
         _prepare(dev, r)
 
+    # 记住「进日历 UI 之前」日历里最大的事件 id。
+    # 输入法会把 ASCII 名字自动纠正（实测 Bday111760 → B答应111760），
+    # 于是按 title 精确匹配找不到刚建的事件，整轮场景直接挂掉。
+    # 有了这个基线，找不到就取 id 比它大的最新那条 —— 那必然是刚建的，
+    # 不管标题被纠成了什么。
+    seed_baseline = fixtures.newest_event_id(dev) if not fast_mode else 0
+
     def _seed_event() -> None:
         _select_calendar_day(dev, r, target, "今天+1", "1天后")
         _add_important_event(dev, r, name, ev_value=ev_value,
                              type_cn=et["cn"], type_en=et["en"], placeholder=et["ph"],
                              type_labels=et.get("labels"))
+
+    def _locate_after_seed() -> dict | None:
+        """按标题找；找不到就回退到「新建的那条」（输入法纠正兜底）。"""
+        fx = fixtures.find_latest(dev, ev_value, name)
+        if fx:
+            return fx
+        fx = fixtures.newest_event(dev, newer_than=seed_baseline)
+        if fx:
+            r.log(f"标题 {name!r} 没匹配上（输入法可能自动纠正了），"
+                  f"改用新建事件 #{fx['_id']}（标题 {fx.get('title','')!r}）")
+        return fx
 
     created = False
     if fast_mode:
@@ -138,7 +159,7 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
             fixtures.clear(dev, ev_value)
             _prepare(dev, r)
             _seed_event()
-            fx = fixtures.find_latest(dev, ev_value, name)
+            fx = _locate_after_seed()
             if not fx:
                 raise UiError("回退重建 fixture 后仍找不到事件")
             fixtures.register(dev, ev_value, fx)
@@ -146,7 +167,7 @@ def _run_fast(dev: Device, r: Runner, *, today: _dt.date, hour: int, minute: int
             r.ok(f"已重新登记 fixture #{fx['_id']}")
     else:
         _seed_event()
-        fx = fixtures.find_latest(dev, ev_value, name)
+        fx = _locate_after_seed()
         if not fx:
             raise UiError("首次创建后仍未在 CalendarProvider 中找到 fixture 事件")
         fixtures.register(dev, ev_value, fx)
@@ -243,6 +264,9 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
     if offset_months:
         bday = _shift_months(bday, offset_months)
         r.log(f"重新触发：目标日期平移 +{offset_months} 月 → {bday}")
+
+    # 旧流程（PHONE_REMOTE_LEGACY=1）也要登记卡片标题，自动识别不认流程只认文案
+    r.card_hint = name
 
     set_system_datetime(dev, r, bday, hour, minute)
 

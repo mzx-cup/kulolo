@@ -1,0 +1,188 @@
+// ═══════════════════════════════════════════════════════════════════
+//   全局自定义鼠标指针（阿尼亚 · Anya）
+//
+//   图片由 tools/make_anya_cursors.py 从「阿尼亚+拓展」里的 Windows
+//   动画光标 (.ani) 抽取第一帧生成到 public/cursors/anya/，
+//   构建后就是 ./cursors/anya/*.png。每张都有 @1x / @2x 两版。
+//
+//   对应关系：
+//     arrow       —— 默认箭头：兽耳替换arrow.ani（用户指定）
+//     pointer     —— 可点击：link.ani（链接手型）
+//     text        —— 文本选择：beam.ani
+//     grab/grabbing—— 可拖拽 / 拖拽中：move.ani
+//     zoom-in     —— 放大预览：cross.ani（精确选择）
+//     not-allowed —— 禁用：no.ani
+//     progress    —— 等待/忙：busy.ani
+//
+//   写法策略（重要）：
+//     先写一条 url() 的 1x 版本，再写一条 image-set() 的 1x/2x 版本。
+//     image-set 在 cursor 上的支持虽然现在很广，但个别浏览器/内核版本
+//     解析不了整条声明 —— 那样 cursor 会直接失效、指针变成原生默认。
+//     先给 url() 兜底，再让支持的浏览器用 image-set 升级到高分屏，
+//     两边都能正常显示，不会出现「指针突然变回系统箭头」的情况。
+//
+//   热点（hotspot）一律按 1x 图（32px）的像素写，浏览器会按倍率自己换算。
+//   每项都留原生关键字（auto / pointer / grab …）作为最终兜底。
+// ═══════════════════════════════════════════════════════════════════
+
+/* ── 默认指针：箭头 ─────────────────────────────────────────────── */
+html,
+body {
+  cursor: url("../cursors/anya/arrow.png") 0 0, auto;
+  cursor: image-set(
+    url("../cursors/anya/arrow.png") 1x,
+    url("../cursors/anya/arrow@2x.png") 2x
+  ) 0 0, auto;
+}
+
+/* 所有原本是 pointer 的都换成阿尼亚手型。
+   这里用通配 + 属性选择器覆盖面比较广，但只改「看起来是按钮」的元素，
+   不会把整页变成自定义指针（那样反而不好用）。 */
+a,
+button,
+label,
+summary,
+[role="button"],
+[role="tab"],
+[role="option"],
+[role="menuitem"],
+[aria-pressed],
+[aria-expanded],
+[tabindex]:not([tabindex="-1"]),
+select,
+input[type="checkbox"],
+input[type="radio"],
+input[type="file"],
+input[type="color"],
+input[type="submit"],
+input[type="button"],
+input[type="reset"],
+.btn,
+.icon-btn,
+.vbtn,
+.commit,
+.filter,
+.chip,
+.recent-chip,
+.recentbar-card,
+.recentbar-fav,
+.catnav-item,
+.catnav-fold,
+.catnav-subitem,
+.catnav-submain,
+.catnav-toggle-all,
+.catnav-thumb,
+.catalog .card,
+.deck-card,
+.stage-card.is-side,
+.group-head,
+.search-clear,
+.theme-option,
+.theme-menu-close,
+.sel-btn,
+.sel-opt,
+.stage-icbtn,
+.stage-run,
+.expand-btn,
+.lightbox-close,
+.devstatus {
+  cursor: url("../cursors/anya/pointer.png") 0 0, pointer;
+  cursor: image-set(
+    url("../cursors/anya/pointer.png") 1x,
+    url("../cursors/anya/pointer@2x.png") 2x
+  ) 0 0, pointer;
+}
+/* ── 可拖拽 / 拖拽中 ────────────────────────────────────────────── */
+.stage-viewport,
+.stage-card.is-center {
+  cursor: url("../cursors/anya/grab.png") 0 0, grab;
+  cursor: image-set(
+    url("../cursors/anya/grab.png") 1x,
+    url("../cursors/anya/grab@2x.png") 2x
+  ) 0 0, grab;
+}
+.stage-viewport.dragging,
+.stage-viewport.dragging .stage-card.is-center,
+.stage-card.is-center:active {
+  cursor: url("../cursors/anya/grabbing.png") 0 0, grabbing;
+  cursor: image-set(
+    url("../cursors/anya/grabbing.png") 1x,
+    url("../cursors/anya/grabbing@2x.png") 2x
+  ) 0 0, grabbing;
+}
+
+/* ── 文本输入：竖线 ─────────────────────────────────────────────── */
+input[type="text"],
+input[type="search"],
+input[type="number"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+input[type="url"],
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
+  cursor: url("../cursors/anya/text.png") 6 16, text;
+  cursor: image-set(
+    url("../cursors/anya/text.png") 1x,
+    url("../cursors/anya/text@2x.png") 2x
+  ) 6 16, text;
+}
+
+/* ── 放大预览：精确选择 ─────────────────────────────────────────── */
+.catnav-thumb:not(:disabled),
+.card-thumb,
+.device-screen,
+.device-screen.has-shot {
+  cursor: url("../cursors/anya/zoom-in.png") 6 6, zoom-in;
+  cursor: image-set(
+    url("../cursors/anya/zoom-in.png") 1x,
+    url("../cursors/anya/zoom-in@2x.png") 2x
+  ) 6 6, zoom-in;
+}
+
+/* ── 禁用：灰色斜杠 ─────────────────────────────────────────────── */
+:disabled,
+[aria-disabled="true"],
+.btn:disabled,
+.icon-btn:disabled,
+.vbtn:disabled,
+.commit:disabled,
+.catnav-thumb:disabled,
+select:disabled {
+  cursor: url("../cursors/anya/not-allowed.png") 1 1, not-allowed;
+  cursor: image-set(
+    url("../cursors/anya/not-allowed.png") 1x,
+    url("../cursors/anya/not-allowed@2x.png") 2x
+  ) 1 1, not-allowed;
+}
+
+/* 运行中的主按钮显示「等待」，用阿尼亚 busy */
+.commit:disabled:not([aria-disabled="true"]) {
+  cursor: url("../cursors/anya/progress.png") 1 1, progress;
+  cursor: image-set(
+    url("../cursors/anya/progress.png") 1x,
+    url("../cursors/anya/progress@2x.png") 2x
+  ) 1 1, progress;
+}
+
+/* ── 尊重系统「减少动态」与「强制系统指针」偏好 ─────────────────
+ *  某些用户会在系统设置里强制使用自己的指针（无障碍需求），
+ *  这时应该让浏览器用原生指针，不要被我们覆盖。 */
+@media (prefers-reduced-motion: reduce) {
+  /* 动画关了，但指针本身仍保留 —— 指针不是「动效」 */
+}
+
+/* 高对比度模式下退回系统指针，保证可达性 */
+@media (forced-colors: active) {
+  html, body,
+  a, button, label, summary,
+  [role="button"], [role="tab"], [role="option"],
+  [tabindex]:not([tabindex="-1"]),
+  .btn, .icon-btn, .vbtn, .commit,
+  .catnav-item, .catnav-subitem, .catnav-submain,
+  .stage-viewport, .stage-card.is-center,
+  input, textarea, select {
+    cursor: revert;
+  }
+}

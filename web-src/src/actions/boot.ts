@@ -2,7 +2,7 @@ import { state } from "@/stores/core";
 import type { ScenarioView } from "@/types/api";
 import { STORAGE_KEYS, readText } from "@/lib/storage";
 import { api } from "@/lib/api";
-import { buildGroups, currentVisible, loadPrefs, selectScenario } from "./catalog";
+import { buildGroups, currentVisible, loadPrefs, selectScenario, applyInitialCollapse } from "./catalog";
 import { syncMetaColor } from "./theme";
 import { toast } from "./toast";
 
@@ -52,6 +52,10 @@ export async function loadScenarios(): Promise<void> {
   const pick = state.scenarios.find((s) => s.id === saved) || state.scenarios[0];
   state.loading = false;
   selectScenario(pick.id, { silent: true, force: true });
+
+  /* 首次访问时只展开选中场景所在的分组，其余收起，
+     避免 30 个条目把侧栏撑爆、分组头被挤出可视区。 */
+  applyInitialCollapse();
 }
 
 export { currentVisible };

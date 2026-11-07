@@ -89,6 +89,33 @@ def screenshots_dir() -> Path:
     return p
 
 
+def adb_temp_dir() -> Path | None:
+    """adb daemon 备用日志目录（应用目录旁），供 main.py 启动 daemon 失败时兜底。
+
+    为什么放在应用目录旁而不是状态目录 / %TEMP%
+    ------------------------------------------
+    内置 adb 36.0.0 启动 daemon 时**必定**去写 `<TEMP>\\adb.log`，写不了就
+    `Fatal: cannot open ...adb.log: Permission denied` 直接退出，之后所有 adb
+    命令统一报 `cannot connect to daemon`，设备「凭空消失」。
+
+    实测（2026-11-07）：本机 `%TEMP%`、`%LOCALAPPDATA%` 以及
+    `%APPDATA%\\phone-remote` 下的目录，Python 都能写，但**adb daemon 这个
+    detached 子进程写不了**；只有应用目录（工作区）里的目录能写。所以兜底
+    目录选在 `resource_path()` 旁边——那是源码直跑 / 打包后都确定可写的地方
+    （打包后 `_MEIPASS` 本身就是解压出来的可写临时目录）。
+
+    注意：不能用「Python 能不能写 adb.log」来判断，这样会误判为正常（实测
+    Python 写 OK 但 adb 仍失败），必须由 main.py 真的 `adb start-server`
+    一次，看返回码再决定用不用这个目录。
+    """
+    try:
+        p = resource_path("_adb_tmp")
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    except OSError:
+        return None
+
+
 def find_adb() -> str | None:
     """定位 adb 可执行文件。
 
