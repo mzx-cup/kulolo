@@ -33,7 +33,13 @@ export function setShot(src: string, tag: string): void {
     const screen = refs.deviceScreenEl;
     state.shotSrc = src;
     state.hasShot = true;
-    if (screen) screen.style.setProperty("--shot-bg", `url("${src}")`);
+    /* KeepAlive 下触发页/消失页各有一个 .device-screen（refs 只指向当前显示的那个），
+     *  模糊底图逐个写，切页回来不会拿到过期画面 */
+    const bg = `url("${src}")`;
+    for (const el of document.querySelectorAll<HTMLElement>(".device-screen")) {
+      el.style.setProperty("--shot-bg", bg);
+    }
+    if (screen) screen.style.setProperty("--shot-bg", bg);
     /* 先摘掉再挂上，强制重排一次让动画重播 */
     state.shotSwap = false;
     requestAnimationFrame(() => {

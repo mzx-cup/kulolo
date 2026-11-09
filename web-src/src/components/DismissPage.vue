@@ -9,15 +9,17 @@ import {
   setObs,
   clearObs,
 } from "@/actions/dock";
-import { fetchShot } from "@/actions/shot";
+import DevicePanel from "@/components/DevicePanel.vue";
 
 /** 消失页 = 「卡片消失机制检测台」。
  *
  *  排版刻意和触发页不同：触发页是居中卡片轮播，这里改成
  *  左侧竖向流程时间轴（9 个观察节点）+ 右侧实时画面与统计，
- *  每个节点现场记录「卡片消失 / 卡片仍在」。 */
+ *  每个节点现场记录「卡片消失 / 卡片仍在」。
+ *  右栏的实时画面直接复用触发页的 DevicePanel（手机框 + LIVE + 自动刷新）。 */
 export default defineComponent({
   name: "DismissPage",
+  components: { DevicePanel },
   setup() {
     const stats = computed(() => obsStats());
     const phases = computed(() => {
@@ -33,11 +35,8 @@ export default defineComponent({
     function onObs(id: string, v: "gone" | "stay"): void {
       setObs(id, v);
     }
-    function onShot(): void {
-      void fetchShot("消失检测 " + new Date().toLocaleTimeString());
-    }
 
-    return { state, phases, stats, obsOf, onObs, clearObs, onShot, DISMISS_PREP };
+    return { state, phases, stats, obsOf, onObs, clearObs, DISMISS_PREP };
   },
 });
 </script>
@@ -107,22 +106,9 @@ export default defineComponent({
         </li>
       </ol>
 
-      <!-- 右：实时画面 + 说明 -->
+      <!-- 右：实时画面（与触发页同款手机框 DevicePanel） + 说明 -->
       <aside class="dismiss-side">
-        <section class="panel dismiss-shot">
-          <div class="panel-head">
-            <div class="panel-title">
-              <h3>实时画面</h3>
-              <span class="head-note">live</span>
-            </div>
-            <button class="vbtn" type="button" @click="onShot">截取</button>
-          </div>
-          <div class="dismiss-shot-box">
-            <img v-if="state.shotSrc" :src="state.shotSrc" :alt="state.shotTag || '实时画面'" />
-            <div v-else class="dismiss-shot-empty">还没有画面，点「截取」抓一帧</div>
-          </div>
-          <p class="dismiss-shot-tag">{{ state.shotTag }}</p>
-        </section>
+        <DevicePanel />
 
         <section class="panel dismiss-help">
           <div class="panel-head">

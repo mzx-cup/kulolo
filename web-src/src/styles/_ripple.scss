@@ -15,6 +15,22 @@
 .filter .ripple,
 .icon-btn .ripple { background: var(--ripple); }
 
+/* 涟漪必须悬浮在布局之外。
+   _liquid.scss 的 `.glow-target > *, .btn > *, .icon-btn > * …` 会给子元素
+   `position: relative; z-index: 1`（同特异度且更靠后会覆盖上面的 absolute），
+   涟漪一旦变成布局内元素，就会作为 .icon-btn 这个 grid 容器的第二个格子
+   把 svg 挤偏——点击瞬间图标往右上跳的根因。这里用更高特异度锁回 absolute。 */
+.commit > .ripple,
+.vbtn > .ripple,
+.btn > .ripple,
+.filter > .ripple,
+.icon-btn > .ripple,
+.stage-icbtn > .ripple,
+.glow-target > .ripple {
+  position: absolute;
+  z-index: 1;
+}
+
 /* ── 主题切换过渡 ───────────────────────────────────────────────── */
 html.theme-switching *,
 html.theme-switching *::before,

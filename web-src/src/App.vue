@@ -1,15 +1,10 @@
 <script lang="ts">
 import { defineComponent, nextTick, onMounted, onUnmounted, ref } from "vue";
 import TheTopbar from "@/components/TheTopbar.vue";
-import CategoryNav from "@/components/CategoryNav.vue";
-import ScenarioStage from "@/components/ScenarioStage.vue";
-import DevicePanel from "@/components/DevicePanel.vue";
-import RecentBar from "@/components/RecentBar.vue";
+import TriggerPage from "@/components/TriggerPage.vue";
 import DismissPage from "@/components/DismissPage.vue";
 import DockBar from "@/components/DockBar.vue";
 import ParamsDrawer from "@/components/ParamsDrawer.vue";
-import StepsPanel from "@/components/StepsPanel.vue";
-import LogPanel from "@/components/LogPanel.vue";
 import ModalVerify from "@/components/ModalVerify.vue";
 import ModalRetry from "@/components/ModalRetry.vue";
 import ModalStop from "@/components/ModalStop.vue";
@@ -31,15 +26,10 @@ export default defineComponent({
   name: "App",
   components: {
     TheTopbar,
-    CategoryNav,
-    ScenarioStage,
-    DevicePanel,
-    RecentBar,
+    TriggerPage,
     DismissPage,
     DockBar,
     ParamsDrawer,
-    StepsPanel,
-    LogPanel,
     ModalVerify,
     ModalRetry,
     ModalStop,
@@ -216,6 +206,11 @@ export default defineComponent({
       if (!el || (el as HTMLButtonElement).disabled) return;
       const r = document.createElement("span");
       r.className = "ripple";
+      /* 行内锁死 absolute：涟漪绝不能变成 .icon-btn(grid) 的布局内格子，
+       * 否则会把 svg 挤偏（点击瞬间图标右上跳）——样式表里 .ripple 的
+       * absolute 曾被 _liquid.scss 的 `.icon-btn > * { position: relative }`
+       * 同特异度覆盖，行内样式不受层叠影响，作为最终保险。 */
+      r.style.position = "absolute";
       const rect = el.getBoundingClientRect();
       const d = Math.max(rect.width, rect.height) * 2;
       r.style.width = r.style.height = d + "px";
@@ -331,18 +326,7 @@ export default defineComponent({
     <div class="page-slot">
       <Transition name="dockpage" mode="out-in" @enter="onPageEnter">
         <KeepAlive>
-          <div v-if="state.dockPage === 'trigger'" key="trigger" class="page-trigger">
-            <CategoryNav />
-            <div class="workspace">
-              <ScenarioStage ref="stageRef" />
-              <DevicePanel />
-              <RecentBar />
-              <div class="flow">
-                <StepsPanel />
-                <LogPanel />
-              </div>
-            </div>
-          </div>
+          <TriggerPage v-if="state.dockPage === 'trigger'" ref="stageRef" key="trigger" />
           <DismissPage v-else key="dismiss" />
         </KeepAlive>
       </Transition>

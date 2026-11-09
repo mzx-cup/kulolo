@@ -46,8 +46,22 @@ export default defineComponent({
     };
   },
   mounted() {
-    refs.deviceScreenEl = this.$refs.screen as HTMLElement;
-    refs.shotImgEl = this.$refs.img as HTMLImageElement;
+    this.syncRefs();
+  },
+  /* KeepAlive 下两个页面各有一个 DevicePanel 实例，DOM 里先后存在过两个，
+   * refs 只应指向当前显示的那个，否则 --shot-bg 会写到隐藏页上。切回时重新登记。 */
+  activated() {
+    this.syncRefs();
+  },
+  methods: {
+    syncRefs(): void {
+      refs.deviceScreenEl = this.$refs.screen as HTMLElement;
+      refs.shotImgEl = this.$refs.img as HTMLImageElement;
+      /* KeepAlive 存档里的 DOM 不在 document 上，新画面的模糊底图写不到它；
+       *  切回来时按当前画面补一次，避免底图停留在旧帧 */
+      const screen = this.$refs.screen as HTMLElement | null;
+      if (screen && state.shotSrc) screen.style.setProperty("--shot-bg", `url("${state.shotSrc}")`);
+    },
   },
 });
 </script>
