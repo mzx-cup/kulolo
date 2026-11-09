@@ -44,6 +44,7 @@ import scenario_power_saving
 import scenario_satellite
 import scenario_smart_traffic
 import scenario_summary_report
+import scenario_personal_knowledge
 from phone_ctl import Device, UiError
 
 HOST = "127.0.0.1"
@@ -869,6 +870,35 @@ SCENARIOS = [
             {"k": "等待", "from": "wait_sec", "suffix": "s"},
         ],
     },
+    {
+        "id": "personal_knowledge",
+        "title": "个人知识库授权卡片",
+        "tag": "privacy · knowledge · card",
+        "desc": "蓝色底图的个人知识库服务授权卡片（TPK serviceId=66071 / "
+                "规则 10061）。①DemoHost 调试功能下发云端配置；②设置/系统/"
+                "增强服务/个人知识库服务关闭（必须点确认弹层）；③把时间拨到"
+                "关闭后第 1/4/6/36/72/108 天的 12:35，息屏亮屏解锁出卡。"
+                "卡片是自绘 View（控件树无文字），用蓝色像素占比 + 派发日志判定。",
+        "module": scenario_personal_knowledge,
+        "group": "隐私合规",
+        "icon": "spark",
+        "retryable": False,
+        "params": [
+            {"key": "days", "type": "text", "label": "节点日",
+             "value": "1,4,6,36,72,108",
+             "placeholder": "1,4,6,36,72,108"},
+            {"key": "hour", "type": "time", "label": "系统时间", "h": 12, "m": 35},
+            {"key": "off_sec", "type": "number", "label": "息屏",
+             "value": 8, "min": 3, "max": 60, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "解锁后等卡片",
+             "value": 8, "min": 3, "max": 60, "unit": "秒"},
+        ],
+        "specs": [
+            {"k": "规则", "v": "10061 · 蓝色授权卡"},
+            {"k": "节点日", "from": "days"},
+            {"k": "额度", "v": "总共 6 次 · 每天 1 次"},
+        ],
+    },
 ]
 SCENARIOS_BY_ID = {s["id"]: s for s in SCENARIOS}
 
@@ -1298,8 +1328,8 @@ def _confirm_fn(r) -> bool:
       `pm clear`（launcher3 / atomicbrain / atomiccore，见
       `Device.clear_atomic_services()`），和网页点「没出卡重试」完全同一套
       命令；这条规则对**所有**卡片生效。节日卡片（festival_*）因为要联网
-      拉节日数据、生成最慢，等待预算放宽到 8 分钟；其它卡片仍是 90 秒
-      快速失败，不跟着干等。
+      拉节日数据、生成最慢，亮屏后先安静等 7 分钟再决定要不要清；其它
+      卡片仍是 90 秒快速失败，不跟着干等。
     * 可被暂停/结束打断：识别期间穿插检查，点了「结束」能立刻停。
     """
     sid = _current_scenario_id()
@@ -1342,14 +1372,27 @@ def _confirm_fn(r) -> bool:
     # 按用户定的策略，两条规则分开：
     #   * **三条 pm clear**（launcher3 / atomicbrain / atomiccore，和网页点
     #     「没出卡重试」完全同一套命令）加进**所有**卡片的重试链路；
-    #   * **最长 8 分钟**的等待预算只给**节日卡片**（festival_*）—— 节日卡
-    #     依赖联网拉节日数据，生成最慢；其它卡片保持 90 秒快速失败，别让
-    #     普通卡片也跟着干等 8 分钟。
+    #   * **节日卡片（festival_*）亮屏之后先安静等 7 分钟再清缓存** ——
+    #     实测节日卡是联网拉节日数据后再渲染的，亮屏那一刻往往还没画出来；
+    #     这时候立刻 pm clear 会把正在生成的卡片打断，越清越不出。所以先
+    #     只「看一眼」（dump 控件树，不动缓存），7 分钟仍没看到才清数据、
+    #     翻下一张（节日卡基本只有一次出卡机会，清早了就白跑一张）。
+    #     其它卡片保持 90 秒快速失败，不跟着干等。
     is_festival = sid.startswith("festival_")
-    DEADLINE_SEC = 8 * 60 if is_festival else 90
-    ROUND_GAP = 12 if is_festival else 6   # 每轮之间的等待（清缓存后给重建时间）
+    FESTIVAL_QUIET_SEC = 7 * 60        # 亮屏后先安静等这么久，不许清数据
+    QUIET_POLL_SEC = 60                # 安静期每隔多久看一眼（只看不清）
+    # 节日卡只跑一个安静期：7 分钟没出就判「这张没出」，清完数据交给
+    # 采集脚本翻下一张（而不是在同一张卡上继续耗）。
+    DEADLINE_SEC = FESTIVAL_QUIET_SEC if is_festival else 90
+    ROUND_GAP = 12 if is_festival else 6   # 清数据后给 launcher 重建的时间
     started = time.time()
     round_no = 0
+    quiet_until = started + FESTIVAL_QUIET_SEC if is_festival else started
+
+    if is_festival:
+        log(f"亮屏后先安静等待 {FESTIVAL_QUIET_SEC // 60} 分钟（期间不清任何数据，"
+            f"等节日卡片自己渲染出来；{FESTIVAL_QUIET_SEC // 60} 分钟后仍没出就"
+            f"清数据、翻下一张）")
 
     while hit is None and time.time() - started < DEADLINE_SEC:
         if _ctrl["stop"]:
@@ -1358,14 +1401,27 @@ def _confirm_fn(r) -> bool:
             return True      # 暂停中不折腾设备，交给用户继续时再跑
         round_no += 1
         left = int(DEADLINE_SEC - (time.time() - started))
-        log(f"第 {round_no} 轮识别（剩余约 {left}s）…")
+        in_quiet = time.time() < quiet_until
+        phase = "，安静期不清数据）" if in_quiet else "）"
+        log(f"第 {round_no} 轮识别（剩余约 {left}s{phase}…")
         hit = card_probe.find_card_anywhere(dev, keywords, log=log)
         if hit:
             break
 
-        # 没找到：清缓存让卡片重新生成，再等一轮
+        # 没找到，分两种情况：
+        #   * **安静期**（只有节日卡有）：只歇一会儿再看，**不清任何数据**；
+        #   * 安静期之外（所有非节日卡，以及节日卡跑过安静期后理论上到不了的
+        #     分支）：沿用老策略 —— 三条 pm clear 后重试，90 秒快速失败。
         if time.time() - started >= DEADLINE_SEC:
             break
+        if in_quiet:
+            wait = min(QUIET_POLL_SEC, max(1, int(quiet_until - time.time())))
+            log(f"安静期：卡片还没出来，{wait}s 后再看一眼（不清数据）")
+            for _ in range(wait):
+                if _ctrl["stop"]:
+                    raise UiError("用户结束场景")
+                time.sleep(1)
+            continue
         log("本轮没找到，执行三条 pm clear（launcher3 / atomicbrain / atomiccore）后重试")
         try:
             dev.clear_atomic_services()
@@ -1380,6 +1436,24 @@ def _confirm_fn(r) -> bool:
     if not hit:
         log(f"等了 {int(time.time() - started)}s（{round_no} 轮）仍未找到智慧建议卡片"
             f"（关键词 {tuple(keywords)}）")
+        # 节日卡失败后**只清 launcher3，绝不清 atomicbrain / atomiccore**：
+        #
+        # 节日卡的配置和素材是 atomicbrain 联网下载的（logcat 里
+        # `TAB.CardDataManager: getHolidayCardConfig ... cardsCount=11` 之后
+        # `TAB.CardDownloader` 把每张 HOLIDAY_*_bg.png / _effect.mp4 存到
+        # files/cards/）。`pm clear atomicbrain` 会把这份刚下好的素材一起删掉，
+        # 下一张卡就得重新联网下载 —— 表现就是「越清越不出」，一张接一张失败。
+        # launcher3 只存小部件布局/轮播位置，清它是安全的。
+        if is_festival:
+            log("只清 launcher3 的小部件状态（保留 atomicbrain 已下载的节日卡素材）")
+            try:
+                dev.shell("pm clear com.transsion.launcher3")
+            except Exception as exc:  # noqa: BLE001
+                log(f"清 launcher3 失败（不影响翻下一张）：{exc}")
+            for _ in range(max(1, ROUND_GAP // 3)):
+                if _ctrl["stop"]:
+                    raise UiError("用户结束场景")
+                time.sleep(3)
         _emit({"t": "card", "no": r._no, "ok": False, "scenario": sid})
         return False
     log(f"第 {round_no} 轮命中，共用时 {int(time.time() - started)}s")
@@ -1403,12 +1477,20 @@ def _confirm_fn(r) -> bool:
             try:
                 import io
                 from PIL import Image
+                from tools import make_card_art as _art
                 im = Image.open(io.BytesIO(png))
                 x1, y1, x2, y2 = hit.box
                 im = im.crop((max(0, x1), max(0, y1),
                               min(im.width, x2), min(im.height, y2)))
+                # 裁完仍然要画圆角 alpha：裸裁会把桌面的黑色底和圆角残留
+                # 一起带进来，贴到深色 UI 上就是一块方角黑边。
+                import numpy as _np
+                rgb = _np.asarray(im.convert("RGB")).astype(_np.float32)
+                h, w, _ = rgb.shape
+                art = _art._render_boxed(
+                    rgb, (0, 0, w, h), min(w, h) * 0.14, 0, _art.OUT_SIZE)
                 buf = io.BytesIO()
-                im.save(buf, format="PNG")
+                art.save(buf, format="PNG", optimize=True)
                 png = buf.getvalue()
             except Exception:  # noqa: BLE001
                 pass

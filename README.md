@@ -630,6 +630,70 @@ ability 22 每天只给 1 次额度。第一次跑满 `wait_sec` 还没看到卡
 - **装包会弹 Google Play 保护机制**（`PlayProtectDialogsActivity`），三个按钮是
   「发现未知应用时一律发送 / 本次发送 / **不发送**」，要点「不发送」，否则焦点被抢走。
 
+## 个人知识库授权卡片（蓝色底图 / 隐私合规）
+
+`personal_knowledge`，分组 `隐私合规`。这是规则 **`rule_id=10061`**
+（`assets/rule/AITIPS_KNOWLEDGE_AUTHORIZATION.json`，
+`intent_id=transsion.intent.aitips.AITIPS_Knowledge_Authorization`，
+TPK `serviceId=66071`）派发的一张**蓝色底图自绘卡片**。
+
+| ability | 类型 | 条件 |
+|---|---|---|
+| 1 | 解锁 | `EQUAL Boolean "true"`（active ability） |
+| 2 | 时间窗 | `RANGE 12_30_00 ~ 23_59_00`，`time_type=DAY` |
+| 15 | 总额度 | `EQUAL Int "6"`，**总共最多 6 次** |
+| 22 | 日频控 | `EQUAL Int "1"`，每天 1 次 |
+
+### 触发流程（`scenario_personal_knowledge.py`）
+
+1. **DemoHost 云端配置**（不做这步，规则 10061 根本不评估）：装
+   `DemoHost-16.02.00.000-3cff59d-0721-release_signed.apk`（包名其实是
+   `com.example.tpk.client`），从主页进「调试功能」→ 勾「测试环境」+「感知服务Flag」
+   → 点「更新TCSCONFIG」+「触发TCS更新云端数据」。全部按 `resource-id` 点，跨语言通用。
+2. **清空原子服务缓存**：ability 15 的 6 次额度是**持久计数**，上一次把 6 个节点日全跑过
+   之后就满了，再触发会被频控直接挡掉（logcat 里 10061 完全不评估）。所以每次开跑前
+   `dev.clear_atomic_services()`（launcher3 + atomicbrain + atomiccore 一起清）重置额度
+   和关闭基准时间；顺序必须在云端配置之前，因为 cloud config 也落在被清的包里。
+3. **关闭个人知识库服务**：`设置 / 系统 / 增强服务 / 个人知识库服务`，或直达
+   `PersonalKnowledgeActivity`。主开关里的 Switch 节点**不出现在控件树、也不可点**，
+   要点整行容器 `toggle_switch` 的中心（RTL 下开关翻到左边，硬编码坐标会点空）。
+   开→关会弹确认框，**必须点 `btn_negative`**（不是中文「关闭」文本）才会把
+   `atomic_personal_knowledge_state` 从 1 写成 0 并落盘；只点开关不点确认则状态从不落盘。
+4. 关闭当天记为 **T0**，把系统时间依次拨到 T0 + N 天的 **12:35**
+   （N 只能是 `1 / 4 / 6 / 36 / 72 / 108`，`days` 参数逗号分隔；其它值会被拒绝）。
+   实测非节点日 D+2 `blue=0.033` 不出卡，节点日 `blue=0.728` 出卡，门控严格。
+5. 每个节点日：息屏 → 亮屏 → 上滑解锁 → 回桌面，智慧建议轮播里出现蓝色底图卡片。
+
+### 判定为什么不能用控件树文字
+
+这张卡是 TPK 自绘 View，**uiautomator 里没有文字**。桌面上同时会有另一张白底
+「玩机技巧卡片」（文案「开启个人知识库，让服务更懂你。/ 立即开启」），按文本匹配会认错卡
+（用户明确纠正过：白底那张不是要的卡，要的是**蓝色底图**那张）。所以场景用两条独立证据：
+
+- **视觉**：连采最多 8 帧截图，取「智慧建议卡片区 `(611,213,1153,801)` 里蓝色像素占比」
+  的最大值，> 0.5 即命中（判据 `b>r+45 & b>g+25 & b>120`）。
+  蓝卡常落在轮播非首位（被早安卡挤到 index 3），单帧可能采到白底卡，多帧采样覆盖它。
+- **系统日志**：`logcat` 里 `Aitips_AITIPS_Knowledge_Authorization`（athena ≥ 2）且
+  `TpkServiceCard onCardTrigger` 含 `Knowledge`（≥ 1）—— 轮播没转到蓝卡那帧时靠它兜底，
+  与智能路况卡「判定走 logcat」同源。
+
+任一成立即算出卡。因此 `main.py` 里这个场景**故意不声明 `card_keywords`**，
+自动识别会直接跳过（按已触发处理），由模块自己判定并 `emit` 一条 card 事件。
+静态 UI 图取自真机节点日截图的蓝卡本体（按蓝色像素紧框裁切），抠成 512×512
+透明圆角 `web-src/public/cards/personal_knowledge.png`，登记在 `cardArt.ts`。
+
+### 实测结果：三语言 × 6 个节点日
+
+| 语言 | 1 | 4 | 6 | 36 | 72 | 108 |
+|---|---|---|---|---|---|---|
+| 中文 `zh-Hans-CN` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 英语 `en-US` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| 阿拉伯语 `ar-EG` | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+
+阿拉伯语（RTL）下 `toggle_switch` 容器中心 `(604,478)` 三语不变，
+`btn_negative` 文本变成 `إيقاف التشغيل` 但 rid 不变，所以按 rid + 控件树 bounds 点即可，
+不需要为中文/阿语各写一套坐标。
+
 ## 界面
 
 界面按「场景目录 / 工作台 / 实时画面」三块重做，场景数涨到 30+ 也不会挤：
@@ -689,6 +753,8 @@ adb shell settings put system system_locales "ar-EG,zh-Hans-CN,en-GB,en-US"
 新增的第 27~29 个场景，中文 / 英语 / 阿拉伯语下也都逐张真机跑通过。
 智能路况是第 30 个场景，mock 路径三语言都通过；real 路径的流程也三语言跑通，
 但本版 App 出不了卡（原因见上一节）。**
+**个人知识库授权卡片（蓝色底图）是第 31 个场景，中文 / 英语 / 阿拉伯语下
+6 个节点日全部真机出卡（见上一节）。**
 
 多语言下踩到并修掉的坑：
 
@@ -837,6 +903,7 @@ npm run dev       # 可选：热更新调试，5273 端口，/api 自动代理�
 | `scenario_power_saving.py` | 停电建议：停电省电提醒卡片（**需 root**；mock 电量 30% + KPLC 查公告 → 时间 12:30 → 息屏 10s → 解锁出卡） |
 | `scenario_power_restore.py` | 停电建议：停电恢复卡片（**需 root**；先清电池 mock 避免 conflict_group 抢卡 → KPLC 查公告 → 时间 16:30 → 息屏 10s → 解锁出卡） |
 | `scenario_smart_traffic.py` | 路况天气：智能路况卡片。mock = 调试页清当日计数 + 点 mock 按钮；real = 天气 App + 12 点前 + 写 MMKV 天气记忆 + 1 分钟后重复闹钟上滑关闭，全程不碰 test brain |
+| `scenario_personal_knowledge.py` | 隐私合规：个人知识库授权卡片（蓝色底图，规则 10061）。DemoHost 云端配置 → 清原子服务重置 6 次额度 → 关闭个人知识库服务 → 拨到关闭后第 1/4/6/36/72/108 天 12:35 → 息屏亮屏解锁出卡；判定用多帧蓝色占比 + logcat 派发，不按控件树文字 |
 | `locale_kit.py` | 三语词表与解析：月份/星期/阿拉伯-印度数字归一化、日期格候选、UI 标签表、RTL 方向判定 |
 | `locale_switch.py` | 触发语言切换：`cmd locale set-device-locale` 即时生效（不重启），并还原语言列表；老系统退回重启路径 |
 | `seed_important_days.py` | 一次性预置生日/纪念日/考试/观演日/重要日五类 fixture |

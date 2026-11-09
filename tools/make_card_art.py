@@ -35,7 +35,11 @@ from pathlib import Path
 
 import numpy as np
 from PIL import Image
-from scipy import ndimage
+
+try:                       # 只有「靠描边猜轮廓」那条路需要 scipy
+    from scipy import ndimage
+except ImportError:        # noqa: BLE001
+    ndimage = None         # type: ignore[assignment]
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC_DIR = ROOT / "资源" / "图片资源" / "_incoming"

@@ -45,7 +45,9 @@ TARGETS = [
 
 PARAMS = {"hour": 9, "minute": 30, "wait_sec": 60}
 # 单个场景最长等多久：改时间 + 常亮 60s + 锁屏亮屏 8s +
-# 自动识别最长 8 分钟（节日卡片专用预算）+ 余量。
+# 节日卡片「亮屏后先安静等 7 分钟、没出就清数据翻下一张」（main.py 里的
+# FESTIVAL_QUIET_SEC）+ 余量。每张节日卡基本只有一次出卡机会，安静期
+# 内不许清任何数据，清早了等于白跑一张。
 RUN_TIMEOUT = 10 * 60
 POLL_GAP = 3
 
@@ -137,7 +139,7 @@ def main() -> int:
     ok, fail = [], []
     for i, (sid, name) in enumerate(todo, 1):
         print(f"[{i}/{len(todo)}] {name} ({sid}) ... ", end="", flush=True)
-        # 后端 _confirm_fn 自带「三条 pm clear + 最长 8 分钟」重试循环，
+        # 后端 _confirm_fn 自带「亮屏后安静等 7 分钟 → 判没出 → 清数据翻下一张」，
         # 脚本层不再重复重试，否则单张卡会被拖到 18 分钟。
         res = run_one(sid, name)
         if res["ok"]:
