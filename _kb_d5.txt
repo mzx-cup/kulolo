@@ -1,0 +1,1 @@
+10-06 12:35:14.442 26521 26668 I TAB.KnowledgeAuthorizationIntent: intentMatch: checkTime=1790829065205 diffDays=5 match=false

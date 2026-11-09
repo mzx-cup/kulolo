@@ -8,6 +8,8 @@ export const STORAGE_KEYS = {
   recent: "ui.recent",
   collapsed: "ui.collapsedGroups",
   favorites: "ui.favorites",
+  dockPage: "ui.dockPage",
+  dismissObs: "ui.dismissObs",
 } as const;
 
 export function readJSON<T>(key: string, fallback: T): T {

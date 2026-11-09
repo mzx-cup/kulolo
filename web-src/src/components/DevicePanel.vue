@@ -63,9 +63,12 @@ export default defineComponent({
       <button
         id="btn-shot-dock"
         class="icon-btn sm"
+        :class="{ 'is-busy': state.shotBusy }"
         type="button"
         title="立即刷新一次截图"
         aria-label="立即刷新截图"
+        :aria-busy="state.shotBusy"
+        :disabled="state.shotBusy"
         @click.stop="manualShot"
       >
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">

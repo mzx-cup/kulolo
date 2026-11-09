@@ -1,0 +1,134 @@
+/* 底部 dock：「触发 / 消失」两个页面的切换器。
+ *
+ *  为什么要有 --dockbar-h：dock 是 fixed 贴底的，正文最后一块会被它盖住，
+ *  所以 .shell 底部留出等高的空白，toast 也上抬同样高度。 */
+
+:root {
+  --dockbar-h: 62px;
+}
+
+.dockbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 60; /* 高于 .scrim(55)，低于 toast(100)/resultfx(90) */
+  display: flex;
+  justify-content: center;
+  padding: 0 26px 12px;
+  pointer-events: none; /* 栏本身不挡点击，只有里面的按钮接事件 */
+}
+
+.dockbar-shell {
+  position: relative;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: 236px;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  backdrop-filter: var(--glass);
+  -webkit-backdrop-filter: var(--glass);
+  box-shadow: var(--glass-float), var(--shadow-card);
+}
+
+.dock-btn {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 10px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink-3);
+  font: 550 12.5px/1 var(--sans);
+  letter-spacing: .05em;
+  cursor: pointer;
+  transition: color .2s var(--ease-out), background .2s var(--ease-out),
+    border-color .2s var(--ease-out), translate .18s var(--ease-spring);
+}
+
+.dock-btn svg {
+  width: 14px;
+  height: 14px;
+  flex: none;
+}
+
+.dock-btn:hover {
+  color: var(--ink);
+  translate: 0 -1px;
+}
+
+.dock-btn:active {
+  translate: 0 0;
+  transition-duration: .1s;
+}
+
+.dock-btn.is-trigger.on {
+  color: var(--amber);
+}
+
+.dock-btn.is-dismiss.on {
+  color: var(--blue);
+}
+
+/* 滑动指示块：跟着当前页左右滑，切换动画的"锚点" */
+.dock-ink {
+  position: absolute;
+  top: 5px;
+  bottom: 5px;
+  left: 6px;
+  width: calc((100% - 16px) / 2); /* 两侧 padding 6+6 + 中缝 4 = 16 */
+  border: 1px solid color-mix(in srgb, var(--amber) 30%, transparent);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--amber) 12%, transparent);
+  transition: translate .32s var(--ease-out), border-color .32s var(--ease-out),
+    background .32s var(--ease-out);
+}
+
+.dock-ink.right {
+  translate: calc(100% + 4px) 0; /* 跨过中缝 gap */
+  border-color: color-mix(in srgb, var(--blue) 30%, transparent);
+  background: color-mix(in srgb, var(--blue) 12%, transparent);
+}
+
+/* ── 给正文与 toast 让位 ────────────────────────────────────── */
+.shell {
+  padding-bottom: calc(42px + var(--dockbar-h));
+}
+
+.toast {
+  bottom: calc(30px + var(--dockbar-h));
+}
+
+@media (max-width: 900px) {
+  :root {
+    --dockbar-h: 60px;
+  }
+
+  .dockbar {
+    padding: 0 14px 10px;
+  }
+
+  .dock-btn {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-btn {
+    transition: none;
+  }
+
+  .dock-btn:hover {
+    translate: 0 0;
+  }
+}

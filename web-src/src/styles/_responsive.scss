@@ -38,7 +38,7 @@
 
 @media (max-width: 900px) {
   /* 移动端/窄屏：分类变横向标签，中央轮播全宽 */
-  .shell {
+  .page-trigger {
     grid-template-columns: minmax(0, 1fr);
     gap: 14px;
   }
@@ -59,13 +59,20 @@
   .catnav-foot { display: none; }
   .device-body { flex-direction: column; }
   .stage { min-height: 380px; }
-  .stage-viewport { min-height: 320px; }
+  /* 别把 min-height 压到卡片之下：长结果文案换行时卡片会长高，
+     视口至少留出 pad 的余量，且用 padding 给上下留呼吸，避免居中的长卡片
+     顶部被 stage-head 盖住、底部贴住下方面板（就是「文字被遮一半」）。 */
+  .stage-viewport {
+    min-height: calc(var(--stage-card-h) + var(--stage-viewport-pad));
+    padding-block: 12px;
+  }
   .stage-card.is-side { display: none; } /* 窄屏只显示中央卡，省空间 */
 }
 
 @media (max-width: 620px) {
   :root { --topbar-h: 60px; }
   .shell { padding: 12px 12px 26px; gap: 12px; }
+  .page-trigger { gap: 12px; }
   .workspace { gap: 12px; }
   .stage-card.is-center { padding: 20px 17px 17px; }
   .stage-card-title { font-size: 20px; }

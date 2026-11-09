@@ -17,6 +17,7 @@ from __future__ import annotations
 import io
 import os
 import re
+import stat
 import tempfile
 import time
 from dataclasses import dataclass
@@ -420,13 +421,25 @@ class Device:
         # 有些机型有多个 display，adb exec-out 的 screencap 会把
         # "Multiple displays..." 警告混进字节流，adbutils 直接解码会失败。
         # 先落到设备文件再 pull，警告只走 stderr，不会污染 PNG。
-        remote = f"/sdcard/.dsh_screen_{os.getpid()}.png"
+        #
+        # 远端文件名带唯一后缀：手动刷新 / 自动刷新 / 场景识别可能并发截图，
+        # 共用一个远端文件会互相删掉对方正在 pull 的文件。
+        # 并且必须用 pull_file 而不是 pull：adbutils 的 pull() 先 stat 远端，
+        # 文件不存在时会误判成目录走 pull_dir()，对已存在的本地临时文件
+        # os.makedirs(exist_ok=False) → 报 [WinError 183]「当文件已存在时，
+        # 无法创建该文件」。pull_file 只走文件通道，从根上避开那个分支。
+        import uuid as _uuid
+
+        remote = f"/sdcard/.dsh_screen_{os.getpid()}_{_uuid.uuid4().hex[:8]}.png"
         local = ""
         try:
             self.shell(f"screencap -p {remote}")
+            info = self._call(lambda: self.d.sync.stat(remote))
+            if info.mode & stat.S_IFREG == 0:
+                raise UiError("截图失败：screencap 没有生成图片文件")
             fd, local = tempfile.mkstemp(suffix=".png")
             os.close(fd)
-            self._call(lambda: self.d.sync.pull(remote, local))
+            self._call(lambda: self.d.sync.pull_file(remote, local))
             with open(local, "rb") as fh:
                 data = fh.read()
             if not data.startswith(b"\x89PNG"):

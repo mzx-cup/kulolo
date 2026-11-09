@@ -33,6 +33,11 @@
 @use "_refine";
 @use "_liquid";
 @use "_responsive";
+// dock 必须排在 _layout / _toast / _responsive 之后：
+// 它要覆盖 .shell 的底部内边距与 .toast 的 bottom，给贴底栏让位。
+@use "_dock";
+// 消失检测页与 dock 页面切换动画；排在 _dock 之后，让 .dismiss-* 收尾覆盖
+@use "_dismiss";
 @use "_a11y";
 // 光标必须最后一个加载：它要覆盖前面各组件里写的 cursor 声明
 @use "_cursor";

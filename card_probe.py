@@ -69,6 +69,16 @@ SWIPE_SETTLE = 1.8
 # 滑动时长：太快会被当成 fling 甩过头，太慢会被当成拖拽，300ms 实测最稳
 SWIPE_MS = 300
 
+# AZ 应用抽屉的特征文案。小部件里没有卡片时，大幅上滑会穿透到 launcher
+# 打开应用抽屉（节点里出现「分类」），这时必须按 HOME 退回桌面首页，
+# 不能继续在抽屉里 dump —— 否则读到的全是应用名，被误当成轮播内容。
+DRAWER_HINTS = ("分类", "Categories", "All apps")
+
+
+def in_app_drawer(nodes: list[Node]) -> bool:
+    """控件树里是否出现了 AZ 应用抽屉的特征（说明已经滑离桌面首页）。"""
+    return any((n.text or "").strip() in DRAWER_HINTS for n in nodes)
+
 # 灵动岛：SystemUI 窗口名 + 收起手势坐标（屏幕 1208x2644 实测）
 ISLAND_WINDOW = "DynamicBarCard"
 ISLAND_SWIPE = (604, 360, 604, 90, 160)   # (x1, y1, x2, y2, ms)
@@ -310,31 +320,42 @@ def probe_home(dev: Device, keywords, *, swipes: int = MAX_SWIPES,
     seen: set[tuple[str, ...]] = set()
     index = 0
     for i in range(swipes + 1):
+        if in_app_drawer(nodes):
+            say("检测到已滑进 AZ 应用抽屉，按 HOME 退回桌面首页并结束本轮")
+            dev.key(3)
+            time.sleep(1.2)
+            return None
+
         texts = _plate_of(nodes, box)
         fingerprint = tuple(sorted(texts))
         hit = match_any(texts, keywords)
         if hit:
             raw, kw = hit
             say(f"第 {i} 屏命中「{raw}」（关键词 {kw}）")
-            # 抠图用：卡片本体的紧框（不是整个小部件区域）
             return CardHit(where="home", text=raw, keyword=kw,
                            index=index, texts=texts, shot=tag,
                            box=card_box(nodes, box))
-        if not texts:
-            say(f"第 {i} 屏在小部件区域里读不到任何文案（卡片可能还没渲染）")
-        else:
-            say(f"第 {i} 屏不是目标卡：{' / '.join(texts[:4])}")
 
-        # 转满一圈了：这一屏的内容之前见过
+        if not texts:
+            # 小部件里没渲染出卡片时**不能滑**：大幅上滑会穿透 launcher
+            # 打开 AZ 应用抽屉（实测空小部件 + 上滑 → 抽屉里的应用名被
+            # 当成轮播内容，一路「分类 / 相机 / Phone Master」全是假的）。
+            # 直接结束本轮，交给上层等待 / 清缓存重试。
+            say("第 0 屏小部件里没有卡片文案，不滑动（避免滑进应用抽屉），结束本轮"
+                if i == 0 else f"第 {i} 屏读不到卡片文案，结束本轮")
+            return None
+        say(f"第 {i} 屏不是目标卡：{' / '.join(texts[:4])}")
+
         if fingerprint in seen:
             say("轮播已经转了一圈，没有找到目标卡片")
             return None
         seen.add(fingerprint)
-
         if i == swipes:
             break
 
-        # 在区域中心竖滑一次翻到下一条。横滑会翻桌面分页，千万别用。
+        # 有卡片内容时，用实测能翻轮播的大幅竖滑（约 350px / 300ms）。
+        # 空小部件时这个手势会穿透 launcher 打开 AZ 抽屉，所以上面专门挡了
+        # 「没有文案就 return None」；这里再靠滑动后的 in_app_drawer 兜底。
         x1, y1, x2, y2 = box
         cx = (x1 + x2) // 2
         lo, hi = y1 + (y2 - y1) // 5, y2 - (y2 - y1) // 5
@@ -346,7 +367,11 @@ def probe_home(dev: Device, keywords, *, swipes: int = MAX_SWIPES,
         except UiError as exc:
             say(f"第 {i + 1} 屏控件树读取失败：{exc}")
             return None
-        # 区域位置理论上不变，但卡片尺寸可能略有差异，重算一次更保险
+        if in_app_drawer(nodes):
+            say("这一滑进了 AZ 应用抽屉，按 HOME 退回桌面首页并结束本轮")
+            dev.key(3)
+            time.sleep(1.2)
+            return None
         box = find_widget(nodes) or box
 
     say(f"翻了 {swipes} 屏仍未找到目标卡片")

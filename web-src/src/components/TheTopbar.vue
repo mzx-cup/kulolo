@@ -3,7 +3,6 @@ import { defineComponent, computed, ref, onMounted, onBeforeUnmount } from "vue"
 import { state } from "@/stores/core";
 import { recheckDevice, launchScrcpy, deviceLabel } from "@/actions/device";
 import { toggleTheme, THEMES } from "@/actions/theme";
-import { manualShot } from "@/actions/shot";
 import { pickDevice } from "@/actions/device";
 
 export default defineComponent({
@@ -31,7 +30,6 @@ export default defineComponent({
       recheckDevice,
       launchScrcpy,
       toggleTheme,
-      manualShot,
       pickDevice,
       deviceLabel,
       THEMES,
@@ -125,13 +123,6 @@ export default defineComponent({
           <path d="M4 7h16M4 12h16M4 17h10" />
         </svg>
         <span class="txt">场景目录</span>
-      </button>
-      <button id="btn-shot" class="btn ghost" type="button" title="立即刷新一次手机截图" @click="manualShot">
-        <svg class="ico-refresh" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <path d="M20.5 11a8.5 8.5 0 1 0-2.4 6" />
-          <path d="M20.5 4.5V11h-6.5" />
-        </svg>
-        <span class="txt">刷新截图</span>
       </button>
       <button
         id="btn-scrcpy"

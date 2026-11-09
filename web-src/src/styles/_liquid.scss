@@ -66,6 +66,8 @@
 .catalog,
 .stage-card,
 .recentbar-card,
+.dock-btn,
+.dismiss-obs-btn,
 .btn,
 .icon-btn,
 .vbtn,
@@ -88,6 +90,8 @@
 .catalog::after,
 .stage-card::after,
 .recentbar-card::after,
+.dock-btn::after,
+.dismiss-obs-btn::after,
 .btn::after,
 .icon-btn::after,
 .vbtn::after,
@@ -109,6 +113,8 @@
 .catalog:hover::after,
 .stage-card:hover::after,
 .recentbar-card:hover::after,
+.dock-btn:hover::after,
+.dismiss-obs-btn:hover::after,
 .btn:hover::after,
 .icon-btn:hover::after,
 .vbtn:hover::after,
@@ -441,8 +447,12 @@
     0 6px 16px -10px rgba(0, 0, 0, .6);
 }
 
-/* 拖拽时关掉 backdrop-filter（每帧重采样是卡顿元凶） */
-.stage-viewport.dragging .stage-card.is-deck {
+/* 拖拽/落位动画期间关掉 backdrop-filter（每帧重采样是卡顿元凶）。
+   ⚠ 必须连 settling 一起关：松手后卡片还要滑 .42s、长高 .54s，
+   这期间若把毛玻璃重新打开，三张卡每帧重采样一次 —— 表现就是
+   「松手/点击后动画一顿一顿的」。等落位结束再恢复。 */
+.stage-viewport.dragging .stage-card.is-deck,
+.stage-viewport.settling .stage-card.is-deck {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
   background-color: color-mix(in srgb, var(--panel-solid) 92%, transparent);

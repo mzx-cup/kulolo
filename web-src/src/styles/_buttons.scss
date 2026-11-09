@@ -49,7 +49,15 @@
   border-color: var(--rust-deep);
   box-shadow: 0 14px 28px -18px var(--rust);
 }
-.btn.is-busy svg { animation: spin .8s linear infinite; opacity: .6; }
+.btn.is-busy svg {
+  animation: spin .8s linear infinite;
+  /* SVG 根元素的 CSS transform 默认按 view-box(24×24) 解析旋转原点，
+     会让旋转中心偏离图标几何中心，转圈时图标被甩到右上角并被按钮裁切。
+     改按元素自身边框盒 + 中心为轴，图标即可原地自转。 */
+  transform-box: border-box;
+  transform-origin: center;
+  opacity: .6;
+}
 .btn.is-busy { pointer-events: none; opacity: .7; }
 
 /* 主提交按钮：更饱满的光泽与按压感 */
@@ -158,8 +166,15 @@
 .icon-btn:active { transform: translateY(1px) scale(.95); }
 .icon-btn.sm { width: 30px; height: 30px; border-radius: 8px; }
 .icon-btn.sm svg { width: 15px; height: 15px; }
-.icon-btn.is-busy svg { animation: spin .8s linear infinite; opacity: .6; }
-.icon-btn.is-busy { pointer-events: none; opacity: .7; }
+.icon-btn.is-busy svg {
+  animation: spin .8s linear infinite;
+  /* 与 .btn.is-busy svg 同理：SVG 根元素的 transform 默认按 view-box
+     解析旋转原点，会让加载图标绕偏离自身中心的点公转并被按钮裁切。 */
+  transform-box: border-box;
+  transform-origin: center;
+  opacity: .95;
+}
+.icon-btn.is-busy:disabled { pointer-events: none; opacity: 1; }
 
 .catalog-toggle { display: none; }
 .close-catalog { display: none; }

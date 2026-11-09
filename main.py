@@ -181,7 +181,10 @@ SCENARIOS = [
                 "息屏 60 秒后第一次解锁，回桌面再等 1 分钟，二次息屏亮屏后"
                 "验证锁屏上的纪念日提醒卡片。",
         "module": scenario_birthday,
-        "unsupported_note": "NOTE 系列手机不支持",
+        # 注意：这里**不写** unsupported_note。纪念日策划案卡在 NOTE 系列上
+        # 确实不出卡，但同一份代码换到非 NOTE 机型应该能正常跑，所以改由
+        # 前端按 /api/status 的 modelInfo.is_note 实时置灰（见 actions/oobe.ts）。
+        # 写死 unsupported_note 会把所有机型都拦掉。
         "params": [
             {"key": "offset_days", "type": "number", "label": "纪念日 = 今天 +",
              "value": 4, "min": 1, "max": 27, "unit": "天"},
@@ -264,10 +267,9 @@ SCENARIOS = [
         "id": "show_day",
         "title": "追星提醒卡片",
         "tag": "show day · concert",
-        "desc": "把手机时间调到日历里设置的观演日（Show Day）当天，息屏静候约 1 分钟，"
-                "再亮屏上滑解锁；解锁完成后再补一次「马上息屏、马上亮屏、上滑解锁」，"
-                "查看锁屏上的追星提醒卡片。日历里没有观演日事件时"
-                "会自动在「今天+1」新建一个（重要日里勾选 Show Day）。",
+        "desc": "把手机时间调到日历里设置的观演日（Show Day）当天，息屏静候约 1 分钟"
+                "再亮屏上滑解锁，然后补一次「马上息屏、马上亮屏、上滑解锁」，"
+                "查看锁屏上的追星提醒卡片。日历里没有该事件时会自动在「今天+1」新建。",
         "module": scenario_greeting,
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 10, "m": 30},
@@ -306,10 +308,9 @@ SCENARIOS = [
         "id": "wake_alarm_delay",
         "title": "起床闹钟延迟卡片",
         "tag": "wake alarm · delay",
-        "desc": "刷机后先在 22:00 保持 10 分钟亮屏使用数据；设置并启用每天 04:01 的闹钟；"
-                "把系统时间调到周三 23:39，息屏等待 60 秒到 23:40 再亮屏，"
-                "检查锁屏/通知栏是否出现「起床闹钟延迟」卡片。"
-                "首次刷机预热保持 10 分钟，日常已有使用数据可设为 0。",
+        "desc": "刷机后先在 22:00 保持 10 分钟亮屏使用数据（日常已有数据可设 0）；"
+                "设每天 04:01 的闹钟，把系统时间调到周三 23:39，息屏 60 秒到 23:40 "
+                "再亮屏，看锁屏/通知栏是否出现「起床闹钟延迟」卡片。",
         "module": scenario_alarm,
         "group": "时间管理",
         "icon": "clock",
@@ -333,9 +334,9 @@ SCENARIOS = [
         "id": "alarm_early_prompt",
         "title": "提前打开提示卡片",
         "tag": "alarm · early prompt",
-        "desc": "先设置每天 04:05 闹钟并关闭（闹钟仍在列表里，但处于关闭状态）；"
-                "系统时间调到周日 19:09，先息屏等待 60 秒，再亮屏等待 60 秒；"
-                "之后桌面「智慧建议」应出现「明天是工作日 / 要开启明天的闹钟吗？」。",
+        "desc": "先设每天 04:05 的闹钟再关掉（闹钟仍在列表里、处于关闭状态）；"
+                "系统时间调到周日 19:09，息屏等 60 秒、再亮屏等 60 秒，"
+                "桌面「智慧建议」应出现「要开启明天的闹钟吗？」卡片。",
         "module": scenario_alarm_prompt,
         "group": "时间管理",
         "icon": "clock",
@@ -402,8 +403,8 @@ SCENARIOS = [
         "id": "one_tap_food",
         "title": "一键点餐卡片",
         "tag": "life · food",
-        "desc": "foodpanda 一键点餐卡片，仅午餐 10:45~13:00、晚餐 17:00~19:00。"
-                "设置系统时间在窗口内后发送 AppSuggestEvent"
+        "desc": "foodpanda 一键点餐卡片，仅午餐 10:45~13:00、晚餐 17:00~19:00 出卡。"
+                "把系统时间设到窗口内，再发 AppSuggestEvent"
                 "（app_list=com.global.foodpanda.android）。",
         "module": scenario_app_suggest,
         "group": "生活服务卡片",
@@ -426,12 +427,10 @@ SCENARIOS = [
         "id": "boomplay_recent_music",
         "title": "最近音乐卡片",
         "tag": "boomplay · music",
-        "desc": "进入 Boomplay 随机播放一首海外音乐（约 10 秒），"
-                "mock 发 AppSuggestEvent（app_list=com.afmobi.boomplayer）触发"
-                "最近播放音乐卡片；再打开系统蓝牙开关、mock 发 HEADSET_PLUG"
-                "（state=1,type=1）连接蓝牙耳机，卡片即可出现。"
-                "再次触发时先把系统时间拨到 2 小时后或隔天，以满足频率控制"
-                "（每天最多 2 次、触发后 2 小时才可再次触发）。",
+        "desc": "Boomplay 随机播放一首海外音乐约 10 秒，mock 发 AppSuggestEvent"
+                "（app_list=com.afmobi.boomplayer）；再打开系统蓝牙、"
+                "mock 发 HEADSET_PLUG（state=1,type=1）连上耳机，卡片即出现。"
+                "重触发前先把时间拨到 2 小时后或隔天（每天上限 2 次、冷却 2 小时）。",
         "module": scenario_boomplay_music,
         "group": "BoomPlay",
         "icon": "music",
@@ -462,10 +461,9 @@ SCENARIOS = [
         "id": "satellite_call",
         "title": "卫星通话卡片",
         "tag": "tips · satellite",
-        "desc": "先检查 ro.tr_telephony.satellite.support 是否为 1；"
-                "清理原子化模拟器 com.transsion.atomicbrain，断开网络再重连；"
-                "把日期推到 3 天后（>72h）、时间设 09:59，等到 10:00，"
-                "桌面/锁屏出现卫星通话玩机技巧卡片。",
+        "desc": "先确认 ro.tr_telephony.satellite.support=1；清掉原子化模拟器 "
+                "com.transsion.atomicbrain，断网再重连；日期推到 3 天后（>72h）、"
+                "时间设 09:59 并等到 10:00，桌面/锁屏出现卫星通话玩机技巧卡片。",
         "module": scenario_satellite,
         "group": "玩机技巧卡片",
         "icon": "satellite",
@@ -529,10 +527,9 @@ SCENARIOS = [
         "id": "cross_region",
         "title": "跨国 / 跨城卡片",
         "tag": "location · cross region",
-        "desc": "两种触发方式自选。①定位切换法：定位改到上海亮屏 20 分钟，"
-                "再切到新德里亮屏 20 分钟，上滑回桌面出卡；"
-                "②Mock 事件法：直接发 LocationEvent"
-                "（country_code=IN，city_code 留空 = 跨国，1148 = 德里，1057 = 新德里）。",
+        "desc": "两种方式自选。①定位切换：定位改到上海亮屏 20 分钟，再切到新德里"
+                "亮屏 20 分钟，上滑回桌面出卡；②Mock：直接发 LocationEvent"
+                "（country_code=IN，city_code 留空=跨国，1148=德里，1057=新德里）。",
         "module": scenario_cross_region,
         "group": "位置感知卡片",
         "icon": "globe",
@@ -562,10 +559,10 @@ SCENARIOS = [
         "id": "power_outage_warning",
         "title": "停电预警卡片",
         "tag": "kplc · outage · warning",
-        "desc": "需要 root 版设备（向 TceService 注入常住区受 START_TCE_SERVICE 保护）。"
-                "全程联网，时区改内罗毕、国家改 KE，注入 5 个内罗毕夜间证据把常住区"
-                "变成 KE-30/Nairobi；再清 atomiccore + atomicbrain，时间调到目标日 11:49，"
-                "息屏 60 秒后亮屏上滑解锁，约 25 秒后桌面出现停电预警卡片。",
+        "desc": "需要 root 版设备（要向受 START_TCE_SERVICE 保护的 TceService 注入数据）。"
+                "联网，时区改内罗毕、国家改 KE，注入 5 条内罗毕夜间证据把常住区变成 "
+                "KE-30/Nairobi；清 atomiccore + atomicbrain，时间调到目标日 11:49，"
+                "息屏 60 秒后亮屏解锁，约 25 秒后桌面出现停电预警卡片。",
         "module": scenario_power_outage,
         "group": "停电建议",
         "icon": "bolt",
@@ -601,11 +598,10 @@ SCENARIOS = [
         "id": "power_outage_saving",
         "title": "停电省电提醒卡片",
         "tag": "kplc · outage · saving",
-        "desc": "需要 root 版设备。全程联网，时区改内罗毕、国家改 KE，装好 TransAtomicBrain，"
-                "时间先调到 09-18 12:29（debug 页的 KPLC 日期框默认取当天，所以必须先设时间），"
-                "清 atomiccore + atomicbrain，滚到调试页底部的 KPLC 区，把电量 mock 成 30% 且放电中，"
-                "点「Mock 电量=30」再点「查询 KPLC API」确认 MATASIA 当天有停电公告，"
-                "最后把时间拨到 12:30、息屏 10 秒再亮屏解锁，桌面出现省电建议卡片。",
+        "desc": "需要 root 版设备。联网，时区改内罗毕、国家改 KE，装 TransAtomicBrain；"
+                "时间先调到 09-18 12:29（KPLC 日期框取当天），清 atomiccore + atomicbrain，"
+                "在调试页 KPLC 区把电量 mock 成 30% 放电中，点「Mock 电量=30」"
+                "再点「查询 KPLC API」确认有公告，最后拨到 12:30、息屏 10 秒解锁出卡。",
         "module": scenario_power_saving,
         "group": "停电建议",
         "icon": "bolt",
@@ -643,10 +639,10 @@ SCENARIOS = [
         "id": "power_outage_restore",
         "title": "停电恢复卡片",
         "tag": "kplc · outage · restoration",
-        "desc": "需要 root 版设备。流程与省电卡相同，但不需要 mock 电量——反而要先 "
+        "desc": "需要 root 版设备。流程同省电卡，但不 mock 电量 —— 反而要先 "
                 "「dumpsys battery reset」清掉上一轮残留的电池 mock，否则省电卡会抢走同一个 "
-                "conflict_group 把恢复卡 DROP 掉。查完 KPLC API 确认 MATASIA 当天有停电公告后，"
-                "把时间拨到结束前 2 小时的 16:30，息屏 10 秒再亮屏解锁，桌面出现电力恢复时间卡片。",
+                "conflict_group 把恢复卡挤掉。查 KPLC API 确认当天有停电公告后，"
+                "把时间拨到结束前 2 小时的 16:30，息屏 10 秒解锁，桌面出现电力恢复时间卡片。",
         "module": scenario_power_restore,
         "group": "停电建议",
         "icon": "bolt",
@@ -682,13 +678,11 @@ SCENARIOS = [
         "id": "smart_traffic",
         "title": "智能路况卡片",
         "tag": "smart · traffic · weather",
-        "desc": "对应 atomicbrain 规则 10058（需 08:00~11:59 的末闹 dismiss 时刻 + 当天"
-                "异常天气进记忆 + 每天 1 次额度）。两种触发方式：①Mock——装 "
-                "TransAtomicBrain_full_signed(5).apk，打开调试页滑到底部，先点「清理智能"
-                "路况当日计数」再点「MOCK 智能路况卡」，回桌面即出卡（十几秒）；"
-                "②真实——打开天气 App 并刷新、系统时间调到当天 12 点前、把指定异常天气"
-                "写进天气记忆，再设「当前时间下一分钟」的闹钟，息屏等它响，关掉闹钟后"
-                "解锁回桌面出卡（全程不打开 test brain；万一没出卡会自动清一次当日计数再重试）。",
+        "desc": "对应 atomicbrain 规则 10058（需 08:00~11:59 的末闹 dismiss 时刻、"
+                "当天异常天气进记忆、每天 1 次额度）。①Mock：调试页滑到底部先点「清理智能"
+                "路况当日计数」再点「MOCK 智能路况卡」，回桌面十几秒出卡。②真实：刷新天气 "
+                "App、时间调到 12 点前、写异常天气进记忆，再设「下一分钟」闹钟，"
+                "息屏等响、关掉后解锁出卡。",
         "module": scenario_smart_traffic,
         "group": "路况天气",
         "icon": "road",
@@ -728,10 +722,9 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 新年",
         "tag": "festival · New Year",
         "desc": "把系统日期调到新年当天（2026-01-01）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
-        "card_keywords": ("新年", "元旦", "New Year", "New Year's"),
+        "card_keywords": ("新年", "元旦", "新年快乐", "元旦快乐", "New Year", "Happy New Year"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -748,10 +741,9 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 端午节",
         "tag": "festival · Dragon Boat",
         "desc": "把系统日期调到端午节当天（2026-06-19）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
-        "card_keywords": ("端午", "龙舟", "Dragon Boat"),
+        "card_keywords": ("端午", "龙舟", "端午安康", "Dragon Boat"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -768,10 +760,9 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 中秋节",
         "tag": "festival · Mid-Autumn",
         "desc": "把系统日期调到中秋节当天（2026-09-25）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
-        "card_keywords": ("中秋", "月饼", "Mid-Autumn"),
+        "card_keywords": ("中秋", "月饼", "团圆", "月圆", "Mid-Autumn", "Moon Festival"),
         "params": [
             {"key": "hour", "type": "time", "label": "系统时间", "h": 9, "m": 30},
             {"key": "wait_sec", "type": "number", "label": "常亮等待",
@@ -788,8 +779,7 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 国庆节",
         "tag": "festival · National Day",
         "desc": "把系统日期调到国庆节当天（2026-10-01）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
         "card_keywords": ("国庆", "National Day"),
         "params": [
@@ -808,8 +798,7 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 冬至",
         "tag": "festival · Winter Solstice",
         "desc": "把系统日期调到冬至当天（2026-12-21）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
         "card_keywords": ("冬至", "Winter Solstice"),
         "params": [
@@ -828,8 +817,7 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 圣诞夜",
         "tag": "festival · Christmas Eve",
         "desc": "把系统日期调到圣诞夜当天（2026-12-24）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "圣诞夜不依赖中国 OOBE，触发前不询问国家。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
         "card_keywords": ("圣诞", "平安夜", "Christmas", "Christmas Eve"),
         "params": [
@@ -848,8 +836,7 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 圣诞节",
         "tag": "festival · Christmas",
         "desc": "把系统日期调到圣诞节当天（2026-12-25）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "圣诞节不依赖中国 OOBE，触发前不询问国家。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
         "card_keywords": ("圣诞", "Christmas"),
         "params": [
@@ -868,8 +855,7 @@ SCENARIOS = [
         "title": "节日祝福卡片 · 春节",
         "tag": "festival · Spring Festival",
         "desc": "把系统日期调到春节当天（2027-02-06，明年）、时间调到 9:00~22:00"
-                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。"
-                "触发前先询问 OOBE 国家是否已调到中国（否则中止）。",
+                "之间，回桌面常亮等待 1 分钟，锁屏后上滑解锁，检查锁屏节日祝福卡片。",
         "module": scenario_festival,
         "card_keywords": ("春节", "春节快乐", "Spring Festival", "Chinese New Year"),
         "params": [
@@ -920,6 +906,16 @@ _ask_state = {"pending": False, "ok": None, "prompt": ""}   # 触发前询问（
 _dev: Device | None = None
 _selected: str | None = None   # 用户在多个设备里指定的首选串号；失效后自动回落
 _model_cache: dict[str, str] = {}   # serial -> ro.product.model，读过就记住
+_country_cache: tuple[float, dict] | None = None   # (时间戳, 国家检测结果)，10 秒缓存
+_root_cache: tuple[float, dict] | None = None      # (时间戳, root 检测结果)，10 秒缓存
+_model_info_cache: tuple[float, dict] | None = None   # (时间戳, 型号检测结果)，30 秒缓存
+
+# NOTE 系列机型：纪念日策划案卡片（anniversary）在这些机型上实测不出卡
+# （轮播翻满一圈也找不到），前端据此把按钮置灰。
+# 遇到新机型往这里加一行即可 —— 用白名单而不是正则，避免误伤其他机型。
+NOTE_MODELS = (
+    "X6766", "X6765", "X6878", "X6886", "X6833", "X6836",
+)
 _last_adb_chase = 0.0   # 最近一次 adb 自愈尝试的时间戳（节流用）
 # 启动时解析出的 adb 绝对路径。打包后 PATH 里没有 adb，只有资源目录里那份；
 # 源码直跑时通常解析到系统安装的 adb。解析不到就退回裸 "adb" 交给 PATH。
@@ -970,6 +966,42 @@ def _find_scrcpy() -> str | None:
     return _scrcpy  # type: ignore[return-value]
 
 
+def _device_country(dev) -> dict:
+    """读设备 OOBE 国家，判断是否为中国。结果给前端做「一键运行」置灰依据。
+
+    为什么需要它：节日祝福卡片（`festival_*`）依赖 OOBE 国家=中国才会触发，
+    以前是场景跑到一半弹一个「是否已在 OOBE 里把国家调整到中国？」让人点。
+    现在改成开跑前就自动检测，前端把按钮置灰并写明原因，用户点不了也就
+    不会白等两分钟再失败。
+
+    判据（实测 X6766）：
+      * `persist.tr_oobe.country`  —— 主判据，XOS 在 OOBE 里写入的就是它；
+      * `persist.sys.locale` 的 `-CN` 后缀 —— 兜底（部分机型只改语言）。
+    两个都读不到时返回 unknown，前端**不**据此置灰（宁可放行也别误拦）。
+
+    每次 /api/status 都调，但 adb 往返一次约 80ms，且带 10 秒缓存，
+    对 3~5 秒一次的状态轮询没有压力。
+    """
+    global _country_cache
+    now = time.time()
+    if _country_cache and now - _country_cache[0] < 10:
+        return _country_cache[1]
+    out = {"country": "", "is_cn": None, "source": ""}
+    try:
+        raw = (dev.shell("getprop persist.tr_oobe.country") or "").strip()
+        if raw:
+            out.update(country=raw, is_cn=(raw.upper() == "CN"), source="oobe")
+        else:
+            loc = (dev.shell("getprop persist.sys.locale") or "").strip()
+            out["country"] = loc
+            if loc:
+                out.update(is_cn=loc.upper().endswith("-CN"), source="locale")
+    except Exception:  # noqa: BLE001 —— 读不到就当未知，前端不拦
+        pass
+    _country_cache = (now, out)
+    return out
+
+
 def _device_model(serial: str) -> str:
     """机型名（如 Infinix X6765）。串号是内部编号，界面上给用户看机型更直观。
 
@@ -1010,6 +1042,79 @@ def _find_scrcpy_async() -> str | None:
 
     threading.Thread(target=_work, name="find-scrcpy", daemon=True).start()
     return None
+
+
+def _device_model_info(dev) -> dict:
+    """读设备型号并判断是否 NOTE 系列（纪念日策划案卡在 NOTE 系列上不出卡）。
+
+    为什么不能只看 `ro.product.model`：实测这台机器它返回的是 `XYZ`
+    （厂商占位名），真正的型号藏在别的属性里：
+        ro.product.device      = Infinix-X6766
+        ro.product.name        = X6766-OP
+        ro.build.product       = Infinix-X6766
+        ro.product.odm.model   = Infinix X6766
+    所以把几个字段拼起来一起匹配型号编号。
+
+    NOTE 系列判据：型号串里出现 `X6766` / `X6765` / `X6878` 这类 **X+4 位数字**，
+    且属于已知 NOTE 型号集。用「已知集合」而不是「X\\d{4} 正则」是故意的：
+    以后遇到新的 NOTE 型号，往 NOTE_MODELS 里加一行就行，不会误伤别的机型。
+    """
+    global _model_info_cache
+    now = time.time()
+    if _model_info_cache and now - _model_info_cache[0] < 30:
+        return _model_info_cache[1]
+
+    props = {}
+    for k in ("ro.product.model", "ro.product.device", "ro.product.name",
+              "ro.build.product", "ro.product.odm.model", "ro.product.marketname"):
+        try:
+            props[k] = (dev.shell(f"getprop {k}") or "").strip()
+        except Exception:  # noqa: BLE001
+            props[k] = ""
+    blob = " ".join(v for v in props.values() if v).upper()
+
+    hit = next((m for m in NOTE_MODELS if m.upper() in blob), "")
+    out = {
+        "model": props.get("ro.product.model", ""),
+        "device": props.get("ro.product.name") or props.get("ro.product.device", ""),
+        "props": props,
+        "is_note": bool(hit),
+        "note_match": hit,
+    }
+    _model_info_cache = (now, out)
+    return out
+
+
+def _device_root(dev) -> dict:
+    """检测设备是否 root（停电建议三张卡要求 root 版设备）。
+
+    为什么需要它：`power_outage_warning` / `power_outage_saving` /
+    `power_outage_restore` 要向 `com.transsion.tranradionet/.tce.TceService`
+    发 action，该服务受 `signature|privileged` 的 `START_TCE_SERVICE` 保护，
+    普通 `shell` 用户会被拒。以前是场景跑到一半才在 `_check_root()` 里抛错，
+    白等一两分钟；现在开跑前就检测，前端把按钮置灰并小字提示。
+
+    判据：`adb shell id` 输出里有 `uid=0`。实测 X6766 普通机是
+    `uid=2000(shell)`；userdebug/eng 版或执行过 `adb root` 的才是 `uid=0(root)`。
+
+    10 秒缓存，避免每 3~5 秒的状态轮询都跑一次 adb。
+    """
+    global _root_cache
+    now = time.time()
+    if _root_cache and now - _root_cache[0] < 10:
+        return _root_cache[1]
+    out = {"is_root": None, "uid": ""}
+    try:
+        uid = (dev.shell("id") or "").strip()
+        out["uid"] = uid[:80]
+        if uid:
+            # 只认开头的 uid=0（避免把 gid=0 之类误判成 root）
+            head = uid.split(" ", 1)[0]
+            out["is_root"] = head.startswith("uid=0")
+    except Exception:  # noqa: BLE001 —— 读不到就当未知，前端不拦
+        pass
+    _root_cache = (now, out)
+    return out
 
 
 def _adb_devs() -> list[tuple[str, str]]:
@@ -1189,7 +1294,13 @@ def _confirm_fn(r) -> bool:
       和以前「不调用就是通过」的行为一致，不能因为识别不了就判失败。
     * **自动识别失败也不弄死整轮流程**：返回 False 只会让前端显示「未触发」，
       场景本身的步骤都跑完了。真正的报错仍然走异常。
-    * 可被暂停/结束打断：识别期间穿插 r.check()，点了「结束」能立刻停。
+    * **找不到就清缓存重来**：每轮识别前若上一轮没命中，执行三条
+      `pm clear`（launcher3 / atomicbrain / atomiccore，见
+      `Device.clear_atomic_services()`），和网页点「没出卡重试」完全同一套
+      命令；这条规则对**所有**卡片生效。节日卡片（festival_*）因为要联网
+      拉节日数据、生成最慢，等待预算放宽到 8 分钟；其它卡片仍是 90 秒
+      快速失败，不跟着干等。
+    * 可被暂停/结束打断：识别期间穿插检查，点了「结束」能立刻停。
     """
     sid = _current_scenario_id()
     sce = SCENARIOS_BY_ID.get(sid) or {}
@@ -1219,23 +1330,59 @@ def _confirm_fn(r) -> bool:
     if lock_texts:
         log(f"锁屏原子卡片文案（不作为智慧建议图片）：{' / '.join(lock_texts)}")
 
-    # 轮播是「按时间轮换」的，第一次可能刚好没轮到 —— 给两轮机会。
-    for attempt in range(1, 3):
+    # ── 识别主循环：找不到就清缓存重来 ──────────────────────────────
+    #
+    # 卡片没出来不一定是真的出不来，更多时候是：
+    #   * 小部件还没渲染完（改完系统时间 / pm clear 之后要几十秒）；
+    #   * 智慧建议轮播被旧状态卡住（launcher 的 SharedPreferences 里记着
+    #     上一轮被划走的卡）；
+    #   * 原子服务的节日/规则数据拉取失败后退避（实测 backoff 最长 1 小时，
+    #     但 pm clear 会让它重新初始化）。
+    #
+    # 按用户定的策略，两条规则分开：
+    #   * **三条 pm clear**（launcher3 / atomicbrain / atomiccore，和网页点
+    #     「没出卡重试」完全同一套命令）加进**所有**卡片的重试链路；
+    #   * **最长 8 分钟**的等待预算只给**节日卡片**（festival_*）—— 节日卡
+    #     依赖联网拉节日数据，生成最慢；其它卡片保持 90 秒快速失败，别让
+    #     普通卡片也跟着干等 8 分钟。
+    is_festival = sid.startswith("festival_")
+    DEADLINE_SEC = 8 * 60 if is_festival else 90
+    ROUND_GAP = 12 if is_festival else 6   # 每轮之间的等待（清缓存后给重建时间）
+    started = time.time()
+    round_no = 0
+
+    while hit is None and time.time() - started < DEADLINE_SEC:
         if _ctrl["stop"]:
             raise UiError("用户结束场景")
         if _ctrl["paused"]:
             return True      # 暂停中不折腾设备，交给用户继续时再跑
+        round_no += 1
+        left = int(DEADLINE_SEC - (time.time() - started))
+        log(f"第 {round_no} 轮识别（剩余约 {left}s）…")
         hit = card_probe.find_card_anywhere(dev, keywords, log=log)
         if hit:
             break
-        if attempt < 2:
-            log(f"第 {attempt} 轮没找到，歇 6 秒再翻一轮...")
-            time.sleep(6)
+
+        # 没找到：清缓存让卡片重新生成，再等一轮
+        if time.time() - started >= DEADLINE_SEC:
+            break
+        log("本轮没找到，执行三条 pm clear（launcher3 / atomicbrain / atomiccore）后重试")
+        try:
+            dev.clear_atomic_services()
+        except Exception as exc:  # noqa: BLE001 —— 清缓存失败也要继续等
+            log(f"清缓存失败（继续重试）：{exc}")
+        # 清完 launcher 后桌面要重建，期间别急着 dump
+        for _ in range(ROUND_GAP // 3):
+            if _ctrl["stop"]:
+                raise UiError("用户结束场景")
+            time.sleep(3)
 
     if not hit:
-        log(f"翻完轮播仍未找到智慧建议卡片（关键词 {tuple(keywords)}）")
+        log(f"等了 {int(time.time() - started)}s（{round_no} 轮）仍未找到智慧建议卡片"
+            f"（关键词 {tuple(keywords)}）")
         _emit({"t": "card", "no": r._no, "ok": False, "scenario": sid})
         return False
+    log(f"第 {round_no} 轮命中，共用时 {int(time.time() - started)}s")
 
     # 命中：截图 → 抠成透明圆角卡片 → 存进卡片库。
     # 截图失败不影响判定（控件树里的文案已经是足够的证据）。
@@ -1552,6 +1699,12 @@ class Handler(BaseHTTPRequestHandler):
                 info["android"] = d.android_version()
             except Exception:
                 info["android"] = ""
+            # OOBE 国家：前端据此把「一键运行」置灰（节日卡片要求中国）
+            info["country"] = _device_country(d)
+            # root 检测：停电建议三张卡要求 root 版设备
+            info["root"] = _device_root(d)
+            # 型号检测：NOTE 系列上纪念日策划案卡不出卡
+            info["modelInfo"] = _device_model_info(d)
         except Exception as exc:
             info["error"] = str(exc)
         self._json(info)

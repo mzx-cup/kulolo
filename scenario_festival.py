@@ -151,16 +151,21 @@ def run(dev: Device | None = None, emit=None, *, hour: int = 9, minute: int = 30
     fests = ([FESTIVALS_BY_ID[festival]] if festival in FESTIVALS_BY_ID
              else FESTIVALS)
 
-    # 只有中国节日需要 OOBE 中国；圣诞节/圣诞夜跳过询问。
+    # 以前这里会弹「是否已在 OOBE 里把国家调整到中国？」让人点。
+    # 现在改成**开跑前自动检测**（/api/status 的 country 字段），前端在国家
+    # 不是中国时直接把「一键运行」置灰并写明原因，用户根本点不进来；
+    # 所以这里不再询问，只把检测结果记进日志留痕。
+    # 圣诞节/圣诞夜本来就不依赖中国 OOBE，一样只记日志。
     needs_oobe = any(f["id"] not in NO_OOBE_FESTIVALS for f in fests)
     if needs_oobe:
-        r.step("询问用户：OOBE 国家是否已调整到中国")
-        if not r.ask("是否已在 OOBE 里把国家调整到中国？"
-                     "只有中国节日才需要调整到中国，才能正常触发节日卡片。"):
-            raise UiError("用户确认未把国家调到中国，已中止触发。请先在 OOBE 中把国家调整到中国后重试")
-        r.ok("国家为中国，继续触发")
+        try:
+            country = (dev.shell("getprop persist.tr_oobe.country") or "").strip()
+        except Exception:  # noqa: BLE001
+            country = ""
+        r.log(f"OOBE 国家：{country or '未知'}（中国节日要求 CN；"
+              f"不是 CN 时前端会置灰「一键运行」）")
     else:
-        r.log("圣诞节/圣诞夜不依赖中国 OOBE，跳过国家询问")
+        r.log("圣诞节/圣诞夜不依赖中国 OOBE，跳过国家检查")
 
     for f in fests:
         res = _run_one_festival(dev, r, f, hour, minute, wait_sec, unlock_retries)

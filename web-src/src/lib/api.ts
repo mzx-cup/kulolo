@@ -56,8 +56,10 @@ export const api = {
 
   scrcpy: () => postJSON<{ error?: string }>("/api/scrcpy"),
 
-  /** 截图返回的是二进制，这里单独给一个不解析 JSON 的入口 */
-  screenshot: (): Promise<Response> => fetch("/api/screenshot"),
+  /** 截图返回的是二进制，这里单独给一个不解析 JSON 的入口；
+   *  支持 AbortSignal，手动刷新超时就取消，避免按钮一直转圈。 */
+  screenshot: (signal?: AbortSignal): Promise<Response> =>
+    fetch("/api/screenshot", signal ? { signal } : undefined),
 
   /** 卡片库索引：scenario id → 实拍图记录。
    *  图本身是 /api/cards/<id>.png，见 lib/cardArt.ts 的 shotUrl()。 */

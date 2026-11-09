@@ -3,6 +3,7 @@ import { computed, defineComponent } from "vue";
 import { state } from "@/stores/core";
 import type { ScenarioParam, ScenarioSpec } from "@/types/api";
 import { collectParams, resetParams, setParam, specValue } from "@/actions/params";
+import { oobeBlockReason, oobeBlockLabel } from "@/actions/oobe";
 import { runScenario, pauseOrResume } from "@/actions/run";
 import { resetRunUi } from "@/actions/session";
 import { toast } from "@/actions/toast";
@@ -42,10 +43,20 @@ export default defineComponent({
 
     /** 机型不支持的场景：按钮禁用，点一下给个说明，别让人白等两分钟 */
     const unsupported = computed(() => Boolean(sel.value?.unsupported_note));
+    /** 设备前置条件门禁：节日卡要 OOBE=中国、停电卡要 root */
+    const oobeBlock = computed(() => oobeBlockReason(sel.value));
+    /** 按钮上的短文案（完整原因走 title / toast） */
+    const blockedText = computed(() =>
+      unsupported.value ? "此机型不支持" : oobeBlockLabel(sel.value),
+    );
 
     function onRun(): void {
-      if (state.runDisabled || unsupported.value) {
-        if (unsupported.value) toast(sel.value?.unsupported_note || "此机型不支持该场景", true);
+      if (state.runDisabled || blockedText.value) {
+        if (blockedText.value) {
+          toast(unsupported.value
+            ? (sel.value?.unsupported_note || "此机型不支持该场景")
+            : (oobeBlock.value || "此场景当前不可运行"), true);
+        }
         return;
       }
       void runScenario();
@@ -105,6 +116,8 @@ export default defineComponent({
       barClass,
       hasLiveSpec,
       unsupported,
+      oobeBlock,
+      blockedText,
       onRun,
       onReset,
       onInput,
@@ -152,14 +165,14 @@ export default defineComponent({
         class="commit"
         :class="{ busy: state.runBusy }"
         type="button"
-        :disabled="state.runDisabled || unsupported"
-        :title="unsupported ? sel?.unsupported_note : undefined"
+        :disabled="state.runDisabled || Boolean(blockedText)"
+        :title="blockedText || undefined"
         @click="onRun"
       >
         <svg class="play" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M8.5 5.8c0-.8.9-1.3 1.6-.9l8.2 5.9c.6.4.6 1.3 0 1.7l-8.2 5.9c-.7.4-1.6-.1-1.6-.9z" />
         </svg>
-        <span class="lbl">{{ unsupported ? "此机型不支持" : state.runLabel }}</span>
+        <span class="lbl">{{ blockedText || state.runLabel }}</span>
         <span class="spin" aria-hidden="true" />
         <span class="kbd">Ctrl ↑</span>
       </button>

@@ -48,19 +48,36 @@ export function collectParams(): Record<string, string | number> {
   return body;
 }
 
-/** Hero 面板右侧那排规格：带 from 的实时读参数框里的值。 */
-export function specValue(sp: { k: string; v?: string | number; from?: string; prefix?: string; suffix?: string }): string {
+/** 规格行取值：带 `from` 的实时读参数值，否则用静态 `v`。
+ *
+ *  为什么需要 `sc` 参数：舞台会同时渲染中央卡和左右侧卡，**非选中卡**的
+ *  参数不在 `state.params` 里（那是选中卡的编辑态）。所以要按「这张卡自己的
+ *  参数定义 + 它自己的默认值」来算，而不是一律读 state.selected。
+ *
+ *  以前舞台直接写 `sp.v ?? "—"`，导致所有 `from` 型规格行（等待时间、目标
+ *  日期这种跟着参数变的）都显示成一个下划线 —— 就是这个原因。
+ */
+export function specValue(
+  sp: { k: string; v?: string | number; from?: string; prefix?: string; suffix?: string },
+  sc?: { id?: string; params?: ScenarioParam[] },
+): string {
   if (sp.from) {
     const key = sp.from;
-    const param = state.selected?.params?.find((p) => p.key === key);
+    const param = sc?.params?.find((p) => p.key === key);
+    /* 只有「这张卡就是当前选中卡」时，才用编辑中的 state.params；
+       其它卡一律用它自己的默认值，避免把选中卡的参数张冠李戴。 */
+    const isSelected = !sc?.id || sc.id === state.selected?.id;
     let raw: string | undefined;
     if (param?.type === "time") {
-      const h = state.params[`${key}.h`] ?? String(param.h ?? 9);
-      const m = state.params[`${key}.m`] ?? String(param.m ?? 30);
+      const h = (isSelected ? state.params[`${key}.h`] : undefined)
+        ?? String(param.h ?? 9);
+      const m = (isSelected ? state.params[`${key}.m`] : undefined)
+        ?? String(param.m ?? 30);
       raw = `${h.padStart(2, "0")}:${m.padStart(2, "0")}`;
-    } else {
+    } else if (isSelected) {
       raw = state.params[key];
     }
+    if (raw === undefined && param) raw = String(param.value ?? "");
     return `${sp.prefix ?? ""}${raw ?? ""}${sp.suffix ?? ""}`;
   }
   return sp.v === undefined || sp.v === null ? "" : String(sp.v);

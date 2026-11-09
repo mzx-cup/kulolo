@@ -55,6 +55,12 @@ export async function refreshStatus(): Promise<void> {
     state.scrcpyDisabled = !s.scrcpy;
     state.devices = (s.devices || []).filter((d) => d.state === "device");
     state.selectedSerial = s.selected ?? null;
+    /* OOBE 国家：非中国时节日卡片会被置灰（见 actions/oobe.ts） */
+    state.country = s.country ?? null;
+    /* root 检测：非 root 时停电建议卡片会被置灰（见 actions/oobe.ts） */
+    state.root = s.root ?? null;
+    /* 型号检测：NOTE 系列上纪念日策划案卡会被置灰 */
+    state.modelInfo = s.modelInfo ?? null;
     /* 卡片库索引随状态一起下发：跑完一轮场景，缩略图会自动换新 */
     if (s.cards) state.cards = s.cards;
 

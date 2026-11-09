@@ -1,0 +1,421 @@
+/* 消失页 = 「卡片消失机制检测台」。
+ *
+ *  排版刻意和触发页拉开差异：
+ *   触发页 —— 左侧分类导航 + 居中卡片轮播 + 右侧设备舱 + 底部最近使用 + 步骤/日志；
+ *   消失页 —— 竖向流程时间轴（9 个观察节点）+ 右侧实时画面/说明，
+ *             整页占满工作区（.shell 恒为单列，触发页自带 .page-trigger 两栏）。 */
+
+/* 页面切换的舞台：两页各自是 Transition 的一个分支（out-in 不同场），
+   这里只需保证宽度不塌。 */
+.page-slot {
+  position: relative;
+  min-width: 0;
+}
+
+.dismiss-page {
+  min-width: 0;
+  padding: 4px 2px 8px;
+}
+
+/* ── 页头：标题 + 统计 ───────────────────────────────────────── */
+.dismiss-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+  padding: 0 4px;
+}
+
+.dismiss-title h2 {
+  font: 650 19px/1.2 var(--sans);
+  letter-spacing: .01em;
+}
+
+.dismiss-sub {
+  margin: 6px 0 0;
+  max-width: 56ch;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+
+.dismiss-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: none;
+}
+
+.dismiss-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+}
+
+.dismiss-stat b {
+  font: 650 16px/1 var(--sans);
+}
+
+.dismiss-stat span {
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.dismiss-stat.is-gone b {
+  color: var(--rust);
+}
+
+.dismiss-stat.is-stay b {
+  color: var(--jade);
+}
+
+/* ── 前置准备条 ─────────────────────────────────────────────── */
+.dismiss-prep {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+  padding: 11px 16px;
+  border: 1px dashed color-mix(in srgb, var(--amber) 32%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--amber) 6%, transparent);
+}
+
+.dismiss-prep-tag {
+  flex: none;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--amber) 18%, transparent);
+  color: var(--amber);
+  font: 650 10px/1.6 var(--mono);
+  letter-spacing: .12em;
+}
+
+.dismiss-prep-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.dismiss-prep-body b {
+  font-size: 12.5px;
+}
+
+.dismiss-prep-body small {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+
+/* ── 主体：左时间轴 / 右侧栏 ────────────────────────────────── */
+.dismiss-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 300px);
+  gap: 22px;
+  align-items: start;
+}
+
+/* ── 左：流程时间轴 ─────────────────────────────────────────── */
+.dismiss-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.dismiss-phase {
+  list-style: none;
+}
+
+.dismiss-phase-name {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 10px;
+  font: 650 11px/1 var(--mono);
+  letter-spacing: .16em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.dismiss-phase-name::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.dismiss-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* ── 单个观察节点 ───────────────────────────────────────────── */
+.dismiss-step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding: 13px 16px 13px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  transition: border-color .22s var(--ease-out), background .22s var(--ease-out);
+}
+
+.dismiss-step-dot {
+  flex: none;
+  width: 11px;
+  height: 11px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  background: transparent;
+  transition: background .22s var(--ease-out), border-color .22s var(--ease-out),
+    box-shadow .22s var(--ease-out);
+}
+
+.dismiss-step.is-gone {
+  border-color: color-mix(in srgb, var(--rust) 34%, transparent);
+  background: color-mix(in srgb, var(--rust) 5%, var(--panel));
+}
+
+.dismiss-step.is-gone .dismiss-step-dot {
+  border-color: var(--rust);
+  background: var(--rust);
+  box-shadow: 0 0 10px -2px var(--rust);
+}
+
+.dismiss-step.is-stay {
+  border-color: color-mix(in srgb, var(--jade) 30%, transparent);
+  background: color-mix(in srgb, var(--jade) 5%, var(--panel));
+}
+
+.dismiss-step.is-stay .dismiss-step-dot {
+  border-color: var(--jade);
+  background: var(--jade);
+  box-shadow: 0 0 10px -2px var(--jade);
+}
+
+.dismiss-step-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.dismiss-step-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.dismiss-step-head b {
+  font-size: 12.5px;
+}
+
+.dismiss-step-how {
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--ink-3);
+}
+
+/* ── 观察记录按钮组 ─────────────────────────────────────────── */
+.dismiss-obs {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.dismiss-obs-btn {
+  padding: 6px 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-3);
+  font: 550 11px/1.4 var(--sans);
+  cursor: pointer;
+  transition: border-color .18s var(--ease-out), background .18s var(--ease-out),
+    color .18s var(--ease-out), translate .18s var(--ease-spring);
+}
+
+.dismiss-obs-btn:hover {
+  color: var(--ink);
+  translate: 0 -1px;
+}
+
+.dismiss-obs-btn:active {
+  translate: 0 0;
+  transition-duration: .1s;
+}
+
+.dismiss-obs-btn.is-gone.on {
+  border-color: color-mix(in srgb, var(--rust) 55%, transparent);
+  background: color-mix(in srgb, var(--rust) 16%, transparent);
+  color: var(--rust);
+}
+
+.dismiss-obs-btn.is-stay.on {
+  border-color: color-mix(in srgb, var(--jade) 50%, transparent);
+  background: color-mix(in srgb, var(--jade) 14%, transparent);
+  color: var(--jade);
+}
+
+/* ── 右侧栏 ─────────────────────────────────────────────────── */
+.dismiss-side {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  position: sticky;
+  top: calc(var(--topbar-h) + 18px);
+}
+
+.dismiss-shot {
+  overflow: hidden;
+}
+
+.dismiss-shot-box {
+  margin: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--panel-solid) 60%, #000);
+  aspect-ratio: 9 / 19;
+  overflow: hidden;
+}
+
+.dismiss-shot-box img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+}
+
+.dismiss-shot-empty {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  padding: 12px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--ink-4);
+}
+
+.dismiss-shot-tag {
+  margin: 0 14px 12px;
+  font: 9px/1.4 var(--mono);
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--ink-4);
+}
+
+.dismiss-help-list {
+  margin: 0;
+  padding: 12px 20px 16px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11.5px;
+  line-height: 1.65;
+  color: var(--ink-3);
+}
+
+.dismiss-help-list li::marker {
+  color: var(--amber);
+  font: 650 10px/1 var(--mono);
+}
+
+/* ── 页面切换动画（trigger ⇄ dismiss）：顺序渐隐渐现 ───────────────
+ *  Transition mode="out-in"：旧页先整页慢慢淡掉（.42s），走完后新页
+ *  再从透明慢慢浮现（.55s）——「先消失、再出现」，中间不同场。
+ *  只动 opacity、全程单元素动画：无除了绝对定位同场叠页，也无 translate
+ *  位移，玻璃面板不再逐帧重算两套，切换又顺又不卡。 */
+.dockpage-enter-active {
+  transition: opacity .55s var(--ease-out);
+  will-change: opacity;
+}
+
+.dockpage-leave-active {
+  transition: opacity .42s var(--ease-in-out);
+  will-change: opacity;
+}
+
+.dockpage-enter-from,
+.dockpage-leave-to {
+  opacity: 0;
+}
+
+/* ── 窄屏 ───────────────────────────────────────────────────── */
+@media (max-width: 1280px) {
+  .dismiss-body {
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 260px);
+  }
+}
+
+@media (max-width: 1080px) {
+  .dismiss-body {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dismiss-side {
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .dismiss-side > * {
+    flex: 1 1 260px;
+  }
+
+  .dismiss-shot-box {
+    aspect-ratio: 16 / 9;
+  }
+}
+
+@media (max-width: 620px) {
+  .dismiss-head {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .dismiss-stats {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .dismiss-step {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .dismiss-step-dot {
+    margin-top: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dockpage-enter-active,
+  .dockpage-leave-active {
+    transition: none;
+  }
+
+  .dismiss-step,
+  .dismiss-step-dot,
+  .dismiss-obs-btn {
+    transition: none;
+  }
+
+  .dismiss-obs-btn:hover {
+    translate: 0 0;
+  }
+}

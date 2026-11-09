@@ -1,15 +1,16 @@
 <script lang="ts">
-import { defineComponent, onMounted, onUnmounted, ref } from "vue";
+import { defineComponent, nextTick, onMounted, onUnmounted, ref } from "vue";
 import TheTopbar from "@/components/TheTopbar.vue";
 import CategoryNav from "@/components/CategoryNav.vue";
 import ScenarioStage from "@/components/ScenarioStage.vue";
 import DevicePanel from "@/components/DevicePanel.vue";
 import RecentBar from "@/components/RecentBar.vue";
+import DismissPage from "@/components/DismissPage.vue";
+import DockBar from "@/components/DockBar.vue";
 import ParamsDrawer from "@/components/ParamsDrawer.vue";
 import StepsPanel from "@/components/StepsPanel.vue";
 import LogPanel from "@/components/LogPanel.vue";
 import ModalVerify from "@/components/ModalVerify.vue";
-import ModalAsk from "@/components/ModalAsk.vue";
 import ModalRetry from "@/components/ModalRetry.vue";
 import ModalStop from "@/components/ModalStop.vue";
 import ShotLightbox from "@/components/ShotLightbox.vue";
@@ -23,6 +24,7 @@ import { refreshStatus, statusSchedule } from "@/actions/device";
 import { poll, runScenario } from "@/actions/run";
 import { shotSchedule, shotStateRefresh, setVisible, fetchShot, closeLightbox } from "@/actions/shot";
 import { cycleScenario } from "@/actions/catalog";
+import { oobeBlockReason } from "@/actions/oobe";
 import { toast } from "@/actions/toast";
 
 export default defineComponent({
@@ -33,11 +35,12 @@ export default defineComponent({
     ScenarioStage,
     DevicePanel,
     RecentBar,
+    DismissPage,
+    DockBar,
     ParamsDrawer,
     StepsPanel,
     LogPanel,
     ModalVerify,
-    ModalAsk,
     ModalRetry,
     ModalStop,
     ShotLightbox,
@@ -69,8 +72,18 @@ export default defineComponent({
       }
       if (meta && e.key === "Enter") {
         e.preventDefault();
+        if (state.dockPage === "dismiss") {
+          toast("先切回「触发」页再运行场景", true);
+          return;
+        }
         if (state.selected?.unsupported_note) {
           toast(state.selected.unsupported_note, true);
+          return;
+        }
+        // OOBE 国家门禁：节日卡片要求设备国家=中国，不对时快捷键也不放行
+        const blocked = oobeBlockReason(state.selected);
+        if (blocked) {
+          toast(blocked, true);
           return;
         }
         void runScenario();
@@ -101,6 +114,8 @@ export default defineComponent({
         return;
       }
       if (typing) return;
+      /* 消失页没有轮播/场景列表，方向键不该在背后偷偷切卡 */
+      if (state.dockPage === "dismiss") return;
       if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
         e.preventDefault();
         stageRef.value?.onKey(e.key === "ArrowRight" ? 1 : -1);
@@ -147,6 +162,9 @@ export default defineComponent({
       ".catalog",
       ".stage-card",
       ".recentbar-card",
+      ".dock-btn",
+      ".dismiss-obs-btn",
+      ".dismiss-step",
       ".btn",
       ".icon-btn",
       ".vbtn",
@@ -208,6 +226,38 @@ export default defineComponent({
     }
 
     let loopTimer: number | null = null;
+    /** 左侧场景中心与右侧「实时画面」等高的高度同步器 */
+    let sideResizeObserver: ResizeObserver | null = null;
+
+    /** 把右侧设备面板（实时画面）的实际高度写成 --side-h，
+     *  让左侧 .catnav 与之等高（顶部 sticky 已对齐，长度也一致）。
+     *  用 ResizeObserver 而非硬编码：设备信息（电量/系统版本）显隐时
+     *  面板高度会变，跟着变才不会错位。 */
+    function syncSideHeight(): void {
+      const device = document.querySelector<HTMLElement>(".device-panel");
+      if (!device) return;
+      const apply = () => {
+        const h = device.getBoundingClientRect().height;
+        if (h > 0) document.documentElement.style.setProperty("--side-h", `${Math.round(h)}px`);
+      };
+      apply();
+      sideResizeObserver?.disconnect();
+      sideResizeObserver = new ResizeObserver(apply);
+      sideResizeObserver.observe(device);
+    }
+
+    /* 切换触发/消失页（Transition out-in 顺序渐隐）：
+     *  新页 enter 时它才真正挂载，此刻量 .device-panel 才量得到——
+     *  不能用 watch+nextTick，那时旧页还在淡出、新页尚未插入。 */
+    function onPageEnter(): void {
+      if (state.dockPage === "trigger") {
+        void nextTick(() => syncSideHeight());
+      } else {
+        /* 消失页没有 .device-panel（旧节点已随触发页卸载），断掉观测器 */
+        sideResizeObserver?.disconnect();
+        sideResizeObserver = null;
+      }
+    }
 
     onMounted(async () => {
       initTheme();
@@ -244,18 +294,22 @@ export default defineComponent({
       /* 首屏渲染完成后给 shell 加 page-loaded 类，触发整页淡入 */
       window.requestAnimationFrame(() => {
         document.documentElement.classList.add("page-loaded");
+        /* 布局稳定后同步左右侧栏等高 */
+        syncSideHeight();
       });
     });
 
     onUnmounted(() => {
       if (loopTimer !== null) clearInterval(loopTimer);
+      sideResizeObserver?.disconnect();
+      sideResizeObserver = null;
       document.removeEventListener("keydown", onKeydown);
       document.removeEventListener("visibilitychange", onVisibility);
       document.removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("pointermove", onPointerMove);
     });
 
-    return { state, stageRef };
+    return { state, stageRef, onPageEnter };
   },
 });
 </script>
@@ -268,26 +322,38 @@ export default defineComponent({
   <TheTopbar />
 
   <main class="shell">
-    <!-- 左侧：分类导航 -->
-    <CategoryNav />
     <div class="scrim" :class="{ show: state.catalogOpen }" :hidden="!state.catalogOpen" @click="state.catalogOpen = false" />
 
-    <!-- 中央工作区：舞台 + 设备舱 + 最近使用 + 步骤 + 日志 -->
-    <div class="workspace">
-      <ScenarioStage ref="stageRef" />
-      <DevicePanel />
-      <RecentBar />
-      <div class="flow">
-        <StepsPanel />
-        <LogPanel />
-      </div>
+    <!-- 页面切换：触发页=分类导航+卡片轮播工作台；消失页=卡片消失机制检测台。
+         out-in 顺序渐隐渐现——旧页整页先慢慢淡掉，新页再慢慢浮现；
+         catnav 移进触发分支，跟着整页一起淡，不再瞬间消失造成布局跳变。
+         KeepAlive 缓存两页 DOM：切回时不再整页重挂，渐现曲线才不会中途卡顿。 -->
+    <div class="page-slot">
+      <Transition name="dockpage" mode="out-in" @enter="onPageEnter">
+        <KeepAlive>
+          <div v-if="state.dockPage === 'trigger'" key="trigger" class="page-trigger">
+            <CategoryNav />
+            <div class="workspace">
+              <ScenarioStage ref="stageRef" />
+              <DevicePanel />
+              <RecentBar />
+              <div class="flow">
+                <StepsPanel />
+                <LogPanel />
+              </div>
+            </div>
+          </div>
+          <DismissPage v-else key="dismiss" />
+        </KeepAlive>
+      </Transition>
     </div>
   </main>
+
+  <DockBar />
 
   <ParamsDrawer />
 
   <ModalVerify />
-  <ModalAsk />
   <ModalRetry />
   <ModalStop />
   <ShotLightbox />

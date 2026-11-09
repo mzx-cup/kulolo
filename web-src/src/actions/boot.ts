@@ -3,6 +3,7 @@ import type { ScenarioView } from "@/types/api";
 import { STORAGE_KEYS, readText } from "@/lib/storage";
 import { api } from "@/lib/api";
 import { buildGroups, currentVisible, loadPrefs, selectScenario, applyInitialCollapse } from "./catalog";
+import { loadDockPage, loadDismissObs } from "./dock";
 import { syncMetaColor } from "./theme";
 import { toast } from "./toast";
 
@@ -10,6 +11,9 @@ import { toast } from "./toast";
 
 export function initTheme(): void {
   loadPrefs();
+  /* dock 页码（触发/消失）与消失检测记录一并恢复 */
+  loadDockPage();
+  loadDismissObs();
   const saved = readText(STORAGE_KEYS.theme) ?? "dark";
   const valid = ["dark", "light", "rose", "mint", "violet", "midnight"];
   const t = (valid.includes(saved) ? saved : "dark") as "dark" | "light" | "rose" | "mint" | "violet" | "midnight";

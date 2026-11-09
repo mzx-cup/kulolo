@@ -1,5 +1,13 @@
 import { reactive } from "vue";
-import type { CardShot, DeviceEntry, ScenarioGroup, ScenarioView } from "@/types/api";
+import type {
+  CardShot,
+  CountryInfo,
+  DeviceEntry,
+  ModelInfo,
+  RootInfo,
+  ScenarioGroup,
+  ScenarioView,
+} from "@/types/api";
 
 /** 日志行：kind 决定颜色，text 是正文 */
 export interface LogLine {
@@ -92,6 +100,12 @@ export const state = reactive({
 
   /* ── 设备 ─────────────────────────────────────────────────── */
   connected: null as boolean | null,
+  /** OOBE 国家检测：null=还没读到；is_cn=false 时节日卡片置灰 */
+  country: null as CountryInfo | null,
+  /** root 检测：null=还没读到；is_root=false 时停电建议卡片置灰 */
+  root: null as RootInfo | null,
+  /** 型号检测：null=还没读到；is_note=true 时纪念日策划案卡置灰 */
+  modelInfo: null as ModelInfo | null,
   devLabel: "检测设备中…",
   devTone: "loading" as "loading" | "on" | "off",
   devTitle: "设备状态",
@@ -112,6 +126,8 @@ export const state = reactive({
   shotSrc: "",
   shotTag: "手机截图",
   hasShot: false,
+  /** 手动刷新进行中：给按钮挂 loading 旋转，避免「点了没反应」 */
+  shotBusy: false,
   /** 换图瞬间给 <img> 挂 swap 动效 */
   shotSwap: false,
   shotGap: 5,
@@ -127,6 +143,12 @@ export const state = reactive({
   /** 运行事件里最近一次「自动识别结果」，给 Steps 面板显示 */
   cardProbeText: "",
   cardProbeOk: null as boolean | null,
+
+  /* ── 底部 dock：页面切换 + 消失检测记录 ─────────────────────── */
+  /** 当前页面："trigger"=卡片触发工作台 / "dismiss"=卡片消失检测台 */
+  dockPage: "trigger" as "trigger" | "dismiss",
+  /** 消失检测台的观察记录：行 id → "gone"=卡片消失 / "stay"=卡片仍在 */
+  dismissObs: {} as Record<string, "gone" | "stay" | "">,
 
   /* ── 外观 ─────────────────────────────────────────────────── */
   theme: "dark" as "dark" | "light" | "rose" | "mint" | "violet" | "midnight",

@@ -146,13 +146,9 @@ export function renderEvent(e: RunEvent, run: RunSnapshot | null): void {
       }, 280);
       break;
     case "ask":
-      if (!run || !run.running) break;
-      state.pendingAsk = true;
-      state.askPrompt = e.prompt ?? "只有把国家调整到中国，节日卡片才能正常触发。";
-      appendLine("detail", "等待回答：卡片前置条件是否满足？");
-      window.setTimeout(() => {
-        if (state.pendingAsk) state.askOpen = true;
-      }, 280);
+      /* OOBE 国家询问已经下线：后端不再发 ask（改成开跑前自动检测 + 置灰）。
+         万一收到历史事件，只记一行日志，不再弹窗拦住流程。 */
+      appendLine("detail", "（旧版）前置询问：" + (e.prompt ?? ""));
       break;
     case "pause":
       appendLine("detail", "▮▮ 已暂停（可点「继续」恢复）");
@@ -309,25 +305,6 @@ export async function confirmAnswer(ok: boolean): Promise<void> {
     state.pendingConfirm = true;
     state.verifyOpen = true;
     toast("确认失败：本地服务无响应", true);
-  }
-}
-
-export async function askAnswer(ok: boolean): Promise<void> {
-  state.askOpen = false;
-  state.pendingAsk = false;
-  try {
-    const r = await api.ask(ok);
-    if (r.error) {
-      state.pendingAsk = true;
-      state.askOpen = true;
-      toast(r.error, true);
-      return;
-    }
-    appendLine(ok ? "ok" : "err", ok ? "已确认：前置条件满足，继续触发" : "已确认：前置条件不满足，场景将中止");
-  } catch {
-    state.pendingAsk = true;
-    state.askOpen = true;
-    toast("回答失败：本地服务无响应", true);
   }
 }
 

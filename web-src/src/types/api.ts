@@ -222,6 +222,44 @@ export interface CardShot {
   file: string;
 }
 
+/** 设备 OOBE 国家检测结果（节日卡片要求中国）。
+ *
+ *  `is_cn` 为 `null` 表示读不到 —— 这时前端**不**拦，宁可放行也不误判。 */
+export interface CountryInfo {
+  /** 原始值：OOBE 国家码（如 "CN"）或 locale（如 "zh-Hans-CN"） */
+  country: string;
+  /** true=中国 / false=非中国 / null=未知 */
+  is_cn: boolean | null;
+  /** 数据来源：oobe（persist.tr_oobe.country）/ locale（persist.sys.locale） */
+  source: string;
+}
+
+/** 设备 root 检测结果（停电建议三张卡要求 root 版设备）。
+ *
+ *  `is_root` 为 `null` 表示读不到 —— 这时前端**不**拦，宁可放行也不误判。 */
+export interface RootInfo {
+  /** true=root / false=非 root（普通 shell）/ null=未知 */
+  is_root: boolean | null;
+  /** `adb shell id` 的原始输出（截断），排障用 */
+  uid: string;
+}
+
+/** 设备型号检测结果（NOTE 系列上纪念日策划案卡不出卡）。
+ *
+ *  `is_note` 为 `null` 表示读不到 —— 这时前端**不**拦。 */
+export interface ModelInfo {
+  /** `ro.product.model`（实测这台是占位名 "XYZ"，不可靠，仅展示） */
+  model: string;
+  /** 更可信的型号串，形如 "X6766-OP" */
+  device: string;
+  /** 命中的 NOTE 型号（如 "X6766"）；空串表示不是 NOTE 系列 */
+  note_match: string;
+  /** true=NOTE 系列 / false=非 NOTE / null=读不到 */
+  is_note: boolean | null;
+  /** 原始属性表，排障用 */
+  props?: Record<string, string>;
+}
+
 export interface StatusResponse {
   connected: boolean;
   /** 找到的 scrcpy.exe 路径；空表示没找到，前端据此禁用按钮 */
@@ -244,6 +282,12 @@ export interface StatusResponse {
   battery_status?: string;
   /** 系统版本，形如 "Android 14"；空串表示读不到 */
   android?: string;
+  /** OOBE 国家检测：非中国时节日卡片会被前端置灰 */
+  country?: CountryInfo;
+  /** root 检测：非 root 时停电建议三张卡会被前端置灰 */
+  root?: RootInfo;
+  /** 型号检测：NOTE 系列上纪念日策划案卡会被前端置灰 */
+  modelInfo?: ModelInfo;
 }
 
 /** ── 通用响应 ─────────────────────────────────────────────────── */

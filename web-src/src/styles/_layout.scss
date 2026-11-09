@@ -10,7 +10,7 @@
   position: relative;
   z-index: 1;
   display: grid;
-  grid-template-columns: var(--catnav-w) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
   gap: 22px;
   align-items: start;
   max-width: 1920px;
@@ -18,6 +18,16 @@
   padding: 22px 26px 42px;
 }
 .shell.page-loaded { animation: pageFade .8s var(--ease-out) both; }
+
+/* 触发页自己带两栏（分类导航 + 工作区）：两页各自是一个完整分支，
+   切页整页渐隐渐现，catnav 跟着一起淡，不会瞬间消失造成布局跳变。 */
+.page-trigger {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: var(--catnav-w) minmax(0, 1fr);
+  gap: 22px;
+  align-items: start;
+}
 
 /* ── 中央工作区：舞台 + 设备舱双栏，其余纵向堆叠 ─────────────────── */
 /*  列宽：主栏 + 设备舱。steps / log 并排成一行（.flow），共同占主栏，

@@ -8,10 +8,16 @@ import { toast } from "./toast";
  *  对象 URL 必须显式 revoke，否则每 5 秒一张会一直泄漏。 */
 
 let shotUrl: string | null = null;
-let inFlight = false;
 let lastTag = "";
 let timer: number | null = null;
 let visible = !document.hidden;
+
+/** 截图结果：失败时带上可读原因，别再一律丢一句「截图失败」 */
+type ShotResult = { ok: true } | { ok: false; reason: string };
+
+/** 串行队列：自动刷新和手动刷新撞在一起时排队，而不是互相顶掉后误报失败。
+ *  旧的 inFlight 布尔会让「正在自动刷新」期间的手动点击直接拿到 false → 红色错误提示。 */
+let queue: Promise<unknown> = Promise.resolve();
 
 export const isVisible = (): boolean => visible;
 
@@ -43,31 +49,65 @@ export function setShot(src: string, tag: string): void {
   if (tag) state.shotTag = tag;
 }
 
-export async function fetchShot(tag: string): Promise<boolean> {
-  if (inFlight) return false;
-  inFlight = true;
+/** 打一次截图请求，返回可读结果。signal 用于手动刷新的超时取消。 */
+async function shotOnce(tag: string, signal?: AbortSignal): Promise<ShotResult> {
+  /* 进队列时可能已排队了一会，超时取消的请求就别再发了 */
+  if (signal?.aborted) return { ok: false, reason: "截图超时，请重试" };
   try {
-    const r = await api.screenshot();
-    if (!r.ok) return false;
+    const r = await api.screenshot(signal);
+    if (!r.ok) {
+      /* 后端 5xx 会带 JSON {error:...}，把它读出来给用户看真正的原因 */
+      let reason = `截图服务返回 ${r.status}`;
+      try {
+        const data = (await r.json()) as { error?: string };
+        if (data?.error) reason = data.error;
+      } catch { /* 非 JSON 就保留状态码 */ }
+      return { ok: false, reason };
+    }
     const blob = await r.blob();
+    if (signal?.aborted) return { ok: false, reason: "截图超时" };
     if (shotUrl) URL.revokeObjectURL(shotUrl);
     shotUrl = URL.createObjectURL(blob);
     setShot(shotUrl, tag);
-    return true;
-  } catch {
-    return false;
-  } finally {
-    inFlight = false;
+    return { ok: true };
+  } catch (e) {
+    if (signal?.aborted) return { ok: false, reason: "截图超时，请重试" };
+    const msg = e instanceof Error ? e.message : String(e);
+    return { ok: false, reason: msg.includes("fetch")
+      ? "本地服务无响应，请确认后端已启动"
+      : msg };
   }
 }
 
+/** 串行执行：把任务挂到队列尾巴，保证同一时刻只有一次请求在跑。 */
+function enqueue(tag: string, signal?: AbortSignal): Promise<ShotResult> {
+  const job = queue.then(() => shotOnce(tag, signal));
+  /* 无论成功失败都让队列继续走，别把后面的任务卡死 */
+  queue = job.catch(() => undefined);
+  return job;
+}
+
+export async function fetchShot(tag: string): Promise<boolean> {
+  const r = await enqueue(tag);
+  return r.ok;
+}
+
+/** 手动刷新：先给 loading 反馈，成功/失败都有明确提示，
+ *  并显示后端返回的真实原因，不再出现「点了没反应、还弹个笼统红错」。
+ *  不依赖 state.connected 前置拦截（轮询可能滞后），一律真发请求由后端裁决。 */
 export async function manualShot(): Promise<void> {
-  if (inFlight) {
-    toast("截图正在刷新，稍等一下");
-    return;
+  if (state.shotBusy) return;
+  state.shotBusy = true;
+  const ctrl = new AbortController();
+  const timeout = window.setTimeout(() => ctrl.abort(), 12000);
+  try {
+    const r = await enqueue("手动刷新 " + new Date().toLocaleTimeString(), ctrl.signal);
+    if (!r.ok) toast(r.reason, true);
+    else toast("画面已刷新");
+  } finally {
+    clearTimeout(timeout);
+    state.shotBusy = false;
   }
-  const ok = await fetchShot("手动刷新 " + new Date().toLocaleTimeString());
-  if (!ok) toast("截图失败", true);
 }
 
 /** 自动刷新：setTimeout 递归（不用 setInterval），

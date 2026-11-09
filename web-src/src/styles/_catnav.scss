@@ -1,13 +1,19 @@
 // 左侧分类导航：纵向导航 + 搜索 + 分类计数 + 折叠
 
 /* ── 分类导航容器 ─────────────────────────────────────────────── */
+/*  高度与右侧「实时画面」面板一致：--side-h 由 App.vue 用
+    ResizeObserver 测量 .device-panel 的实际高度写入。
+    顶部 sticky 已对齐，这里让「长度」也对齐，视觉上左右平衡。
+    同时保留视口上限（不能高于一屏），min-height 兜底内容过少。 */
 .catnav {
   position: sticky;
   top: calc(var(--topbar-h) + 18px);
   display: flex;
   flex-direction: column;
-  max-height: calc(100vh - var(--topbar-h) - 36px);
-  max-height: calc(100dvh - var(--topbar-h) - 36px);
+  /* 直接用 --side-h（右侧「实时画面」面板的真实高度）。
+     不再套 min(..., 视口上限)：右侧是基准，它可能高于一屏，
+     左侧必须完全照抄才能「长度一致」，不能自己被压矮。 */
+  height: var(--side-h, auto);
   min-height: 420px;
   border: 1px solid var(--line);
   border-radius: var(--radius-xl);
