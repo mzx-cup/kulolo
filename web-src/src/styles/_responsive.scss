@@ -78,7 +78,9 @@
   .stage-card-title { font-size: 20px; }
   .stage-actions { flex-wrap: wrap; }
   .stage-run { min-width: 0; }
-  .params-drawer { width: calc(100vw - 20px); }
+  /* 参数浮层的宽度/位置由 ParamsPop.vue 按视口算好写进行内样式，
+     这里不用再压宽度；只把贴边间距收一档，别糊住卡片 */
+  .params-pop { padding: 13px 13px 11px; }
 }
 
 /* 矮屏：设备舱里的手机图收窄，别把舞台挤得看不见 */

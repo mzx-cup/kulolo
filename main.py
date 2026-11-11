@@ -87,15 +87,34 @@ WEB = runtime_paths.resource_path("web")
 # 词会把「没出卡」误判成「出了别的卡」。
 GREETING_CARD_KEYWORDS = (
     "今天是", "幸运四叶草", "抽取你的", "四叶草", "祝你顺利", "clover",
+    # 中文机实测：嗨，BdayNNNNNN快乐！ / 生成视频
+    "快乐", "生成视频",
+    # 英文机实测：Happy BdayNNNNNN！ / Generate Video
+    "Happy", "Generate Video",
+    # 阿拉伯语机实测：كل عام وأنت بخير（祝你安好）/ إنشاء فيديو（生成视频）
+    # 注意不要把「عيد ميلاد」（生日）放进来：策划案卡的阿语标题也带这个词，
+    # 放进来会让生日策划案被 greeting 组误命中。
+    "كل عام", "عام وأنت بخير", "إنشاء فيديو",
 )
 # 策划案卡（生日/纪念日/考试前 3 天）：文案形如「xx·生日 · 3 天后」
 PLAN_CARD_KEYWORDS = (
     "天后", "策划案", "还有 3 天", "3 天后", "days later", "in 3 days",
     "birthday plan", "upcoming",
+    # 阿拉伯语文案：بعد 3 أيام（3 天后）/ خطة（计划）
+    "بعد 3 أيام", "بعد ثلاثة أيام", "خطة", "قادم",
 )
 # 追星 / 重要日提醒类：文案更泛，靠名字 + 通用词兜底
+#
+# 【不要往这里加 "today"】英文机的「Good Morning」晨报卡文案是
+# 「Be gentle with yourself and everything around you today.」/
+# 「Go for it today!」，都含 today —— 加了就会把晨报卡认成重要日卡片，
+# 实测已经踩过：collect_id.py 采到的 en_important_day / en_show_day
+# 两张图打开全是 Good Morning 晨报卡。英文侧一律靠 card_hint 里的
+# ASCII 名字（BdayNNNNNN）命中，不再加泛化词。
 REMINDER_CARD_KEYWORDS = (
-    "今天是", "提醒", "重要日", "观演", "追星", "演出", "reminder", "today",
+    "今天是", "提醒", "重要日", "观演", "追星", "演出", "reminder",
+    # 阿拉伯语文案：تذكير（提醒）/ اليوم（今天）/ حدث（活动）
+    "تذكير", "اليوم", "حدث", "مهم",
 )
 
 
@@ -384,15 +403,17 @@ SCENARIOS = [
         "title": "一键打车卡片",
         "tag": "life · taxi",
         "desc": "Yango 一键打车卡片，任何时间都可以触发。发送 AppSuggestEvent"
-                "（app_list=com.yandex.yango），系统桌面出现一键打车卡片。",
+                "（app_list=com.yandex.yango）后立刻回桌面智慧建议小部件实时检查"
+                "出卡；到点还没出现，就清缓存按原步骤重试一次。支持中文 / 英文 /"
+                "阿拉伯语三种系统语言下的卡片识别。",
         "module": scenario_app_suggest,
         "group": "生活服务卡片",
         "icon": "car",
         "retryable": False,
-        "card_keywords": ("打车", "Yango", "yango", "ride", "taxi"),
+        "card_keywords": scenario_app_suggest.TAXI_KEYWORDS,
         "params": [
-            {"key": "wait_sec", "type": "number", "label": "等待卡片",
-             "value": 5, "min": 2, "max": 60, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "实时检查",
+             "value": 10, "min": 2, "max": 60, "unit": "秒"},
         ],
         "hidden": {"app_package": "com.yandex.yango"},
         "specs": [
@@ -406,16 +427,18 @@ SCENARIOS = [
         "tag": "life · food",
         "desc": "foodpanda 一键点餐卡片，仅午餐 10:45~13:00、晚餐 17:00~19:00 出卡。"
                 "把系统时间设到窗口内，再发 AppSuggestEvent"
-                "（app_list=com.global.foodpanda.android）。",
+                "（app_list=com.global.foodpanda.android），然后立刻回桌面智慧建议"
+                "小部件实时检查出卡；到点还没出现，就清缓存按原步骤重试一次。"
+                "支持中文 / 英文 / 阿拉伯语三种系统语言下的卡片识别。",
         "module": scenario_app_suggest,
         "group": "生活服务卡片",
         "icon": "food",
         "retryable": False,
-        "card_keywords": ("点餐", "foodpanda", "Foodpanda", "外卖", "food", "delivery"),
+        "card_keywords": scenario_app_suggest.FOOD_KEYWORDS,
         "params": [
             {"key": "hour", "type": "time", "label": "点餐时间", "h": 11, "m": 30},
-            {"key": "wait_sec", "type": "number", "label": "等待卡片",
-             "value": 5, "min": 2, "max": 60, "unit": "秒"},
+            {"key": "wait_sec", "type": "number", "label": "实时检查",
+             "value": 10, "min": 2, "max": 60, "unit": "秒"},
         ],
         "hidden": {"app_package": "com.global.foodpanda.android"},
         "specs": [
@@ -490,6 +513,9 @@ SCENARIOS = [
         "group": "体验报告卡片",
         "icon": "calendar",
         "retryable": False,
+        # 总结类卡片靠系统定时 + 云端下发渲染，pm clear launcher3 会把智慧建议
+        # 小部件整个删掉，之后每轮只能读到空小部件 —— 所以禁止清缓存重试。
+        "no_cache_clear": True,
         "card_keywords": ("月度总结", "本月总结", "体验报告", "monthly summary", "monthly report"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "解锁后等待",
@@ -512,7 +538,14 @@ SCENARIOS = [
         "group": "体验报告卡片",
         "icon": "star",
         "retryable": False,
-        "card_keywords": ("年度总结", "年度报告", "体验报告", "yearly summary", "annual report"),
+        # 同月度卡：pm clear launcher3 会让智慧建议小部件消失，禁止清缓存重试。
+        "no_cache_clear": True,
+        # 真机实测年度卡文案是 `Hi, your Annual Summary is ready. / 2026`，
+        # 注意是 Annual Summary（不是 Annual Report）——旧关键词里只有
+        # "yearly summary" / "annual report"，实测把已经出来的卡判成了没出卡。
+        "card_keywords": ("年度总结", "年度报告", "体验报告",
+                          "annual summary", "yearly summary", "annual report",
+                          "annual review"),
         "params": [
             {"key": "wait_sec", "type": "number", "label": "解锁后等待",
               "value": 90, "min": 30, "max": 180, "unit": "秒"},
@@ -1353,7 +1386,16 @@ def _confirm_fn(r) -> bool:
         return True
 
     log = lambda m: _emit({"t": "log", "no": r._no, "msg": m})
-    hit = None
+
+    # 场景自己跑的时候可能**已经认到卡**了（生活服务卡片会边发事件边实时盯
+    # 小部件，见 scenario_app_suggest._watch_card）。这种情况下直接把那张
+    # 卡拿过来入库，绝不再回头重扫 —— 用户口径是「只要识别到了就报成功，
+    # 然后停止任务」。不这么短路的话，已经出卡还要再走一遍这里最长 90 秒
+    # 的识别循环，白等还会把卡片轮播划走。
+    hit = getattr(r, "pre_hit", None)
+    if hit is not None:
+        log(f"场景运行中已实时认到卡片「{hit.text}」（关键词 {hit.keyword}），"
+            f"直接入库，不再重复扫描")
 
     # 只接受桌面智慧建议卡片。锁屏快照仅用于诊断日志，绝不能作为归位图片。
     lock_texts = list(getattr(r, "lock_texts", None) or [])
@@ -1379,11 +1421,18 @@ def _confirm_fn(r) -> bool:
     #     翻下一张（节日卡基本只有一次出卡机会，清早了就白跑一张）。
     #     其它卡片保持 90 秒快速失败，不跟着干等。
     is_festival = sid.startswith("festival_")
+    # 总结类卡片（月度 / 年度体验报告）**绝不能** pm clear：它们靠系统定时 +
+    # 云端下发渲染，而 `pm clear com.transsion.launcher3` 会把桌面重置成出厂
+    # 状态，智慧建议小部件整个消失 —— 之后每一轮都只能读到空小部件，重试必然
+    # 失败（实测月度卡：第 1 轮没命中后清了一次缓存，后面 9 轮全是「小部件里
+    # 没有卡片文案」，白等 90 秒）。这类场景改成「只轮询、不清缓存」。
+    no_cache_clear = bool(sce.get("no_cache_clear"))
     FESTIVAL_QUIET_SEC = 7 * 60        # 亮屏后先安静等这么久，不许清数据
     QUIET_POLL_SEC = 60                # 安静期每隔多久看一眼（只看不清）
     # 节日卡只跑一个安静期：7 分钟没出就判「这张没出」，清完数据交给
     # 采集脚本翻下一张（而不是在同一张卡上继续耗）。
-    DEADLINE_SEC = FESTIVAL_QUIET_SEC if is_festival else 90
+    DEADLINE_SEC = FESTIVAL_QUIET_SEC if is_festival else (
+        150 if no_cache_clear else 90)
     ROUND_GAP = 12 if is_festival else 6   # 清数据后给 launcher 重建的时间
     started = time.time()
     round_no = 0
@@ -1393,6 +1442,9 @@ def _confirm_fn(r) -> bool:
         log(f"亮屏后先安静等待 {FESTIVAL_QUIET_SEC // 60} 分钟（期间不清任何数据，"
             f"等节日卡片自己渲染出来；{FESTIVAL_QUIET_SEC // 60} 分钟后仍没出就"
             f"清数据、翻下一张）")
+    elif no_cache_clear:
+        log(f"总结类卡片：等待 {DEADLINE_SEC}s 期间只轮询、不清缓存"
+            f"（清 launcher 会让智慧建议小部件消失，反而再也认不到卡）")
 
     while hit is None and time.time() - started < DEADLINE_SEC:
         if _ctrl["stop"]:
@@ -1404,20 +1456,33 @@ def _confirm_fn(r) -> bool:
         in_quiet = time.time() < quiet_until
         phase = "，安静期不清数据）" if in_quiet else "）"
         log(f"第 {round_no} 轮识别（剩余约 {left}s{phase}…")
-        hit = card_probe.find_card_anywhere(dev, keywords, log=log)
+        # 先花 ~2.5s 只看**当前这一屏**的卡片：实测绝大多数情况下卡就在眼前，
+        # 而 find_card_anywhere 要从头翻满轮播，单次要 6.7~10.5s。
+        # 先快后全，命中就立刻收工（用户要求：识别到了马上报成功）。
+        hit = card_probe.find_card_fast(dev, keywords, log=log)
+        if hit is None:
+            hit = card_probe.find_card_anywhere(dev, keywords, log=log)
         if hit:
             break
 
-        # 没找到，分两种情况：
+        # 没找到，分三种情况：
         #   * **安静期**（只有节日卡有）：只歇一会儿再看，**不清任何数据**；
-        #   * 安静期之外（所有非节日卡，以及节日卡跑过安静期后理论上到不了的
-        #     分支）：沿用老策略 —— 三条 pm clear 后重试，90 秒快速失败。
+        #   * **总结类卡片**（no_cache_clear）：同样只轮询，**绝不清缓存** ——
+        #     清 launcher 会把智慧建议小部件整个删掉，之后再也认不到卡；
+        #   * 其它卡片：沿用老策略 —— 三条 pm clear 后重试，90 秒快速失败。
         if time.time() - started >= DEADLINE_SEC:
             break
         if in_quiet:
             wait = min(QUIET_POLL_SEC, max(1, int(quiet_until - time.time())))
             log(f"安静期：卡片还没出来，{wait}s 后再看一眼（不清数据）")
             for _ in range(wait):
+                if _ctrl["stop"]:
+                    raise UiError("用户结束场景")
+                time.sleep(1)
+            continue
+        if no_cache_clear:
+            log("总结类卡片：不清缓存，8s 后再看一眼（清 launcher 会让小部件消失）")
+            for _ in range(8):
                 if _ctrl["stop"]:
                     raise UiError("用户结束场景")
                 time.sleep(1)
@@ -1455,6 +1520,12 @@ def _confirm_fn(r) -> bool:
                     raise UiError("用户结束场景")
                 time.sleep(3)
         _emit({"t": "card", "no": r._no, "ok": False, "scenario": sid})
+        # 自动识别失败也要落进 _confirm_state：前端「卡片没出来 → 要不要把
+        # 目标日期平移一个月重试」的弹窗，判据是 result.confirmed_ok === false。
+        # 以前这里只发 card 事件、不写 _confirm_state，导致自动识别路径下
+        # confirmed_ok 恒为 None，重试弹窗永远不弹（用户实测反馈）。
+        with _lock:
+            _confirm_state["ok"] = False
         return False
     log(f"第 {round_no} 轮命中，共用时 {int(time.time() - started)}s")
 
@@ -1504,6 +1575,9 @@ def _confirm_fn(r) -> bool:
     _emit({"t": "card", "no": r._no, "ok": True, "scenario": sid,
            "text": hit.text, "keyword": hit.keyword, "where": hit.where,
            "has_shot": bool(entry)})
+    # 命中也要写进 _confirm_state：confirmed_ok=True 才会触发前端的绿卡结算动效。
+    with _lock:
+        _confirm_state["ok"] = True
     return True
 
 
@@ -1604,15 +1678,25 @@ def _run_scenario(scenario_id: str, params: dict) -> None:
                 scenario_birthday.Runner(dev, emit=_emit, control=_ctrl),
                 timeout=240.0)
             dev = get_device()
-        # 上一次同一场景以「未触发 / 报错」收尾 → 这次也算重试，照样先清缓存
+        # 上一次同一场景以「未触发 / 报错」收尾 → 这次也算重试，照样先清缓存。
+        # 但总结类卡片（monthly/yearly summary，sce["no_cache_clear"]）例外：
+        # 它们靠系统定时 + 云端下发渲染，而 pm clear launcher3 会把智慧建议小部件
+        # 整个删掉 —— 上一轮失败后再来一次 pre-clear，等于开局就把小部件清空，
+        # 后面无论等多久都读不到卡片（实测踩过：第 1 轮后每轮都是空小部件）。
         with _lock:
             prev_failed = (_prev_run["id"] == scenario_id and not _prev_run["ok"])
+        no_cache_clear = bool(sce.get("no_cache_clear"))
         if is_retry or prev_failed:
             why = "点了重新触发" if is_retry else "上次没触发成功"
-            _emit({"t": "log", "no": 0,
-                   "msg": f"重新触发（{why}）：先清空 launcher3 / atomicbrain / atomiccore"})
-            dev.log = lambda m: _emit({"t": "log", "no": 0, "msg": m})
-            dev.clear_atomic_services()
+            if no_cache_clear:
+                _emit({"t": "log", "no": 0,
+                       "msg": f"重新触发（{why}）：总结类卡片不清缓存，直接重跑"
+                              f"（清 launcher 会让智慧建议小部件消失）"})
+            else:
+                _emit({"t": "log", "no": 0,
+                       "msg": f"重新触发（{why}）：先清空 launcher3 / atomicbrain / atomiccore"})
+                dev.log = lambda m: _emit({"t": "log", "no": 0, "msg": m})
+                dev.clear_atomic_services()
         result = sce["module"].run(dev, emit=_emit, **kwargs)
         # 场景中途是否有过卡片确认（ok=True/False）；没有则为 None
         with _lock:

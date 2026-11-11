@@ -510,6 +510,9 @@
 .stage-icbtn svg { width: 19px; height: 19px; }
 .stage-icbtn.on { color: var(--amber); border-color: var(--amber-line); background: var(--amber-soft); }
 .stage-icbtn.on svg { animation: favPop .4s var(--ease-spring); }
+/* 取消执行：运行中才有，用红色区分于收藏/参数的常态色 */
+.stage-icbtn.danger { color: var(--rust); }
+.stage-icbtn.danger:hover { color: var(--rust); border-color: color-mix(in srgb, var(--rust) 40%, transparent); background: color-mix(in srgb, var(--rust) 10%, var(--panel-3)); }
 @keyframes favPop {
   0% { transform: scale(1); }
   50% { transform: scale(1.3); }

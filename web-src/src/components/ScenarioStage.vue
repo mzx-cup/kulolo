@@ -8,7 +8,7 @@ import { pad2 } from "@/lib/format";
 import { artFor } from "@/actions/cards";
 import { specValue as specVal } from "@/actions/params";
 import { oobeBlockReason, oobeBlockLabel } from "@/actions/oobe";
-import { runScenario } from "@/actions/run";
+import { runScenario, pauseOrResume } from "@/actions/run";
 import { toast } from "@/actions/toast";
 
 /**
@@ -539,8 +539,21 @@ export default defineComponent({
       toggleFavorite(center.value.id);
     }
 
-    function openParams(): void {
+    /* 打开参数浮层：顺手把这个按钮的视口矩形记进 state，浮层 Teleport 到
+     * body 之后要按它算位置（挂卡片里会被 .stage-card 的 overflow 裁掉）。
+     * 同一个按钮再点一次就收起，行为跟下拉菜单一致。 */
+    function openParams(e?: MouseEvent): void {
       if (!center.value) return;
+      if (state.paramsOpen && state.paramsAnchorId === center.value.id) {
+        state.paramsOpen = false;
+        return;
+      }
+      const el = (e?.currentTarget as HTMLElement | null) ?? null;
+      const r = el?.getBoundingClientRect();
+      state.paramsAnchor = r
+        ? { left: r.left, top: r.top, right: r.right, bottom: r.bottom, width: r.width, height: r.height }
+        : null;
+      state.paramsAnchorId = center.value.id;
       state.paramsOpen = true;
     }
 
@@ -778,6 +791,20 @@ export default defineComponent({
       void runScenario();
     }
 
+    /** 运行中才露出「暂停 / 取消」：只有正在跑的这场才有可暂停/可结束的东西。
+     *  暂停态取 state.paused（poll 每轮同步，pause/resume 事件也会即时改）。 */
+    const runningNow = computed(() => state.running || state.starting);
+
+    function onPause(): void {
+      if (!runningNow.value) return;
+      void pauseOrResume();
+    }
+
+    function onStop(): void {
+      if (!runningNow.value) return;
+      state.stopOpen = true;   // ModalStop 挂在 App.vue，确认后走 stopRun()
+    }
+
     onMounted(() => {
       syncIndex();
       window.addEventListener("pointerup", onGlobalPointerUp);
@@ -819,6 +846,9 @@ export default defineComponent({
       onFav,
       openParams,
       onRun,
+      runningNow,
+      onPause,
+      onStop,
       oobeBlock,
       oobeBlockTxt,
       isDescExpanded,
@@ -974,6 +1004,38 @@ export default defineComponent({
               <span class="spin" aria-hidden="true" />
             </button>
 
+            <!-- 运行中才出现：暂停/继续 + 取消执行。只在中央卡露出，取消走 ModalStop 二次确认。 -->
+            <button
+              v-if="runningNow && isCenterSlot(it)"
+              class="stage-icbtn"
+              :class="{ on: state.paused }"
+              type="button"
+              :title="state.paused ? '继续执行' : '暂停执行'"
+              :tabindex="isCenterSlot(it) ? undefined : -1"
+              @click="isCenterSlot(it) && onPause()"
+            >
+              <svg v-if="state.paused" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <path d="M8.5 5.8c0-.8.9-1.3 1.6-.9l8.2 5.9c.6.4.6 1.3 0 1.7l-8.2 5.9c-.7.4-1.6-.1-1.6-.9z" />
+              </svg>
+              <svg v-else viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                <rect x="7" y="5" width="3.6" height="14" rx="1.2" />
+                <rect x="13.4" y="5" width="3.6" height="14" rx="1.2" />
+              </svg>
+            </button>
+
+            <button
+              v-if="runningNow && isCenterSlot(it)"
+              class="stage-icbtn danger"
+              type="button"
+              title="取消执行"
+              :tabindex="isCenterSlot(it) ? undefined : -1"
+              @click="isCenterSlot(it) && onStop()"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" aria-hidden="true">
+                <path d="M6.4 6.4l11.2 11.2M17.6 6.4L6.4 17.6" />
+              </svg>
+            </button>
+
             <button
               class="stage-icbtn"
               :class="{ on: favorited }"
@@ -992,11 +1054,15 @@ export default defineComponent({
             </button>
 
             <button
-              class="stage-icbtn"
+              class="stage-icbtn params-btn"
+              :class="{ on: state.paramsOpen && state.paramsAnchorId === it.card.id }"
               type="button"
+              data-params-anchor
+              :aria-haspopup="'dialog'"
+              :aria-expanded="state.paramsOpen && state.paramsAnchorId === it.card.id ? 'true' : 'false'"
               :title="paramCount ? `调整参数（${paramCount} 项）` : '无参数'"
               :tabindex="isCenterSlot(it) ? undefined : -1"
-              @click="isCenterSlot(it) && openParams()"
+              @click="isCenterSlot(it) && openParams($event)"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <path d="M4 6h10M18 6h2M4 12h2M10 12h10M4 18h7M15 18h5" />

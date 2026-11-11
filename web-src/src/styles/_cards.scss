@@ -32,7 +32,47 @@
   color: rgba(255, 255, 255, .55);
 }
 
-/* 窄屏 */
+/* ── 多语言陈列（一键打车 / 一键点餐） ──────────────────────────────
+   同一张卡在中文 / 英文 / 阿拉伯语三种系统语言下的样子，并排摆开。
+   宽屏三列，窄屏一列——阿语卡是 RTL 版式，压得太小就看不清字了。 */
+.lightbox .card-zoom-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 18px;
+  max-width: min(96vw, 1120px);
+  max-height: 78vh;
+  overflow-y: auto;
+  padding: 4px 2px;
+}
+.lightbox .card-zoom-item {
+  position: relative;
+  margin: 0;
+  flex: 0 1 auto;
+}
+/* 三语陈列时每张图比单图模式小一档，保证三张能横排放下 */
+.lightbox .card-zoom-item .card-zoom-img {
+  max-width: min(30vw, 300px);
+  max-height: 66vh;
+  border-radius: 22px;
+}
+/* 角标：这张是哪一语言 */
+.lightbox .card-zoom-tag {
+  margin-top: 9px;
+  text-align: center;
+  font-size: 11px;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .62);
+}
+.lightbox .card-zoom-item.lang-ar .card-zoom-tag {
+  direction: rtl;
+  font-size: 13px;      /* 阿拉伯字母本来就小，给大一点点 */
+}
+
+/* ── 窄屏 */
 @media (max-width: 720px) {
   .lightbox .card-zoom-img { max-width: 86vw; border-radius: 20px; }
+  .lightbox .card-zoom-group { flex-direction: column; align-items: center; gap: 14px; }
+  .lightbox .card-zoom-item .card-zoom-img { max-width: 78vw; max-height: 42vh; }
 }

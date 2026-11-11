@@ -24,7 +24,7 @@
 
 /* ── 不支持 backdrop-filter 的降级 ─────────────────────────────── */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
-  .panel, .catnav, .catalog, .theme-menu, .modal-card, .params-drawer,
+  .panel, .catnav, .catalog, .theme-menu, .modal-card, .params-pop,
   .sel-menu, .toast, .stage-card, .recentbar-card {
     background-color: var(--panel-solid);
   }
@@ -255,7 +255,7 @@
 .sel-menu,
 .toast,
 .rt-card,
-.params-drawer {
+.params-pop {
   border: 1px solid var(--glass-edge-strong);
   background-image:
     var(--glass-corner),
@@ -273,7 +273,7 @@
 .sel-menu,
 .toast,
 .rt-card { background-color: var(--modal-bg); }
-.params-drawer { background-color: var(--panel-solid); }
+.params-pop { background-color: var(--panel-solid); }
 .theme-menu { background-color: var(--panel); }
 
 /* ── 弹窗：从空间展开（下方向上浮起 + 轻微 3D 回正） ─────────────── */
@@ -292,19 +292,31 @@
 }
 .theme-menu.open { transform: none; }
 
-/* ── 5. 参数抽屉：玻璃从右侧空间展开 ─────────────────────────────
-   不只是一条直线滑入，而是带一点「先探出再回正」的纵深展开感：
-   从 translateX(102%) 开始，叠加一点 scaleX 让玻璃像从侧面长出来。 */
-.params-drawer {
-  border-left-color: var(--glass-edge-strong);
+/* ── 5. 参数浮层：从按钮那侧「挤」出来 ───────────────────────────
+   位移/缩放由 _drawer.scss 的 .ppop-* 过渡负责（左右展开方向不同），
+   这里只补一层玻璃纵深：面板贴边那侧留一道内阴影，让它看起来是从
+   按钮背后浮起来的，而不是平贴上去的一张纸。 */
+.params-pop {
   box-shadow:
-    -42px 0 90px -30px rgba(0, 0, 0, .78),
+    var(--glass-float),
+    var(--shadow-pop),
     var(--glass-inner);
-  transform: translateX(102%) scaleX(.98);
-  transform-origin: right center;
-  transition: transform .42s var(--ease-out);
 }
-.params-drawer.open { transform: none; }
+/* 向右展开 → 左边缘是「贴按钮」的一侧 */
+.params-pop.side-right {
+  box-shadow:
+    inset 1px 0 0 rgba(255, 255, 255, .05),
+    var(--glass-float),
+    var(--shadow-pop),
+    var(--glass-inner);
+}
+.params-pop.side-left {
+  box-shadow:
+    inset -1px 0 0 rgba(255, 255, 255, .05),
+    var(--glass-float),
+    var(--shadow-pop),
+    var(--glass-inner);
+}
 
 /* ── 6. 下拉菜单：液滴聚拢感 ───────────────────────────────────── */
 .sel-menu {
@@ -571,7 +583,7 @@
   .panel, .catnav, .catalog { transform: none !important; }
   .btn::before, .icon-btn::before, .vbtn::before,
   .stage-icbtn::before, .recentbar-card::before { display: none; }
-  .params-drawer { transform: none; }
+  .params-pop { transform: none; }
   .stage-icbtn.on svg,
   .recentbar-fav.on svg { animation: none; }
   .device-screen.swap .shot { animation: none; }

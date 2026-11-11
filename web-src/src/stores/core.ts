@@ -49,8 +49,14 @@ export const state = reactive({
   loading: true,
   loadError: "",
   catalogOpen: false,
-  /** 参数抽屉是否打开 */
+  /** 运行参数浮层是否打开（贴着「调节参数」按钮向右展开） */
   paramsOpen: false,
+  /** 浮层锚点：打开时那个按钮的视口矩形。
+   *  浮层 Teleport 到 body 后用 fixed 定位，只能靠这份矩形算贴边位置；
+   *  null 表示还没开过，浮层不渲染。 */
+  paramsAnchor: null as { left: number; top: number; right: number; bottom: number; width: number; height: number } | null,
+  /** 浮层当前归属的场景 id：切卡后旧面板要自动收起 */
+  paramsAnchorId: "",
 
   /* ── 参数 ─────────────────────────────────────────────────── */
   /** 当前场景的参数值，key 与 ScenarioParam.key 一致。

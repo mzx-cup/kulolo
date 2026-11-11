@@ -9,12 +9,14 @@ from __future__ import annotations
 import time
 from datetime import date, timedelta
 
-from phone_ctl import Device, KEY_POWER, UiError
+from phone_ctl import Device, KEY_POWER, KEY_WAKEUP, UiError
 
 from scenario_birthday import (
     Runner,
     _cli_emit,
     _prepare,
+    _unlock_with_retries,
+    _wait_screen_on,
     device_date,
     ensure_home_before_confirm,
     set_system_datetime,
@@ -74,25 +76,40 @@ def run(dev: Device | None = None, emit=None, *,
     dev.key(KEY_POWER)
     time.sleep(60)
 
-    r.step("上滑解锁")
-    w, h = dev.screen_size()
-    dev.swipe(w // 2, h - 200, w // 2, h // 3, 300)
-    time.sleep(1)
+    # 注意：息屏之后必须先 WAKEUP 再解锁。裸 swipe 在灭屏状态下不会唤醒屏幕，
+    # 只会把整段等待窗口耗在黑屏+锁屏里，`_confirm_fn` 会一路报
+    # 「当前窗口不是桌面（NotificationShade）」直到超时（实测踩过）。
+    r.step("唤醒屏幕并上滑解锁")
+    dev.key(KEY_WAKEUP)
+    if not _wait_screen_on(dev, True, timeout=3.0):
+        r.log("警告：唤醒后屏幕仍未点亮")
+    _unlock_with_retries(dev, r, unlock_retries=3)
+    # 等待窗口里必须保持常亮：这台机 screen_off_timeout=30s，
+    # 不 hold 住的话 90~120 秒的等待里屏幕会自己灭掉，卡片根本不会露出来。
+    dev.stayon(True)
 
     r.step(f"等待卡片出现 {wait_sec} 秒…")
-    time.sleep(wait_sec)
+    for remain in range(wait_sec, 0, -1):
+        r.check()
+        if remain % 10 == 0 or remain == 1:
+            r.tick(remain)
+        time.sleep(1)
 
     ensure_home_before_confirm(dev, r)
     r.shot("桌面")
-    ok = r.confirm()
-    dev.shell("cmd statusbar expand-notifications")
-    time.sleep(0.5)
-    r.shot("通知栏")
-    ok = ok or r.confirm()
-    dev.shell("cmd statusbar collapse")
-    time.sleep(0.4)
-    if ok:
-        ensure_home_before_confirm(dev, r)
+    try:
+        ok = r.confirm()
+        dev.shell("cmd statusbar expand-notifications")
+        time.sleep(0.5)
+        r.shot("通知栏")
+        ok = ok or r.confirm()
+        dev.shell("cmd statusbar collapse")
+        time.sleep(0.4)
+        if ok:
+            ensure_home_before_confirm(dev, r)
+    finally:
+        # 失败/中断也要把常亮放开，否则用户拿回手机时会一直是常亮状态
+        dev.stayon(False)
 
     if not ok:
         raise UiError("桌面和通知栏都没有确认到体验报告卡片")

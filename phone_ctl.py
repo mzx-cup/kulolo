@@ -61,10 +61,13 @@ ATOMIC_PKG = "com.transsion.atomicbrain"
 ATOMIC_CORE_PKG = "com.transsion.atomiccore"
 HOME_PAGE_RIDS = ("tc_time", "tc_date", "tv_temperature")
 # 首页「智慧建议」标题在三种系统语言下文案完全不同：中文 `智慧建议`、
-# 英文 `Smart suggestions`、阿拉伯语 `AI اقتراحات`。这里全部收进来，
-# 作为 rid 之外的第二判据（rid 已足够，文本只是兜底）。
+# 英文 `AI Suggestions`（真机实测就是这个词，早期写的 `Smart suggestions` 是猜的）、
+# 阿拉伯语 `AI اقتراحات`。这里全部收进来，作为 rid 之外的第二判据
+# （rid 已足够，文本只是兜底）。**比较时统一转小写**，否则「AI Suggestions」
+# 与「AI suggestions」对不上，英文机就会误判「不在桌面首页」。
 HOME_PAGE_TEXTS = ("智慧建议", "Smart suggestions", "Smart Suggestions",
-                   "AI suggestions", "AI اقتراحات", "اقتراحات ذكية")
+                   "AI suggestions", "AI Suggestions", "AI اقتراحات",
+                   "اقتراحات ذكية")
 
 
 def parse_wheel_value(rid: str, desc: str) -> int:
@@ -537,8 +540,8 @@ class Device:
         rid_tail = {(n.rid or "").split("/")[-1] for n in nodes}
         if any(t in rid_tail for t in HOME_PAGE_RIDS):
             return True
-        texts = {(n.text or "").strip() for n in nodes}
-        return any(t in texts for t in HOME_PAGE_TEXTS)
+        texts = {(n.text or "").strip().lower() for n in nodes}
+        return any(t.lower() in texts for t in HOME_PAGE_TEXTS)
 
     def goto_launcher_home(self, max_presses: int = 3,
                            settle: float = 0.8) -> bool:

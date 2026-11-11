@@ -22,6 +22,7 @@ import time
 import zipfile
 from pathlib import Path
 
+import card_probe
 from phone_ctl import KEY_HOME, Device, UiError
 
 from scenario_alarm import DESKCLOCK_PKG  # noqa: F401  (仅保持同目录导入习惯)
@@ -52,6 +53,42 @@ FOOD_OK_SIZES = (129913559,)
 # 点餐卡片允许的时段（分钟数）
 LUNCH = (10 * 60 + 45, 13 * 60)
 DINNER = (17 * 60, 19 * 60)
+
+# 桌面「智慧建议」里认卡片用的文案。main.py 的场景注册表直接引用这里
+# （SCENARIOS[*].card_keywords），保证「场景引擎的自动确认」和「本模块
+# 重试前先看一眼」认的是同一批关键词，不会一处改了另一处忘掉。
+#
+# 同一张卡在三种系统语言下文案完全不同（真机 uiautomator dump 实测）：
+#   打车：出行时间 / 差不多该出发了（zh）
+#         Ride Hailing / Time to get a ride（en）
+#         طلب سيارة أجرة / حان وقت الحصول على رحلة（ar-EG）
+#   点餐：点餐时间 / 挑份喜欢的，准时开饭（zh）
+#         Food Ordering / Time to grab a bite（en）
+#         طلب الطعام / حان وقت تناول لقمة（ar-EG）
+# 所有语言都要认，否则「卡片明明在桌面上却被判成没出卡」，白白清缓存重试。
+#
+# 阿拉伯语注意两点：
+#   * 两张卡的阿语标题都以 «طلب»（请求）开头，**不能用裸 «طلب»** 当关键词，
+#     否则打车会把点餐卡也认成命中。这里用完整短语 + 各自独有的词根。
+#   * 阿语是从右往左排的，dump 出来的字符串里可能夹着方向控制符，所以除了
+#     整句之外再补几个「本身就是唯一」的短词（سيارة / لقمة），容错更高。
+TAXI_KEYWORDS = ("Ride Hailing", "Time to get a ride",
+                 "出行时间", "差不多该出发了",
+                 "طلب سيارة أجرة", "سيارة أجرة", "سيارة",
+                 "حان وقت الحصول على رحلة",
+                 "打车", "Yango", "yango", "ride", "taxi")
+FOOD_KEYWORDS = ("Food Ordering", "Time to grab a bite",
+                 "点餐", "挑份喜欢的",
+                 "طلب الطعام", "الطعام", "حان وقت تناول لقمة", "لقمة",
+                 "foodpanda", "Foodpanda", "外卖", "food", "delivery")
+CARD_KEYWORDS: dict[str, tuple[str, ...]] = {
+    TAXI_PACKAGE: TAXI_KEYWORDS,
+    FOOD_PACKAGE: FOOD_KEYWORDS,
+}
+
+# 发完机之后回桌面小部件实时盯多久（秒）：窗口内一出现就立刻收工，
+# 窗口结束还没出现就清缓存按原步骤重试一次。
+CHECK_WINDOW_SEC = 10
 
 
 def _app_installed(dev: Device, package: str) -> bool:
@@ -271,6 +308,84 @@ def dispatch_app_suggest(dev: Device, app_package: str) -> str:
     return dev.shell(cmd)
 
 
+def _card_visible(dev: Device, app_package: str, r):
+    """只「看一眼」桌面智慧建议里有没有目标卡片，不发事件、不清缓存。
+
+    用 `card_probe.find_card_fast`（只看当前屏，约 2.5s）而不是
+    `find_card_anywhere`（会翻满轮播，6.7~10.5s）：这里是在实时盯卡，
+    刚生成的卡片一定在第一屏，翻轮播纯属白花 4.5s —— 而窗口只有 10 秒，
+    慢一档就变成「一次都查不完」。
+
+    find_card_fast 内部会先回首页、收起灵动岛，然后 dump 控件树读文案 ——
+    全是只读操作，不会把 App 拉起来，也不会破坏当前场景。
+    这里刻意不复用 r.confirm()：main.py 的 _confirm_fn 自带「90 秒 +
+    每轮 pm clear」的循环，那个循环跑在本函数里会叠成好几分钟。
+
+    返回 `CardHit`（命中）或 None。**返回整个 hit 而不是 bool**，是为了让
+    调用方命中后直接拿它截图入库，不必再走一遍 _confirm_fn 的重扫。
+    """
+    keywords = CARD_KEYWORDS.get(app_package) or (app_package,)
+    hit = card_probe.find_card_fast(dev, keywords, log=r.log)
+    if hit:
+        r.log(f"桌面已出现卡片：「{hit.text}」（关键词 {hit.keyword}）")
+    return hit
+
+
+def _watch_card(dev: Device, r, app_package: str,
+                window_sec: int = CHECK_WINDOW_SEC):
+    """在桌面上**实时盯**智慧建议小部件，window_sec 秒内出卡就立刻返回 hit。
+
+    和老的「先干等 N 秒、时间到了才检查一次」不同：发完事件立刻回桌面，
+    每轮 dump 一次控件树，一出现就收工 —— 卡片通常 2~4 秒就出来了，不必
+    白等满整个窗口。窗口到点还没出才返回 None，由调用方决定清缓存重试。
+
+    节流说明：`find_card_fast` 自己就要 ~2.5s（dump 控件树是 adb 的硬开销），
+    所以两轮之间不再固定 sleep 1 秒 —— 那样会白白把节奏拖到 3.5s 一轮。
+    只有窗口还剩很多时才补一点点间隔，避免空转刷屏。
+    """
+    deadline = time.monotonic() + window_sec
+    while True:
+        r.check()                       # 暂停 / 结束在这里生效
+        hit = _card_visible(dev, app_package, r)
+        if hit:
+            return hit
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return None
+        r.tick(max(1, int(round(left))))   # 状态栏显示剩余秒数
+        # 探测本身已经花了 ~2.5s；只剩不到 1 秒就别再睡，直接再探一次。
+        if left > 1.2:
+            time.sleep(min(0.4, left - 1.0))
+
+
+def _fire_and_watch(dev: Device, r, app_package: str,
+                    window_sec: int = CHECK_WINDOW_SEC):
+    """发一次 AppSuggestEvent，然后**马上**回桌面小部件盯 window_sec 秒。
+
+    返回命中时的 `CardHit`，窗口内没出卡返回 None。只负责发和看，
+    清缓存重试由 run() 决定。
+    """
+    out = dispatch_app_suggest(dev, app_package)
+    err = ("Error" in out or "Exception" in out
+           or "Not found" in out or "no service started" in out)
+    if err:
+        # 这条 DISPATCH_EVENT 只是额外的一条投递路径：没装 com.example.tpk.client
+        # 的机器上 query-services 返回 "No services found"，回退隐式启动必然报
+        # "Not found; no service started."。卡片实际由已安装的 App 自身触发，
+        # 所以这里只降级成警告，不判失败。
+        r.log("提示：AppSuggestEvent 投递未成功（"
+              f"{out.strip()[:160]}），这台机器没有 DISPATCH_EVENT mock 服务；"
+              "卡片由 App 自身触发，继续等待出卡")
+    else:
+        r.ok(out.strip()[:200])
+
+    # 发完立刻回桌面：用户口径是「输入指令后马上返回桌面智慧建议小部件实时检查」。
+    # 这里不再调 ensure_home_before_confirm（它要 dump 整棵树判断首页，实测 3.1s）；
+    # find_card_fast 内部用 focus() 判断当前窗口，不在桌面才按 HOME，快 30 倍。
+    r.step(f"回桌面智慧建议小部件实时检查（{window_sec} 秒）")
+    return _watch_card(dev, r, app_package, window_sec)
+
+
 def run(dev: Device | None = None, emit=None, *, app_package: str,
         hour: int | None = None, minute: int | None = None,
         wait_sec: int = 5, control: dict | None = None,
@@ -280,8 +395,8 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
     dev.log = r.log
     if not app_package:
         raise UiError("缺少 app_package（一键打车/点餐包名）")
-    if not (2 <= wait_sec <= 60):
-        raise UiError("wait_sec 必须在 2~60 秒之间")
+    if not (2 <= wait_sec <= 120):
+        raise UiError("wait_sec 必须在 2~120 秒之间")
 
     result = {"app_package": app_package, "wait_sec": wait_sec}
 
@@ -301,51 +416,68 @@ def run(dev: Device | None = None, emit=None, *, app_package: str,
     else:
         r.log("不调整系统时间（一键打车任何时间都可触发）")
 
+    # 用户口径（两张生活服务卡一致）：发完指令**马上**回桌面智慧建议小部件
+    # 实时盯 wait_sec（默认 10 秒），一出现就收工；到点还没出卡，就清空三个
+    # 原子服务的数据，再**按原步骤**（回桌面亮屏 → 发 AppSuggestEvent →
+    # 实时检查）整轮重来一次。两轮都不出才判失败。
+    rounds = 2
+
     r.step("回桌面并保持亮屏")
     _prepare(dev, r)
     dev.key(KEY_HOME)
     time.sleep(0.6)
     dev.stayon(True)
+    try:
+        for rnd in range(1, rounds + 1):
+            if rnd > 1:
+                r.step("清缓存后按原步骤重试")
+                dev.clear_atomic_services()
+                r.log("已清空 launcher3 / atomicbrain / atomiccore，"
+                      "等桌面重建后再发一次事件…")
+                # 清完 launcher 后桌面要重建，立刻 dump 只会读到空小部件。
+                for _ in range(3):
+                    r.check()
+                    time.sleep(1)
+                r.step("回桌面并保持亮屏")
+                _prepare(dev, r)
+                dev.key(KEY_HOME)
+                time.sleep(0.6)
+                dev.stayon(True)
 
-    r.step(f"发送 AppSuggestEvent：{app_package}")
-    out = dispatch_app_suggest(dev, app_package)
-    err = ("Error" in out or "Exception" in out
-           or "Not found" in out or "no service started" in out)
-    if err:
-        # 这条 DISPATCH_EVENT 只是额外的一条投递路径：没装 com.example.tpk.client
-        # 的机器上 query-services 返回 "No services found"，回退隐式启动必然报
-        # "Not found; no service started."。卡片实际由已安装的 App 自身触发，
-        # 所以这里只降级成警告，不判失败。
-        r.log("提示：AppSuggestEvent 投递未成功（"
-              f"{out.strip()[:160]}），这台机器没有 DISPATCH_EVENT mock 服务；"
-              "卡片由 App 自身触发，继续等待出卡")
-    else:
-        r.ok(out.strip()[:200])
+            tag = f"（第 {rnd}/{rounds} 轮）" if rounds > 1 else ""
+            r.step(f"发送 AppSuggestEvent：{app_package}{tag}")
+            hit = _fire_and_watch(dev, r, app_package, wait_sec)
+            if hit:
+                # 认到卡了：把 CardHit 交给 Runner，main.py 的 _confirm_fn 看到
+                # 就直接截图入库、不再回头重扫 —— 「只要识别到了就报成功」。
+                r.pre_hit = hit
+                r.shot("生活服务卡片")
+                break
+            if rnd < rounds:
+                r.log(f"实时检查了 {wait_sec} 秒还没出现卡片，清缓存重试一次")
+        else:
+            raise UiError(
+                f"实时检查了 {wait_sec} 秒、清缓存按原步骤重试一次后，桌面仍然"
+                f"没有出现生活服务卡片（{app_package}）。请确认该 App 已登录、"
+                f"系统时间与网络正常后重试。")
 
-    r.step(f"等待 {wait_sec} 秒检查生活服务卡片")
-    for remain in range(wait_sec, 0, -1):
-        r.check()
-        r.tick(remain)
-        time.sleep(1)
-    time.sleep(1.0)
-    ensure_home_before_confirm(dev, r)
-    r.shot("生活服务卡片")
+        r.step("确认生活服务卡片是否出现")
+        if not r.confirm():
+            r.log("桌面未确认，展开通知栏再检查")
+            dev.shell("cmd statusbar expand-notifications")
+            time.sleep(1.0)
+            r.shot("通知栏")
+            ok = r.confirm()
+            dev.shell("cmd statusbar collapse")
+            time.sleep(0.4)
+            if not ok:
+                raise UiError("桌面和通知栏都没有确认到生活服务卡片")
+        ensure_home_before_confirm(dev, r)
+        r.ok("已确认生活服务卡片")
+    finally:
+        dev.stayon(False)
 
-    r.step("确认生活服务卡片是否出现")
-    if not r.confirm():
-        r.log("桌面未确认，展开通知栏再检查")
-        dev.shell("cmd statusbar expand-notifications")
-        time.sleep(1.0)
-        r.shot("通知栏")
-        ok = r.confirm()
-        dev.shell("cmd statusbar collapse")
-        time.sleep(0.4)
-        if not ok:
-            raise UiError("桌面和通知栏都没有确认到生活服务卡片")
-    ensure_home_before_confirm(dev, r)
-    r.ok("已确认生活服务卡片")
-
-    dev.stayon(False)
+    result["tries"] = rnd
     result["device_time_after"] = dev.shell("date '+%Y-%m-%d %H:%M:%S'").strip()
     result["steps"] = r._no
     result["ok"] = True
@@ -359,7 +491,7 @@ if __name__ == "__main__":
     import sys
 
     pkg = sys.argv[1] if len(sys.argv) > 1 else TAXI_PACKAGE
-    wait = int(sys.argv[2]) if len(sys.argv) > 2 else 5
+    wait = int(sys.argv[2]) if len(sys.argv) > 2 else CHECK_WINDOW_SEC
     try:
         out = run(emit=_cli_emit, app_package=pkg, wait_sec=wait)
         print("\n完成：", out)

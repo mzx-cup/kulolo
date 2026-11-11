@@ -308,6 +308,10 @@ class Runner:
         # 记下来，自动识别阶段（已回桌面）才有依据判断卡片是否出现。
         self.lock_texts: list[str] = []
         self.lock_box: tuple[int, int, int, int] | None = None
+        # 场景自己在跑的过程中**已经认到卡**时，把 CardHit 放这里。
+        # main.py 的 _confirm_fn 看到它就直接入库，不再回头重扫一遍 ——
+        # 这就是「只要识别到了就报成功，然后停止任务」。
+        self.pre_hit = None
         self._no = 0
         self._t0 = 0.0
 

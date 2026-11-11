@@ -21,7 +21,6 @@ body {
   background: var(--bg);
 }
 
-body.drawer-open,
 body.lightbox-open { overflow: hidden; }
 
 ::selection { background: var(--mark-bg); color: var(--mark-ink); }

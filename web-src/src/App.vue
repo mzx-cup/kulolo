@@ -4,7 +4,7 @@ import TheTopbar from "@/components/TheTopbar.vue";
 import TriggerPage from "@/components/TriggerPage.vue";
 import DismissPage from "@/components/DismissPage.vue";
 import DockBar from "@/components/DockBar.vue";
-import ParamsDrawer from "@/components/ParamsDrawer.vue";
+import ParamsPop from "@/components/ParamsPop.vue";
 import ModalVerify from "@/components/ModalVerify.vue";
 import ModalRetry from "@/components/ModalRetry.vue";
 import ModalStop from "@/components/ModalStop.vue";
@@ -29,7 +29,7 @@ export default defineComponent({
     TriggerPage,
     DismissPage,
     DockBar,
-    ParamsDrawer,
+    ParamsPop,
     ModalVerify,
     ModalRetry,
     ModalStop,
@@ -85,6 +85,12 @@ export default defineComponent({
           return;
         }
         if (state.paramsOpen) {
+          /* 浮层里可能嵌着 SelectMenu 的选项列表（也挂 body 上）。
+             那一层开着时 Esc 先归它：一次按键把菜单和浮层一起关掉，
+             用户只是想收起选项，却连整块参数面板都丢了。
+             SelectMenu 是通用组件、选项列表又是 Teleport 出去的，
+             没有共享状态可查，只能看 DOM 里还有没有 .sel-menu。 */
+          if (document.querySelector(".sel-menu")) return;
           state.paramsOpen = false;
           return;
         }
@@ -335,7 +341,7 @@ export default defineComponent({
 
   <DockBar />
 
-  <ParamsDrawer />
+  <ParamsPop />
 
   <ModalVerify />
   <ModalRetry />

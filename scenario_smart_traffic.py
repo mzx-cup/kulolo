@@ -60,6 +60,7 @@ import tempfile
 import time
 import zlib
 
+import card_probe
 from phone_ctl import KEY_HOME, KEY_WAKEUP, Device, UiError
 
 from scenario_atomic_mock import ATOMIC_ACTIVITY, ATOMIC_PACKAGE, ensure_installed
@@ -145,6 +146,13 @@ TRAFFIC_HINTS_ZH = ("智能路况", "大雨可能影响车费", "暴雨可能影
 TRAFFIC_HINTS_EN = ("smart traffic", "traffic conditions", "heavy rain may affect",
                     "rain may affect the fare", "road conditions")
 TRAFFIC_HINTS_AR = ("حركة المرور", "الطرق", "الأمطار", "حالة الطريق")
+
+# 收口时翻轮播用的关键词：三语言拼成一条，顺序上把**最具体**的放前面
+# （card_probe.match_any 按传入顺序试，先中「智能路况」就不会被泛词「路况」
+# 抢先命中别的卡）。
+TRAFFIC_KEYWORDS = (
+    TRAFFIC_HINTS_ZH[0], TRAFFIC_HINTS_ZH[1], TRAFFIC_HINTS_ZH[2],
+) + TRAFFIC_HINTS_EN + TRAFFIC_HINTS_AR + (TRAFFIC_HINTS_ZH[3],)
 
 
 def _ensure_awake(dev: Device, r: Runner) -> None:
@@ -1227,10 +1235,10 @@ def wait_traffic_card(dev: Device, r: Runner, wait_sec: int) -> str | None:
         if elapsed >= 5:
             dispatched = traffic_card_dispatched(dev)
             if dispatched:
-                r.log(f"第 {elapsed} 秒卡片已触发（被早安卡挤到轮播后面，不在第一屏）："
-                      f"{dispatched}")
+                r.log(f"第 {elapsed} 秒卡片已触发（被更高的卡挤到轮播后面，"
+                      f"第一屏暂时看不到）：{dispatched}")
                 r.shot("智能路况卡片")
-                return "已触发（在智慧建议轮播里，不在第一屏）"
+                return "已触发（logcat 命中，稍后翻轮播定位）"
         if elapsed and elapsed % 10 == 0:
             r.log(f"第 {elapsed} 秒还没有智能路况卡片（控件 {len(nodes)} 个）")
         time.sleep(2.0)
@@ -1573,7 +1581,44 @@ def run(dev: Device | None = None, emit=None, *,
 
     r.step("确认智慧建议卡片")
     hit = out.get("card_text")
-    ok = bool(hit) or r.confirm()
+
+    # 先把桌面收口到「挂着智慧建议小部件」的那一页 —— 这是硬要求：
+    # 触发完成后必须停在能看到智能路况卡片的分页上。
+    #
+    # 以前这句话只落在 r.confirm() → main._confirm_fn → card_probe.
+    # find_card_anywhere → ensure_home_before_confirm 这条链上，而 logcat 一
+    # 命中 `bool(hit)` 就把 r.confirm() 短路掉了（见下面原来那行
+    # `ok = bool(hit) or r.confirm()`），于是走 logcat 兜底时桌面停在了
+    # 用户刚划到的别的分页（用户实测反馈：触发完成没回到智慧建议那页）。
+    # 其它场景（省电建议 / 停电 / 闹钟）都在 confirm 之前显式收口，只有这里漏了。
+    ensure_home_before_confirm(dev, r)
+
+    shown = None      # 最终报给用户看的那条卡片文案
+    if hit:
+        # logcat 只能证明卡「生成过」，它常被早安卡挤到轮播第 3 张，
+        # 桌面第一屏根本看不见。这里翻一轮轮播把它翻出来：既让用户真的
+        # 看到卡停在哪一屏，也把实拍图收进卡片库（以前 logcat 短路时
+        # r.confirm() 不执行，卡片库就一直不更新）。
+        try:
+            found = card_probe.find_card_anywhere(
+                dev, TRAFFIC_KEYWORDS, log=r.log)
+        except UiError as exc:
+            found = None
+            r.log(f"翻轮播找卡片失败（不影响已触发的判定）：{exc}")
+        if found is not None:
+            shown = found.text
+            out["card_where"] = found.where
+            out["card_box"] = found.box
+            out["card_index"] = found.index
+            # 交给 main.py 的自动识别做截图入库：设了 pre_hit 它会直接复用
+            # 这次命中，不再重扫一遍（省掉最长 90 秒的识别循环和 pm clear）。
+            r.pre_hit = found
+            ok = r.confirm()
+        else:
+            r.log("轮播里没认出这张卡，桌面已停在智慧建议首页")
+            ok = True
+    else:
+        ok = r.confirm()
     if not ok:
         hint = (
             "常见原因：①天气记忆里的 abnormalWeatherType 不在白名单 "
@@ -1588,13 +1633,14 @@ def run(dev: Device | None = None, emit=None, *,
         raise UiError(
             f"解锁后等了 {int(wait_sec)} 秒，既没在桌面看到智能路况卡片，"
             f"日志里也没有 tvTitle 含「智能路况」的渲染记录。{hint}")
-    r.ok(f"已确认智能路况卡片：{hit or '人工确认'}")
+    r.ok(f"已确认智能路况卡片：{shown or hit or '人工确认'}")
 
     dev.stayon(False)
     out["device_time_after"] = dev.shell("date '+%Y-%m-%d %H:%M:%S %Z'").strip()
     out["steps"] = r._no
     out["ok"] = True
     out["triggered"] = bool(hit)
+    out["card_shown"] = shown or ""
     out["rule_id"] = RULE_ID
     if method == "mock":
         out["summary"] = (

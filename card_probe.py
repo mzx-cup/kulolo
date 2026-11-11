@@ -29,8 +29,11 @@
 屏幕顶部 y≈148~216 会出现一大片纯黑（实测 1074px 宽），正好压住小部件
 卡片的上半截 —— 截出来的卡片图顶上带一条黑边，很难看。
 
-收起办法：**从灵动岛卡片内部向上滑**（实测 `input swipe 604 360 604 90 160ms`
-3/3 成功，焦点仍在桌面）。注意：
+收起办法：**从灵动岛卡片内部向上滑**。旧机 X6766（1208x2644）实测
+`input swipe 604 360 604 90 160ms` 3/3 成功，焦点仍在桌面；换机后固定坐标
+失效（TECNO LK7k 1080x2364 上同样命令试三次都收不起来，要用
+`540 300 540 80` 才行），所以坐标改成按屏幕比例换算，见
+`ISLAND_SWIPE_RATIO` / `island_swipe_points()`。注意：
   * 点岛中心会打开日历事件详情页，破坏当前场景；
   * 点岛外空白处 / 按 BACK / 按 HOME 都不稳定（实测有的能收有的不能）；
   * 只有上滑手势可靠且不切 App。
@@ -59,11 +62,26 @@ WIDGET_TEXTS = (
 # 小部件容器的 content-desc 也带这几个词，用它兜底定位
 WIDGET_DESC_HINTS = WIDGET_TEXTS
 
+# 表头一律小写比较：真机英文机的标题是「AI Suggestions」（大写 S），
+# 早先按原样精确比较会认不出来，于是英文机每次都报「没找到智慧建议小部件」。
+_WIDGET_LOW = tuple(t.lower() for t in WIDGET_TEXTS)
+
+
+def is_widget_label(text: str) -> bool:
+    """这段文案是不是智慧建议小部件的表头（三种系统语言，忽略大小写）。"""
+    return (text or "").strip().lower() in _WIDGET_LOW
+
 # 锁屏上「灵动岛/原子卡片」的控件 id（实测 com.android.systemui:id/atomic_title）
 LOCK_CARD_RIDS = ("atomic_title", "atomic_subTitle")
 
 # 轮播最多滑几次。实测一圈 4 张，留一倍余量；再多就是异常了。
 MAX_SWIPES = 10
+# find_card_fast 默认往后翻几张。实测重要日卡片常排在第 2~3 屏
+# （「早上好」「省电模式」抢在前面），只看第一屏会误判成没出卡。
+# 实测一台机器的轮播一圈正好 3 张（早上好 → 省电模式 → 生日卡），
+# 所以要翻 3 张才能摸到最后一屏；翻少了会在卡片前一屏就「转了一圈」。
+# 3 张 ≈ +13s，比误判后清缓存重跑一整轮（2~3 分钟）便宜得多。
+FAST_FLIPS = 3
 # 每次滑动后等卡片换过来。实测 1.5 秒够，给到 1.8 稳一点。
 SWIPE_SETTLE = 1.8
 # 滑动时长：太快会被当成 fling 甩过头，太慢会被当成拖拽，300ms 实测最稳
@@ -72,18 +90,74 @@ SWIPE_MS = 300
 # AZ 应用抽屉的特征文案。小部件里没有卡片时，大幅上滑会穿透到 launcher
 # 打开应用抽屉（节点里出现「分类」），这时必须按 HOME 退回桌面首页，
 # 不能继续在抽屉里 dump —— 否则读到的全是应用名，被误当成轮播内容。
-DRAWER_HINTS = ("分类", "Categories", "All apps")
+#
+# 三种系统语言都要认：中文机是「分类」，英文机 "Categories" / "All apps"，
+# 阿拉伯语机是「الفئات」/「كل التطبيقات」。漏一种就会在那种语言的机器上
+# 一直把抽屉里的应用名当成卡片文案。
+DRAWER_HINTS = (
+    "分类", "Categories", "All apps",
+    "الفئات", "كل التطبيقات",
+)
+DRAWER_SETTLE = 1.2                        # 按 HOME 退出抽屉后等桌面重新渲染
+_DRAWER_LOW = tuple(t.lower() for t in DRAWER_HINTS)
+# 抽屉里一定有搜索框（rid=search_edit_text），桌面首页没有 —— 名称与文案
+# 都会随语言变，这个控件 id 不会，所以拿它当跨语言的结构化兜底信号。
+DRAWER_RIDS = ("search_edit_text",)
 
 
 def in_app_drawer(nodes: list[Node]) -> bool:
     """控件树里是否出现了 AZ 应用抽屉的特征（说明已经滑离桌面首页）。"""
-    return any((n.text or "").strip() in DRAWER_HINTS for n in nodes)
+    for n in nodes:
+        text = (n.text or "").strip().lower()
+        if text and text in _DRAWER_LOW:
+            return True
+        if n.short_id in DRAWER_RIDS:
+            return True
+    return False
 
-# 灵动岛：SystemUI 窗口名 + 收起手势坐标（屏幕 1208x2644 实测）
+
+def _leave_drawer(dev: Device, say) -> list[Node] | None:
+    """滑进了 AZ 应用抽屉：**立刻退出**，再读一次桌面控件树交回调用方。
+
+    AZ 应用抽屉（launcher 的「分类 / Categories / All apps」页）里只有应用名，
+    不可能有智慧建议卡片，继续在里面 dump 只会读到假卡片文案。所以这条规则
+    对**所有**卡片一视同仁：一旦发现滑进去，马上按 HOME 退出，退出后重新
+    dump 桌面，让调用方在真正的桌面上再判一次，而不是直接把这轮判死。
+
+    返回退出后的控件树；退出失败 / 读不到返回 None。
+    """
+    say("滑进了 AZ 应用抽屉（这里不可能有智慧建议卡片），立刻退出")
+    try:
+        dev.key(3)                         # KEYCODE_HOME
+    except UiError as exc:
+        say(f"按 HOME 退出应用抽屉失败：{exc}")
+        return None
+    time.sleep(DRAWER_SETTLE)
+    try:
+        return dev.dump()
+    except UiError as exc:
+        say(f"退出应用抽屉后控件树读取失败：{exc}")
+        return None
+
+# 灵动岛：SystemUI 窗口名 + 收起手势坐标
 ISLAND_WINDOW = "DynamicBarCard"
-ISLAND_SWIPE = (604, 360, 604, 90, 160)   # (x1, y1, x2, y2, ms)
+# 旧机型（X6766 / 1208x2644）实测的绝对坐标，仅作换算参考：
+#   input swipe 604 360 604 90 160ms
+# 换机型后固定坐标会失效 —— TECNO LK7k（1080x2364）上 604,360→604,90 试三次都
+# 收不起来，必须改到 540,300→540,80 才行。所以坐标改成按屏幕比例算：
+#   起点 y ≈ 12.7% 屏高（岛卡片内部，别点到岛中心，会打开日历详情）
+#   终点 y ≈ 3.4%  屏高（贴近状态栏，等于把岛「推上去」）
+ISLAND_SWIPE_RATIO = (0.5, 0.127, 0.5, 0.034)   # (x1, y1, x2, y2) 按 屏宽/屏高 取比例
+ISLAND_SWIPE_MS = 160
 ISLAND_SETTLE = 1.4                        # 收起动画要等久一点，1.0s 偶尔还在
 ISLAND_MAX_TRIES = 3
+
+
+def island_swipe_points(dev: Device) -> tuple[int, int, int, int, int]:
+    """按当前屏幕尺寸算出收起灵动岛的上滑坐标 (x1, y1, x2, y2, ms)。"""
+    w, h = dev.screen_size()
+    rx1, ry1, rx2, ry2 = ISLAND_SWIPE_RATIO
+    return (int(w * rx1), int(h * ry1), int(w * rx2), int(h * ry2), ISLAND_SWIPE_MS)
 
 
 @dataclass
@@ -141,7 +215,7 @@ def dismiss_dynamic_island(dev: Device, *, log=None,
             if i > 1:
                 say(f"灵动岛已收起（第 {i - 1} 次上滑生效）")
             return True
-        x1, y1, x2, y2, ms = ISLAND_SWIPE
+        x1, y1, x2, y2, ms = island_swipe_points(dev)
         dev.swipe(x1, y1, x2, y2, ms)
         time.sleep(ISLAND_SETTLE)
     ok = not island_expanded(dev)
@@ -161,14 +235,14 @@ def find_widget(nodes: list[Node]) -> tuple[int, int, int, int] | None:
     """
     # 1) 优先：带多语言 desc 的容器，通常就是整块小部件
     for n in nodes:
-        if (n.desc or "").strip() in WIDGET_DESC_HINTS and n.bounds != (0, 0, 0, 0):
+        if is_widget_label(n.desc or "") and n.bounds != (0, 0, 0, 0):
             x1, y1, x2, y2 = n.bounds
             if x2 - x1 > 100 and y2 - y1 > 100:
                 return (x1, y1, x2, y2)
 
     # 2) 退一步：找标题节点，往上方取一块方形区域
     for n in nodes:
-        if (n.text or "").strip() in WIDGET_TEXTS:
+        if is_widget_label(n.text or ""):
             x1, y1, x2, y2 = n.bounds
             side = x2 - x1
             if side < 100:
@@ -198,7 +272,7 @@ def card_box(nodes: list[Node], widget: tuple[int, int, int, int] | None = None
     x1, y1, x2, y2 = widget
     # 标题节点能给出更准的左边界；没有就按左右各内缩 28px（实测量到）
     for n in nodes:
-        if (n.text or "").strip() in WIDGET_TEXTS:
+        if is_widget_label(n.text or ""):
             tx1, ty1, tx2, _ = n.bounds
             if tx2 - tx1 > 100:
                 x1, x2 = tx1, tx2
@@ -226,7 +300,7 @@ def card_area_texts(nodes: list[Node], box: tuple[int, int, int, int]) -> list[s
         if not t:
             continue
         # 小部件自己的名字不算卡片内容
-        if t in WIDGET_TEXTS:
+        if is_widget_label(t):
             continue
         if t and t not in out:
             out.append(t)
@@ -318,13 +392,19 @@ def probe_home(dev: Device, keywords, *, swipes: int = MAX_SWIPES,
     say(f"智慧建议小部件区域 {box}")
 
     seen: set[tuple[str, ...]] = set()
+    repeat = 0
     index = 0
     for i in range(swipes + 1):
         if in_app_drawer(nodes):
-            say("检测到已滑进 AZ 应用抽屉，按 HOME 退回桌面首页并结束本轮")
-            dev.key(3)
-            time.sleep(1.2)
-            return None
+            # 抽屉里不可能有卡片：立刻退出，在真正的桌面上重新读一屏。
+            fresh = _leave_drawer(dev, say)
+            if fresh is None:
+                return None
+            nodes = fresh
+            box = find_widget(nodes) or box
+            if in_app_drawer(nodes):
+                say("退出后仍然在应用抽屉里，结束本轮")
+                return None
 
         texts = _plate_of(nodes, box)
         fingerprint = tuple(sorted(texts))
@@ -347,8 +427,14 @@ def probe_home(dev: Device, keywords, *, swipes: int = MAX_SWIPES,
         say(f"第 {i} 屏不是目标卡：{' / '.join(texts[:4])}")
 
         if fingerprint in seen:
-            say("轮播已经转了一圈，没有找到目标卡片")
-            return None
+            # 这个轮播是**动态**的：翻两屏又转回「早上好」很常见，紧接着
+            # 下一次就能翻出目标卡。所以重复一次不能当「转了一圈」，
+            # 只累计次数，连续重复两次才认定翻不动了。
+            repeat += 1
+            say(f"第 {i} 屏与之前某屏重复（第 {repeat} 次）")
+            if repeat >= 2:
+                say("连续重复同一屏，轮播翻不动了，结束本轮")
+                return None
         seen.add(fingerprint)
         if i == swipes:
             break
@@ -368,10 +454,18 @@ def probe_home(dev: Device, keywords, *, swipes: int = MAX_SWIPES,
             say(f"第 {i + 1} 屏控件树读取失败：{exc}")
             return None
         if in_app_drawer(nodes):
-            say("这一滑进了 AZ 应用抽屉，按 HOME 退回桌面首页并结束本轮")
-            dev.key(3)
-            time.sleep(1.2)
-            return None
+            # 滑穿进了抽屉：立刻退出，回到桌面继续翻，别把这一轮白白判死。
+            fresh = _leave_drawer(dev, say)
+            if fresh is None:
+                return None
+            nodes = fresh
+            if in_app_drawer(nodes):
+                say("退出后仍然在应用抽屉里，结束本轮")
+                return None
+            # 退出后卡片文案跟滑之前一模一样 = 只有一张卡，翻不动了。
+            if tuple(sorted(_plate_of(nodes, box))) == fingerprint:
+                say("小部件里只有这一张卡片，翻不动堆叠，不再滑动")
+                return None
         box = find_widget(nodes) or box
 
     say(f"翻了 {swipes} 屏仍未找到目标卡片")
@@ -464,12 +558,163 @@ def find_card(dev: Device, keywords, *, also_lock: bool = True,
     return probe_home(dev, keywords, log=say)
 
 
+def find_card_fast(dev: Device, keywords, *, log=None,
+                   flips: int = FAST_FLIPS) -> CardHit | None:
+    """最快的一条认卡路径：先看当前屏，没命中再翻 `flips` 张。
+
+    为什么需要它（真机 TECNO LK7k / 1080x2364 实测单次耗时）：
+
+        find_card_anywhere   6.7 ~ 10.5s   ← 回首页 3.1s + dump 2.4s + 翻轮播
+        find_card_fast       2.5s 左右     ← focus 判断 0.1s + dump 2.4s
+
+    三个省下来的开销：
+      * **回首页**：`goto_launcher_home()` 要 dump 一整棵控件树判断是不是首页
+        （实测 3.1s）；这里改用 `dev.focus()` 读当前窗口名（0.1s），不是
+        launcher 才按一次 HOME。实时盯卡时人刚把手机放回桌面，99% 已经在桌面。
+      * **翻轮播**：每翻一屏要 swipe + 1.8s settle + 2.4s dump ≈ 4.5s。所以
+        默认只看当前屏 + 往后翻 `FAST_FLIPS`(2) 张，不像 find_card_anywhere
+        那样翻满 10 张。
+      * **灵动岛**：`dumpsys` 只有 0.1s，先判断再决定要不要付 1.4s 手势。
+
+    为什么要翻那 2 张：实测重要日卡片（生日祝福/考前提醒等）经常排在轮播
+    第 2、3 屏，「早上好」「省电模式」「新闻晨报」抢在前面。只会看第一屏的
+    版本会把它误判成「没出卡」，导致白清缓存重跑一整轮（2~3 分钟）。
+
+    命中语义与 `find_card_anywhere` 一致（只认桌面智慧建议，锁屏原子卡片
+    不算）。没看到就返回 None，由调用方决定重试。
+    """
+    say = log or (lambda _m: None)
+
+    # 顶部展开的灵动岛会压住小部件的上半截，截图会带黑边，先收起来。
+    # 只在真的展开时才付手势代价（1.4s），没收起来也不影响识别。
+    try:
+        if island_expanded(dev):
+            dismiss_dynamic_island(dev, log=say)
+    except Exception:  # noqa: BLE001 —— 收岛失败不该拖垮识别
+        pass
+
+    # 不在桌面就按一次 HOME。用 focus() 而不是 goto_launcher_home()：
+    # 后者要 dump 整棵树判断首页，慢 30 倍。
+    try:
+        win = dev.focus() or ""
+    except Exception:  # noqa: BLE001
+        win = ""
+    if "launcher" not in win.lower():
+        say(f"当前窗口不是桌面（{win or '未知'}），按 HOME 回桌面")
+        dev.key(3)                       # KEYCODE_HOME
+        time.sleep(0.6)
+
+    try:
+        nodes = dev.dump()
+    except UiError as exc:
+        say(f"控件树读取失败，跳过本次识别：{exc}")
+        return None
+
+    box = find_widget(nodes)
+    if box is None:
+        say("没在控件树里找到智慧建议小部件（可能不在首页或小部件被移除）")
+        return None
+
+    texts = card_area_texts(nodes, box)
+    hit = match_any(texts, keywords)
+    if hit:
+        raw, kw = hit
+        say(f"当前屏命中「{raw}」（关键词 {kw}）")
+        return CardHit(where="home", text=raw, keyword=kw, texts=texts,
+                       box=card_box(nodes, box))
+    if texts:
+        say(f"当前屏不是目标卡：{' / '.join(texts[:4])}")
+    else:
+        say("当前屏小部件里还没有卡片文案")
+
+    # 当前屏没命中就往后翻几张。重要日卡片实测经常排在轮播第 2、3 屏
+    # （「早上好」「省电模式」抢在前面），只看第一屏会误判成「没出卡」，
+    # 白白清缓存重跑一整轮（一轮 2~3 分钟）。这里补几张，代价约 2.5s/张。
+    if flips <= 0:
+        return None
+
+    # 注意：这里**不**在首屏为空时直接返回。智慧建议轮播会自动轮转，
+    # 中间夹着空屏是常态（实测 1080x2364：第 0 屏 [] → 第 1 屏「早上好/
+    # 新闻晨报」→ 第 2 屏 []），目标卡完全可能在空屏的下一屏。以前这里
+    # `if not texts: return None` 会让扫描在第 2 屏就放弃，月度/年度总结
+    # 这类排得靠后的卡永远认不到。
+    #
+    # 滑穿进 AZ 应用抽屉的风险由下面每轮的 in_app_drawer 检查兜住。
+
+    seen: set[tuple[str, ...]] = set()
+    if texts:
+        seen.add(tuple(sorted(texts)))
+    repeat = 0
+    empty_screens = 0
+    for i in range(1, flips + 1):
+        before = tuple(sorted(texts))
+        x1, y1, x2, y2 = box
+        cx = (x1 + x2) // 2
+        lo, hi = y1 + (y2 - y1) // 5, y2 - (y2 - y1) // 5
+        dev.swipe(cx, hi, cx, lo, SWIPE_MS)
+        time.sleep(SWIPE_SETTLE)
+        try:
+            nodes = dev.dump()
+        except UiError as exc:
+            say(f"第 {i} 屏控件树读取失败：{exc}")
+            return None
+        if in_app_drawer(nodes):
+            # 滑穿进了抽屉：立刻退出，回到桌面重新判一次（别把本轮判死）。
+            fresh = _leave_drawer(dev, say)
+            if fresh is None:
+                return None
+            nodes = fresh
+            box = find_widget(nodes) or box
+            if in_app_drawer(nodes):
+                say("退出后仍然在应用抽屉里，结束本次识别")
+                return None
+            # 退出后卡片文案跟滑之前一模一样 = 小部件里只有这一张卡，
+            # 再滑还会重复滑进抽屉，没有继续翻的意义。
+            if before and tuple(sorted(card_area_texts(nodes, box))) == before:
+                say("小部件里只有这一张卡片，翻不动堆叠，不再滑动")
+                return None
+        box = find_widget(nodes) or box
+        texts = card_area_texts(nodes, box)
+        hit = match_any(texts, keywords)
+        if hit:
+            raw, kw = hit
+            say(f"翻到第 {i} 屏命中「{raw}」（关键词 {kw}）")
+            return CardHit(where="home", text=raw, keyword=kw, texts=texts,
+                           index=i, box=card_box(nodes, box))
+        if not texts:
+            # 空屏是轮播切换中的正常状态，继续翻下一屏，别在这里放弃。
+            empty_screens += 1
+            say(f"第 {i} 屏是空屏（轮播切换中），继续翻")
+            if empty_screens >= flips:
+                say("连续翻到的都是空屏，本次识别结束")
+                return None
+            continue
+        empty_screens = 0
+        say(f"第 {i} 屏不是目标卡：{' / '.join(texts[:4])}")
+        fp = tuple(sorted(texts))
+        if fp in seen:
+            # 实测这个轮播是**动态**的：翻两屏又转回「早上好」很常见，
+            # 但紧接着下一次就能翻出目标卡。所以重复一次不能当「转了一圈」，
+            # 只记录重复次数，翻满 flips 再收工。
+            repeat += 1
+            say(f"第 {i} 屏与之前某屏重复（第 {repeat} 次）")
+            if repeat >= 2:
+                say("连续重复同一屏，轮播翻不动了，结束本次识别")
+                return None
+        seen.add(fp)
+    return None
+
+
 def find_card_anywhere(dev: Device, keywords, *, log=None) -> CardHit | None:
     """只找桌面首页的**智慧建议**卡片；不再把锁屏原子卡片算作命中。
 
     这是场景侧最常用的入口。`also_lock` 参数不再使用：锁屏上的
     `atomic_title` 与桌面智慧建议是两种不同 UI，之前混用导致生日策划案、
     考试考前提醒、追星提醒、重要日提醒被存成了灵动岛截图。
+
+    注意：本函数会**翻满轮播**找（单次 6.7~10.5s）。实时盯卡用
+    `find_card_fast()`（2.5s，只看当前屏）；这里适合「卡片不确定在第几屏」
+    的事后兜底。
     """
     from scenario_birthday import ensure_home_before_confirm
 
